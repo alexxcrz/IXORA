@@ -3,21 +3,32 @@ import ReactDOM from "react-dom/client";
 import App from "./App";
 import { cargarTema } from "./utils/temas";
 import { applySystemDarkMode } from "./utils/darkMode";
+import ErrorBoundary from "./components/ErrorBoundary";
+import logger from "./utils/logger";
 
 // PROTECCIÓN: Manejador global de errores para evitar crashes
 window.addEventListener('error', (event) => {
-  console.error('❌ Error global capturado:', event.error);
-  console.error('❌ Stack trace:', event.error?.stack);
-  console.error('❌ URL:', event.filename);
-  console.error('❌ Línea:', event.lineno);
+  logger.error('Error global capturado', {
+    message: event.message,
+    filename: event.filename,
+    lineno: event.lineno,
+    colno: event.colno,
+    error: event.error,
+    stack: event.error?.stack,
+  }, 'GLOBAL_ERROR');
+  
   // Prevenir que el error cierre la app
   event.preventDefault();
   return true;
 });
 
 window.addEventListener('unhandledrejection', (event) => {
-  console.error('❌ Promise rechazada no manejada:', event.reason);
-  console.error('❌ Stack trace:', event.reason?.stack);
+  logger.error('Promise rechazada no manejada', {
+    reason: event.reason,
+    stack: event.reason?.stack,
+    message: event.reason?.message,
+  }, 'GLOBAL_ERROR');
+  
   // Prevenir que el error cierre la app
   event.preventDefault();
 });
@@ -59,13 +70,17 @@ if (!rootElement) {
   const root = ReactDOM.createRoot(rootElement);
   
   try {
+    logger.info('Iniciando aplicación React');
     root.render(
       <React.StrictMode>
-        <App />
+        <ErrorBoundary>
+          <App />
+        </ErrorBoundary>
       </React.StrictMode>
     );
+    logger.info('Aplicación React renderizada correctamente');
   } catch (error) {
-    console.error('❌ Error renderizando app:', error);
+    logger.error('Error renderizando app', { error, stack: error.stack }, 'ROOT_RENDER');
     rootElement.innerHTML = '<div style="padding: 20px; color: red;">Error al cargar la aplicación. Por favor, recarga la página.</div>';
   }
 }

@@ -545,58 +545,99 @@ export function AuthProvider({ children }) {
   ====================================================== */
   const login = async (userObj, jwtToken, permisos) => {
     try {
-      console.log('🔐 [LOGIN] Iniciando proceso de login...');
+      logger.auth.info('Iniciando proceso de login');
       
       // Detectar si estamos en móvil
       const isMobile = window.Capacitor && window.Capacitor.isNativePlatform();
-      console.log(`🔐 [LOGIN] Es móvil: ${isMobile}`);
+      logger.auth.debug(`Es móvil: ${isMobile}`);
       
       // 🔥 CRÍTICO: Actualizar variable global PRIMERO (antes que todo)
       // Esto asegura que authFetch use el token nuevo inmediatamente
       currentToken = jwtToken;
-      console.log('🔐 [LOGIN] Token global actualizado');
+      logger.auth.debug('Token global actualizado');
       
       // 🔥 CRÍTICO: Actualizar estado SEGUNDO
       setToken(jwtToken);
       setUser(userObj);
       setPerms(permisos || []);
-      console.log('🔐 [LOGIN] Estados actualizados');
+      logger.auth.debug('Estados actualizados');
       
       // 🔥 CRÍTICO: Guardar en localStorage SIN CIFRAR (más confiable y rápido)
       // Esto funciona tanto en móvil como en desktop
-      try {
-        localStorage.setItem("token", jwtToken);
-        localStorage.setItem("user", JSON.stringify(userObj));
-        localStorage.setItem("perms", JSON.stringify(permisos || []));
-        
-        // Verificar inmediatamente que se guardó
-        const verifyToken = localStorage.getItem("token");
-        if (verifyToken !== jwtToken) {
-          console.error(`❌ [LOGIN] ERROR: Token no coincide después de guardar!`);
-          // Intentar guardar de nuevo
+      let savedSuccessfully = false;
+      let retryCount = 0;
+      const maxRetries = 3;
+      
+      while (!savedSuccessfully && retryCount < maxRetries) {
+        try {
           localStorage.setItem("token", jwtToken);
+          localStorage.setItem("user", JSON.stringify(userObj));
+          localStorage.setItem("perms", JSON.stringify(permisos || []));
+          
+          // Verificar inmediatamente que se guardó
+          const verifyToken = localStorage.getItem("token");
+          const verifyUser = localStorage.getItem("user");
+          const verifyPerms = localStorage.getItem("perms");
+          
+          if (verifyToken !== jwtToken) {
+            logger.session.warn(`Token no coincide después de guardar (intento ${retryCount + 1})`);
+            retryCount++;
+            if (retryCount < maxRetries) {
+              await new Promise(resolve => setTimeout(resolve, 100 * retryCount)); // Delay progresivo
+              continue;
+            }
+          } else if (!verifyUser || !verifyPerms) {
+            logger.session.warn(`Usuario o permisos no guardados correctamente (intento ${retryCount + 1})`);
+            retryCount++;
+            if (retryCount < maxRetries) {
+              await new Promise(resolve => setTimeout(resolve, 100 * retryCount));
+              continue;
+            }
+          } else {
+            savedSuccessfully = true;
+            logger.session.info('Sesión guardada correctamente en localStorage');
+          }
+        } catch (localError) {
+          logger.session.error(`Error guardando en localStorage (${isMobile ? 'MÓVIL' : 'DESKTOP'})`, {
+            error: localError,
+            retryCount,
+            isMobile,
+          });
+          retryCount++;
+          if (retryCount < maxRetries) {
+            await new Promise(resolve => setTimeout(resolve, 100 * retryCount));
+            continue;
+          }
         }
-      } catch (localError) {
-        console.error(`❌ Error guardando en localStorage (${isMobile ? 'MÓVIL' : 'DESKTOP'}):`, localError);
       }
       
-      // También intentar guardar cifrado como respaldo (opcional)
+      if (!savedSuccessfully) {
+        logger.session.error('No se pudo guardar sesión después de múltiples intentos', {
+          retryCount,
+          isMobile,
+        });
+        throw new Error("Error al guardar sesión después de múltiples intentos");
+      }
+      
+      // También intentar guardar cifrado como respaldo (opcional, no bloqueante)
       try {
-        await setEncryptedItem("token", jwtToken);
-        await setEncryptedItem("user", JSON.stringify(userObj));
-        await setEncryptedItem("perms", JSON.stringify(permisos || []));
+        await Promise.all([
+          setEncryptedItem("token", jwtToken),
+          setEncryptedItem("user", JSON.stringify(userObj)),
+          setEncryptedItem("perms", JSON.stringify(permisos || [])),
+        ]);
+        logger.session.debug('Sesión también guardada en storage cifrado');
       } catch (tokenError) {
         // No es crítico si falla, ya está guardado en localStorage
-        console.debug(`Error guardando token cifrado (no crítico):`, tokenError);
+        logger.session.debug('Error guardando token cifrado (no crítico)', { error: tokenError });
       }
 
-      // Verificación simple (no bloquear si falla)
-      if (isMobile) {
-        // En móviles, verificar localStorage
-        const verifyToken = localStorage.getItem("token");
-        if (verifyToken !== jwtToken) {
-          console.warn("⚠️ Token no coincide en localStorage (MÓVIL), pero continuando");
-        }
+      // Verificación final
+      const finalVerify = localStorage.getItem("token");
+      if (finalVerify !== jwtToken) {
+        logger.session.warn("Token no coincide en verificación final, pero continuando");
+      } else {
+        logger.session.info('Verificación final de sesión exitosa');
       }
 
       // Si la contraseña es temporal, mostrar modal
@@ -606,21 +647,21 @@ export function AuthProvider({ children }) {
         }, 500);
       }
       
-      // DESACTIVADO: Cargar tema personal causa problemas de rendimiento y cierre de sesión
-      // cargarTemaPersonalUsuario(userObj.id);
-      
-      console.log('✅ [LOGIN] Login completado exitosamente');
+      logger.auth.info('Login completado exitosamente');
     } catch (error) {
-      console.error("❌ Error crítico en login:", error);
-      console.error("❌ Error stack:", error.stack);
+      logger.auth.error('Error crítico en login', {
+        error: error.message,
+        stack: error.stack,
+        userId: userObj?.id,
+      });
+      
       // Solo mostrar alerta si es un error realmente crítico
-      if (error.message && error.message.includes("Error al guardar token")) {
+      if (error.message && error.message.includes("Error al guardar")) {
         await showAlert("Error al guardar sesión. El token puede no persistir después de recargar la página.", "warning", { title: "Advertencia" });
       } else {
         await showAlert("Error al guardar sesión. Intenta nuevamente.", "error");
       }
       // NO re-lanzar el error para que el login pueda continuar
-      // throw error;
     }
   };
 

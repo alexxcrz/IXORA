@@ -6,6 +6,7 @@ import "./estilos/global.css";
 import { NotificationProvider } from "./components/Notifications";
 import WidgetsMenu from "./components/WidgetsMenu";
 import { AlertModalProvider, useAlert } from "./components/AlertModal";
+import logger from "./utils/logger";
 
 import Picking from "./pestañas/Picking/Picking";
 import RegistrosPicking from "./pestañas/RegistrosPicking/RegistrosPicking";
@@ -590,7 +591,7 @@ function App() {
   });
 
   const [toasts, setToasts] = useState([]);
-  const pushToast = (text, type = "ok") => {
+  const pushToast = useCallback((text, type = "ok") => {
     const id = Date.now() + Math.random();
     setToasts((prev) => [...prev, { id, text, type }]);
     // Errores y advertencias duran más tiempo para que se puedan leer
@@ -598,7 +599,7 @@ function App() {
     setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id));
     }, duration);
-  };
+  }, []);
 
   useEffect(() => {
     // Si estamos en la tienda, no cambiar el título (la tienda maneja su propio título)
@@ -704,6 +705,7 @@ function App() {
 
   useEffect(() => {
     // Optimización: actualizar hora cada segundo pero sin causar re-renders innecesarios
+    // Usar ref para minimizar re-renders del componente completo
     const interval = setInterval(() => {
       setHoraActual(prev => {
         const now = new Date();
@@ -716,6 +718,12 @@ function App() {
     }, 1000);
     return () => clearInterval(interval);
   }, []);
+  
+  // Memoizar formatearHora para evitar recalcular en cada render
+  const horaFormateada = useMemo(() => formatearHora(horaActual), [horaActual, formatearHora]);
+  
+  // Memoizar fecha formateada
+  const fechaCompletaFormateada = useMemo(() => fecha ? formatearFechaCompleta(fecha) : "", [fecha, formatearFechaCompleta]);
 
   // Detectar y aplicar modo oscuro del sistema
   useEffect(() => {
@@ -1349,7 +1357,7 @@ function App() {
         inputFechaRef.current.value = fecha || "";
       }
     }
-  };
+  }, [fecha, SERVER_URL, authFetch, showAlert, pushToast, cargarProductos, solicitarPasswordYCambiarFecha]);
 
   const diasPorMes = useMemo(() => {
     const map = {};
@@ -1688,11 +1696,11 @@ function App() {
                 <>
                   <div className="fecha-texto">
                     <span className="fecha-calendario">📅</span>
-                    <span className="fecha-completa">{formatearFechaCompleta(fecha)}</span>
+                    <span className="fecha-completa">{fechaCompletaFormateada}</span>
                   </div>
                   <div className="fecha-hora">
                     <span className="hora-reloj">🕐</span>
-                    <span className="hora-texto">{formatearHora(horaActual)}</span>
+                    <span className="hora-texto">{horaFormateada}</span>
                   </div>
                 </>
               ) : (
@@ -2428,7 +2436,7 @@ function App() {
               </div>
               <p className="alert-modal-message">
                 {fechaPendiente && fechaPendiente !== ""
-                  ? `Se requiere contraseña de administrador para cambiar la fecha a: ${formatearFechaCompleta(fechaPendiente)}`
+                  ? `Se requiere contraseña de administrador para cambiar la fecha a: ${fechaPendiente ? formatearFechaCompleta(fechaPendiente) : ''}`
                   : fecha
                     ? `Se requiere contraseña de administrador para eliminar la fecha actual: ${formatearFechaCompleta(fecha)}`
                     : "Se requiere contraseña de administrador para establecer una nueva fecha"}

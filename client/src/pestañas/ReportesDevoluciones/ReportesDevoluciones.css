@@ -100,34 +100,35 @@ select:focus {
   transform: translateY(-1px);
 }
 
-/* === Tarjeta general === */
+/* === Tarjeta general - Igual que picking y reenvios === */
 .reportes-wrapper {
-  display: flex;
-  justify-content: center;
+  background: var(--fondo-card);
   padding: 18px;
-  width: 100%;
+  border-radius: var(--radio-xl);
+  box-shadow: var(--sombra-md);
+  margin: 10px auto;
+  width: 95%;
+  max-width: 1200px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border: 1px solid var(--borde-sutil);
 }
 
 .reportes-card {
-  background: var(--fondo-card);
-  border-radius: var(--radio-xl);
-  box-shadow: var(--sombra-sm);
-  border: 1px solid var(--borde-sutil);
-  width: 95%;
-  max-width: 1200px;
-  padding: 18px;
-  margin: 10px auto;
+  /* Sin fondo adicional - usar el del wrapper */
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 
 .reportes-card h2 {
-  font-size: 1.25rem;
-  font-weight: 600;
-  color: var(--texto-principal);
-  margin: 0;
-  padding: 0;
+  font-size: 1.8rem;
+  color: var(--texto-principal) !important;
+  font-weight: 700;
+  margin-bottom: 20px;
+  text-align: center;
+  letter-spacing: 2px;
 }
 
 /* === Contenedor de pestañas y cambiar fecha === */
@@ -218,30 +219,53 @@ select:focus {
   transform: translateY(-1px);
 }
 
-/* === Encabezado de mes (acordeón) === */
+/* === Encabezado de mes (acordeón) - Igual que picking/reenvios === */
+.mes-bloque {
+  border: 1px solid var(--borde-sutil);
+  border-radius: var(--radio-xl);
+  overflow: hidden;
+  background: var(--fondo-card);
+  margin-bottom: 10px;
+}
+
 .mes-titulo {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background: var(--fondo-secundario);
-  padding: 10px 14px;
-  border-radius: var(--radio-full);
-  margin-top: 14px;
+  background: var(--azul-primario);
+  width: 100%;
+  text-align: left;
+  padding: 14px 18px;
   cursor: pointer;
-  user-select: none;
-  font-weight: 600;
-  color: var(--texto-principal);
+  border: none;
+  outline: none;
   transition: all var(--transicion-media);
-  border: 1px solid var(--borde-sutil);
+  border-bottom: 2px solid var(--borde-sutil);
+  color: var(--texto-boton, #ffffff) !important;
+  font-weight: 700;
+  font-size: 1.1rem;
+  letter-spacing: 0.5px;
+  text-transform: capitalize;
 }
 
 .mes-titulo:hover {
   box-shadow: var(--sombra-xs);
+  transform: translateX(2px);
+  background: var(--azul-hover) !important;
+}
+
+.mes-titulo:active {
+  transform: translateX(1px) scale(0.99);
 }
 
 /* === Tabla === */
 .tabla-container {
   overflow-x: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--fondo-card);
 }
 
 .tabla-reportes {

@@ -413,8 +413,8 @@ export default function ReportesDevoluciones({ serverUrl, pushToast }) {
 
   return (
     <div className="reportes-wrapper">
+      <h2>Reportes de Devoluciones</h2>
       <div className="reportes-card">
-        <h2>Reportes de Devoluciones</h2>
 
         {/* 🔹 PESTAÑAS Y CAMBIAR FECHA */}
         <div className="tabs-and-date-container">
@@ -744,8 +744,6 @@ export default function ReportesDevoluciones({ serverUrl, pushToast }) {
             </table>
           </div>
         )}
-      </div>
-
       {/* ===========================================
           MODAL DETALLE DE PEDIDO CON FOTOS
       =========================================== */}
