@@ -744,6 +744,7 @@ export default function ReportesDevoluciones({ serverUrl, pushToast }) {
             </table>
           </div>
         )}
+      </div>
       {/* ===========================================
           MODAL DETALLE DE PEDIDO CON FOTOS
       =========================================== */}
