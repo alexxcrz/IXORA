@@ -1,0 +1,58 @@
+# Node modules
+node_modules/
+
+# Build files
+build/
+dist/
+
+# Databases
+*.db
+
+# Env files
+.env
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Android / Capacitor
+client/android/app/build/
+client/android/build/
+client/android/.gradle/
+*.apk
+*.aab
+*.keystore
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Archivos subidos por usuarios (CRÍTICO)
+server/uploads/
+client/uploads/
+uploads/
+
+# Logs del servidor
+server/*.log
+server/debug-runtime.log
+server/logs/
+*.log
+
+# Electron (MUY IMPORTANTE)
+dist-electron/
+electron/dist/
+electron/out/
+electron/build/
+
+# Electron binaries
+*.exe
+*.msi
+*.dmg
+*.AppImage
+
+# Cache
+.cache/

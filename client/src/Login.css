@@ -1,0 +1,1670 @@
+/* =======================================================
+   🎨 LOGIN - DISEÑO COMPLETAMENTE NUEVO
+   ====================================================== */
+
+@import './estilos/tema.css';
+
+/* =======================================================
+   FONDO CON EFECTOS MODERNOS
+   ====================================================== */
+
+.login-bg {
+  width: 100vw;
+  height: 100vh;
+  max-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: var(--fondo-principal) !important;
+  position: fixed;
+  top: 0;
+  left: 0;
+  padding: 0;
+  box-sizing: border-box;
+  overflow: hidden !important;
+  position: relative;
+}
+
+/* Grid de fondo animado con cuadros redondeados (puntos) */
+.login-bg::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-image: 
+    linear-gradient(var(--azul-borde) 1px, transparent 1px),
+    linear-gradient(90deg, var(--azul-borde) 1px, transparent 1px);
+  background-size: 50px 50px;
+  background-position: 0 0;
+  mask-image: 
+    radial-gradient(ellipse 10px 10px at center, black 60%, transparent 60%);
+  -webkit-mask-image: 
+    radial-gradient(ellipse 10px 10px at center, black 60%, transparent 60%);
+  mask-size: 50px 50px;
+  -webkit-mask-size: 50px 50px;
+  mask-repeat: repeat;
+  -webkit-mask-repeat: repeat;
+  animation: gridMove 25s linear infinite;
+  opacity: 0.6;
+  z-index: 0;
+  pointer-events: none;
+}
+
+@keyframes gridMove {
+  0% {
+    transform: translate(0, 0);
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 0.5;
+  }
+  100% {
+    transform: translate(50px, 50px);
+    opacity: 0.3;
+  }
+}
+
+/* Círculos de fondo con efecto mejorado */
+.login-bg::after {
+  content: '';
+  position: fixed;
+  width: 600px;
+  height: 600px;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--azul-primario-transparente) 0%, var(--azul-sutil) 40%, transparent 70%);
+  top: -300px;
+  right: -300px;
+  animation: circleRotate 35s linear infinite;
+  z-index: 0;
+  filter: blur(100px);
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+.login-bg {
+  position: relative;
+}
+
+@keyframes circleRotate {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Partículas flotantes animadas */
+.login-bg {
+  position: relative;
+}
+
+.login-bg::before {
+  z-index: 0;
+}
+
+.login-bg::after {
+  z-index: 0;
+}
+
+/* Partículas CSS eliminadas - todas las partículas ahora son JavaScript con movimiento libre */
+
+/* Partículas dinámicas creadas con JavaScript */
+.particle {
+  position: fixed;
+  width: 3px;
+  height: 3px;
+  background: var(--azul-primario);
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 1;
+  animation: particleFloat 3s ease-out forwards;
+  box-shadow: 0 0 8px rgba(59, 130, 246, 0.9), 0 0 16px rgba(99, 102, 241, 0.7);
+}
+
+@keyframes particleFloat {
+  0% {
+    opacity: 0.8;
+    transform: translate(0, 0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--dx, 0), var(--dy, -100px)) scale(0);
+  }
+}
+
+/* Ondas animadas en el fondo */
+.login-container::after {
+  content: '';
+  position: absolute;
+  width: 200%;
+  height: 200%;
+  top: -50%;
+  left: -50%;
+  background: 
+    radial-gradient(circle at 20% 50%, var(--azul-primario-transparente) 0%, transparent 50%),
+    radial-gradient(circle at 80% 80%, var(--azul-secundario) 0%, transparent 50%),
+    radial-gradient(circle at 40% 20%, var(--azul-primario-transparente) 0%, transparent 50%);
+  animation: waves 15s ease-in-out infinite;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.3;
+  filter: blur(60px);
+}
+
+@keyframes waves {
+  0%, 100% {
+    transform: translate(0, 0) scale(1);
+    opacity: 0.2;
+  }
+  33% {
+    transform: translate(5%, 5%) scale(1.1);
+    opacity: 0.4;
+  }
+  66% {
+    transform: translate(-5%, -5%) scale(0.9);
+    opacity: 0.3;
+  }
+}
+
+.login-fondo-personalizado {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -1;
+  pointer-events: none;
+}
+
+.login-fondo-video,
+.login-fondo-imagen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  z-index: -1;
+}
+
+/* Solo aplicar estas reglas cuando estemos en la página de login */
+body.login-page html {
+  overflow: hidden !important;
+  height: 100vh !important;
+  max-height: 100vh !important;
+}
+
+body.login-page {
+  overflow: hidden !important;
+  height: 100vh !important;
+  max-height: 100vh !important;
+}
+
+body.login-page #root {
+  overflow: hidden !important;
+  height: 100vh !important;
+  max-height: 100vh !important;
+}
+
+/* =======================================================
+   CONTENEDOR CENTRADO MODERNO
+   ====================================================== */
+
+.login-container {
+  width: 100%;
+  max-width: 100%;
+  padding: var(--espacio-lg);
+  position: relative;
+  z-index: 1;
+  animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  max-height: 100vh;
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden !important;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(40px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* =======================================================
+   TARJETA DE LOGIN MODERNA
+   ====================================================== */
+
+.login-card {
+  width: 900px;
+  max-width: 900px;
+  max-height: calc(100vh - 32px);
+  background: var(--fondo-card);
+  backdrop-filter: blur(40px) saturate(200%);
+  border: 1px solid var(--borde-sutil);
+  border-radius: 28px;
+  padding: var(--espacio-xl);
+  box-shadow: 
+    var(--sombra-xl),
+    0 0 0 1px var(--borde-sutil) inset,
+    0 0 60px var(--azul-primario-transparente) inset,
+    0 8px 32px rgba(0, 0, 0, 0.3) inset,
+    0 0 40px var(--azul-primario-transparente),
+    0 0 80px rgba(59, 130, 246, 0.2);
+  position: relative;
+  overflow: hidden !important;
+  transition: all 0.4s ease;
+  display: flex;
+  flex-direction: row;
+  box-sizing: border-box;
+  height: fit-content;
+  max-height: calc(100vh - 32px);
+  justify-content: center;
+  align-items: center;
+  gap: var(--espacio-2xl);
+  animation: cardGlow 4s ease-in-out infinite;
+}
+
+@keyframes cardGlow {
+  0%, 100% {
+    box-shadow: 
+      var(--sombra-xl),
+      0 0 0 1px var(--borde-sutil) inset,
+      0 0 60px var(--azul-primario-transparente) inset,
+      0 8px 32px rgba(0, 0, 0, 0.3) inset,
+      0 0 40px var(--azul-primario-transparente),
+      0 0 80px rgba(59, 130, 246, 0.2);
+  }
+  50% {
+    box-shadow: 
+      var(--sombra-xl),
+      0 0 0 1px var(--borde-medio) inset,
+      0 0 80px var(--azul-primario-transparente) inset,
+      0 8px 32px rgba(0, 0, 0, 0.3) inset,
+      0 0 60px var(--azul-primario-transparente),
+      0 0 120px rgba(59, 130, 246, 0.4);
+  }
+}
+
+/* Efecto interno de profundidad */
+.login-card::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border-radius: 28px;
+  background: 
+    radial-gradient(ellipse at top left, var(--azul-primario-transparente) 0%, transparent 50%),
+    radial-gradient(ellipse at bottom right, var(--azul-sutil) 0%, transparent 50%);
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.6;
+  animation: innerGlow 8s ease-in-out infinite;
+}
+
+@keyframes innerGlow {
+  0%, 100% {
+    opacity: 0.4;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(1.02);
+  }
+}
+
+.login-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, 
+    transparent,
+    var(--azul-primario),
+    var(--azul-secundario),
+    transparent
+  );
+  animation: topGlow 3s ease-in-out infinite;
+  z-index: 1;
+  box-shadow: 
+    0 2px 8px var(--azul-primario-transparente),
+    0 0 20px var(--azul-primario-transparente);
+}
+
+@keyframes topGlow {
+  0%, 100% {
+    opacity: 0.5;
+    transform: scaleX(0.8);
+  }
+  50% {
+    opacity: 1;
+    transform: scaleX(1);
+  }
+}
+
+.login-card:hover {
+  transform: translateY(-8px);
+  box-shadow: 
+    var(--sombra-xl),
+    0 0 0 1px var(--borde-medio) inset,
+    0 0 80px var(--azul-primario-transparente) inset,
+    0 12px 40px rgba(0, 0, 0, 0.4) inset,
+    var(--sombra-azul);
+}
+
+.login-card:hover::after {
+  opacity: 0.9;
+  animation-duration: 4s;
+}
+
+/* =======================================================
+   BRANDING COMPACTO
+   ====================================================== */
+
+.login-left-panel {
+  display: none;
+}
+
+.login-branding {
+  width: 40%;
+  min-width: 280px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--espacio-md);
+  position: relative;
+  z-index: 2;
+  flex-shrink: 0;
+  justify-content: center;
+  padding-right: var(--espacio-lg);
+  border-right: 1px solid var(--borde-sutil);
+}
+
+.login-logo-wrapper {
+  position: relative;
+  padding: 16px;
+  background: var(--fondo-card-hover);
+  backdrop-filter: blur(20px);
+  border-radius: 24px;
+  border: 2px solid var(--borde-sutil);
+  box-shadow: 
+    var(--sombra-lg),
+    0 0 0 1px var(--borde-sutil) inset;
+  transition: all 0.4s ease;
+  animation: logoGlow 4s ease-in-out infinite;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto;
+}
+
+@keyframes logoGlow {
+  0%, 100% {
+    box-shadow: 
+      var(--sombra-lg),
+      0 0 0 1px var(--borde-sutil) inset,
+      var(--sombra-azul);
+  }
+  50% {
+    box-shadow: 
+      var(--sombra-xl),
+      0 0 0 1px var(--borde-medio) inset,
+      var(--sombra-azul);
+  }
+}
+
+.login-logo-wrapper:hover {
+  transform: translateY(-8px) scale(1.05);
+  animation: none;
+}
+
+.login-logo-large {
+  width: 100px;
+  height: 100px;
+  object-fit: contain;
+  border-radius: 16px;
+  display: block;
+  margin: 0 auto;
+}
+
+.login-brand-title {
+  font-size: clamp(1.9rem, 4vw, 2.4rem);
+  font-weight: 900;
+  color: var(--texto-principal);
+  line-height: 1.1;
+  margin: 0;
+  letter-spacing: -1px;
+  text-align: center;
+  background: linear-gradient(135deg, 
+    var(--texto-principal) 0%,
+    rgba(255, 255, 255, 1) 50%,
+    var(--texto-principal) 100%
+  );
+  background-size: 200% 200%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: textGradient 8s ease-in-out infinite;
+}
+
+@keyframes textGradient {
+  0%, 100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+/* =======================================================
+   FORMULARIO
+   ====================================================== */
+
+.login-box {
+  width: 60%;
+  flex: 1;
+  min-width: 0;
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-sm);
+  position: relative;
+  z-index: 2;
+  flex: 1;
+  min-height: 0;
+  overflow: visible !important;
+  justify-content: center;
+  align-items: stretch;
+  padding-bottom: 8px;
+}
+
+.login-title {
+  font-size: clamp(1.6rem, 3vw, 1.9rem);
+  font-weight: 900;
+  margin-bottom: 4px;
+  letter-spacing: -0.5px;
+  color: var(--texto-principal);
+  text-align: center;
+  line-height: 1.1;
+}
+
+.login-welcome-text {
+  font-size: clamp(0.85rem, 2vw, 0.95rem);
+  color: var(--texto-secundario);
+  text-align: center;
+  line-height: 1.4;
+  opacity: 0.9;
+  margin-bottom: var(--espacio-md);
+  font-weight: 400;
+}
+
+/* =======================================================
+   TABS MODERNOS
+   ====================================================== */
+
+.login-method-tabs {
+  display: flex !important;
+  gap: var(--espacio-sm) !important;
+  margin-bottom: var(--espacio-md) !important;
+  background: var(--fondo-card-hover) !important;
+  backdrop-filter: blur(15px) !important;
+  padding: 6px !important;
+  border-radius: 18px !important;
+  border: 1px solid var(--borde-sutil) !important;
+  width: 100% !important;
+}
+
+.login-method-tab {
+  flex: 1 !important;
+  padding: 14px 20px !important;
+  border: none !important;
+  background: transparent !important;
+  color: var(--texto-secundario) !important;
+  border-radius: 14px !important;
+  cursor: pointer !important;
+  font-weight: 700 !important;
+  font-size: clamp(0.9rem, 2vw, 0.95rem) !important;
+  transition: all 0.3s ease !important;
+  position: relative !important;
+}
+
+.login-method-tab:hover {
+  color: var(--texto-principal) !important;
+  background: var(--fondo-input) !important;
+}
+
+.login-method-tab.active {
+  background: linear-gradient(135deg, var(--azul-primario-transparente), var(--azul-sutil)) !important;
+  color: var(--texto-principal) !important;
+  box-shadow: 
+    var(--sombra-azul),
+    0 0 0 1px var(--azul-borde) inset !important;
+}
+
+/* =======================================================
+   INPUTS MODERNOS
+   ====================================================== */
+
+.login-input-group {
+  width: 100%;
+  max-width: 100%;
+  min-width: 100%;
+  margin-bottom: var(--espacio-sm);
+  box-sizing: border-box;
+  display: block;
+  flex: none;
+  flex-shrink: 0;
+}
+
+.login-input-group:has(.login-input-wrapper) {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 100% !important;
+}
+
+.login-input-label {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--texto-principal);
+  margin-bottom: 6px;
+  opacity: 0.95;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+}
+
+.login-input-wrapper {
+  position: relative;
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 100% !important;
+  box-sizing: border-box !important;
+  display: block !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  flex: none !important;
+  flex-shrink: 0 !important;
+}
+
+.login-input {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 100% !important;
+  padding-top: 3px !important;
+  padding-bottom: 3px !important;
+  padding-left: 14px !important;
+  padding-right: 14px !important;
+  font-size: 0.85rem !important;
+  background: rgba(255, 255, 255, 0.06) !important;
+  backdrop-filter: blur(15px) !important;
+  border: 2px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 12px !important;
+  color: var(--texto-principal) !important;
+  transition: all 0.3s ease !important;
+  font-weight: 500 !important;
+  box-sizing: border-box !important;
+  line-height: 1.1 !important;
+  height: 30px !important;
+  min-height: 30px !important;
+  max-height: 30px !important;
+  margin: 0 !important;
+  display: block !important;
+  flex: none !important;
+  flex-shrink: 0 !important;
+  overflow: visible !important;
+}
+
+/* Asegurar contraste en login inputs */
+.login-input::placeholder,
+.login-input-password::placeholder {
+  color: var(--texto-terciario) !important;
+  opacity: 0.7 !important;
+  font-size: inherit !important;
+}
+
+.login-input-password {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 100% !important;
+  padding-top: 3px !important;
+  padding-bottom: 3px !important;
+  padding-left: 14px !important;
+  padding-right: 32px !important;
+  font-size: 0.85rem !important;
+  background: rgba(255, 255, 255, 0.06) !important;
+  backdrop-filter: blur(15px) !important;
+  border: 2px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 9999px !important;
+  color: var(--texto-principal) !important;
+  transition: all 0.3s ease !important;
+  font-weight: 500 !important;
+  box-sizing: border-box !important;
+  line-height: 1.1 !important;
+  height: 30px !important;
+  min-height: 30px !important;
+  max-height: 30px !important;
+  margin: 0 !important;
+  display: block !important;
+  flex: none !important;
+  flex-shrink: 0 !important;
+  overflow: visible !important;
+}
+
+.login-input-password::placeholder {
+  color: var(--texto-terciario) !important;
+  opacity: 0.7 !important;
+  font-size: inherit !important;
+}
+
+
+.login-input::placeholder {
+  color: var(--texto-terciario) !important;
+  opacity: 0.5;
+}
+
+.login-input:hover,
+.login-input-password:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+}
+
+.login-input:focus,
+.login-input-password:focus {
+  outline: none !important;
+  background: rgba(255, 255, 255, 0.1) !important;
+  border-color: rgba(59, 130, 246, 0.7) !important;
+  box-shadow: 
+    0 0 0 4px rgba(59, 130, 246, 0.15),
+    0 8px 24px rgba(0, 0, 0, 0.2) !important;
+}
+
+.login-password-toggle {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: var(--texto-terciario);
+  cursor: pointer;
+  font-size: 0.85rem;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 16px;
+  min-width: 24px;
+  min-height: 16px;
+  transition: all 0.2s ease;
+  border-radius: 6px;
+  z-index: 1;
+}
+
+.login-password-toggle:hover {
+  color: var(--texto-principal);
+  background: rgba(255, 255, 255, 0.1);
+  transform: translateY(-50%) scale(1.1);
+}
+
+/* =======================================================
+   BOTÓN MODERNO
+   ====================================================== */
+
+.login-bg .btn-green,
+.login-container .btn-green,
+.login-card .btn-green,
+.login-box .btn-green {
+  width: 100%;
+  max-width: 100%;
+  padding: 12px 24px !important;
+  font-size: 0.9rem !important;
+  font-weight: 700 !important;
+  background: linear-gradient(135deg, var(--azul-primario), var(--azul-secundario)) !important;
+  color: white !important;
+  border: none !important;
+  border-radius: 12px !important;
+  cursor: pointer !important;
+  transition: all 0.3s ease !important;
+  box-shadow: 
+    var(--sombra-azul),
+    0 0 0 1px var(--borde-sutil) inset !important;
+  position: relative !important;
+  overflow: hidden !important;
+  margin-top: var(--espacio-xs) !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.8px !important;
+  box-sizing: border-box !important;
+}
+
+.login-bg .btn-green::before,
+.login-container .btn-green::before,
+.login-card .btn-green::before,
+.login-box .btn-green::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+  transition: left 0.6s ease;
+}
+
+.login-bg .btn-green:hover::before,
+.login-container .btn-green:hover::before,
+.login-card .btn-green:hover::before,
+.login-box .btn-green:hover::before {
+  left: 100%;
+}
+
+.login-bg .btn-green:hover,
+.login-container .btn-green:hover,
+.login-card .btn-green:hover,
+.login-box .btn-green:hover {
+  transform: translateY(-4px);
+  background: linear-gradient(135deg, var(--azul-hover), var(--azul-secundario)) !important;
+  box-shadow: 
+    var(--sombra-lg),
+    0 0 0 1px var(--borde-medio) inset !important;
+}
+
+.login-bg .btn-green:active,
+.login-container .btn-green:active,
+.login-card .btn-green:active,
+.login-box .btn-green:active {
+  transform: translateY(-2px);
+}
+
+/* Media query para PC: botón más pequeño y centrado */
+@media (min-width: 769px) {
+  .login-bg .btn-green,
+  .login-container .btn-green,
+  .login-card .btn-green,
+  .login-box .btn-green {
+    width: 50% !important;
+    max-width: 50% !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+  }
+}
+
+/* =======================================================
+   OTP INPUTS
+   ====================================================== */
+
+.otp-container {
+  width: 100%;
+  margin-bottom: var(--espacio-lg);
+}
+
+.otp-label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--texto-principal);
+  margin-bottom: var(--espacio-md);
+  opacity: 0.95;
+  letter-spacing: 1px;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.otp-box {
+  display: flex;
+  gap: var(--espacio-sm);
+  justify-content: center;
+  margin-bottom: var(--espacio-lg);
+}
+
+.otp-input {
+  width: 60px !important;
+  height: 70px !important;
+  max-width: 60px !important;
+  font-size: 28px !important;
+  text-align: center !important;
+  background: rgba(255, 255, 255, 0.06) !important;
+  backdrop-filter: blur(15px) !important;
+  border: 2px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 16px !important;
+  color: var(--texto-principal) !important;
+  transition: all 0.3s ease !important;
+  font-weight: 900 !important;
+}
+
+.otp-input:hover {
+  background: rgba(255, 255, 255, 0.09) !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+}
+
+.otp-input:focus {
+  outline: none !important;
+  background: rgba(255, 255, 255, 0.12) !important;
+  border-color: rgba(59, 130, 246, 0.7) !important;
+  box-shadow: 
+    0 0 0 4px rgba(59, 130, 246, 0.15),
+    0 8px 24px rgba(0, 0, 0, 0.2) !important;
+  transform: scale(1.05);
+}
+
+.otp-input:disabled {
+  opacity: 0.5 !important;
+  cursor: not-allowed !important;
+}
+
+/* =======================================================
+   ENLACES
+   ====================================================== */
+
+.btn-reenviar-otp {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: rgba(255, 255, 255, 0.8);
+  padding: 10px 20px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: all 0.3s ease;
+  font-family: inherit;
+  font-weight: 500;
+  width: 100%;
+}
+
+.btn-reenviar-otp:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.5);
+  color: rgba(255, 255, 255, 1);
+  transform: translateY(-2px);
+}
+
+.btn-reenviar-otp:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.login-mini {
+  font-size: 0.9rem;
+  color: var(--azul-claro);
+  cursor: pointer;
+  margin-top: var(--espacio-md);
+  transition: all 0.3s ease;
+  text-decoration: none;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  font-weight: 600;
+  padding: 12px var(--espacio-md);
+  border-radius: 12px;
+  display: inline-block;
+  text-align: center;
+  width: 100%;
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.login-mini:hover {
+  color: var(--azul-primario);
+  background: rgba(59, 130, 246, 0.12);
+  border-color: rgba(59, 130, 246, 0.3);
+  transform: translateX(8px);
+  box-shadow: 0 8px 24px rgba(59, 130, 246, 0.2);
+}
+
+/* =======================================================
+   TEXTOS ADICIONALES
+   ====================================================== */
+
+.login-subtitle,
+.login-step-title,
+.login-step-subtitle {
+  font-size: 1rem;
+  margin-bottom: var(--espacio-md);
+  color: var(--texto-principal);
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  max-width: 100%;
+  box-sizing: border-box;
+  text-align: center;
+  font-weight: 600;
+}
+
+.login-step-title {
+  font-size: clamp(1.4rem, 3vw, 1.6rem);
+  margin-bottom: var(--espacio-sm);
+}
+
+.login-step-subtitle {
+  font-size: clamp(0.9rem, 2vw, 1rem);
+  margin-bottom: var(--espacio-md);
+  color: var(--texto-secundario);
+  font-weight: 400;
+  opacity: 0.9;
+  line-height: 1.6;
+}
+
+/* =======================================================
+   TOAST
+   ====================================================== */
+
+.toast {
+  position: fixed;
+  top: var(--espacio-lg);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: var(--espacio-md) var(--espacio-xl);
+  background: rgba(20, 25, 45, 0.95);
+  backdrop-filter: blur(40px) saturate(200%);
+  color: var(--texto-principal);
+  font-size: 1rem;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 
+    0 15px 60px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(255, 255, 255, 0.1) inset,
+    0 0 100px rgba(59, 130, 246, 0.3);
+  animation: fadeInOut 1.5s ease forwards;
+  z-index: 999;
+  max-width: 90vw;
+  box-sizing: border-box;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  font-weight: 700;
+}
+
+@keyframes fadeInOut {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-40px);
+  }
+  15% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-40px);
+  }
+}
+
+.login-logo {
+  display: none;
+}
+
+/* =======================================================
+   RESPONSIVE - TABLETS
+   ====================================================== */
+
+@media (max-width: 1024px) {
+  .login-card {
+    width: 100% !important;
+    max-width: 100% !important;
+    flex-direction: column !important;
+    gap: var(--espacio-lg) !important;
+  }
+  
+  .login-branding {
+    width: 100% !important;
+    min-width: auto !important;
+    padding-right: 0 !important;
+    border-right: none !important;
+    border-bottom: 1px solid var(--borde-sutil) !important;
+    padding-bottom: var(--espacio-lg) !important;
+    margin-bottom: var(--espacio-lg) !important;
+  }
+  
+  .login-box {
+    width: 100% !important;
+  }
+  
+  .login-container {
+    max-width: 100%;
+    width: 100%;
+    padding: var(--espacio-lg);
+  }
+}
+
+/* =======================================================
+   RESPONSIVE - MÓVILES (PDA)
+   ====================================================== */
+
+/* Regla específica para igualar ancho de inputs en PDA */
+@media (max-width: 768px) {
+  .login-input-group:first-of-type .login-input,
+  .login-input-group:last-of-type .login-input-wrapper,
+  .login-input-group:last-of-type .login-input-wrapper .login-input-password {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 100% !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .login-bg {
+    padding: 0;
+    overflow: hidden !important;
+  }
+
+  .login-container {
+    max-width: 100%;
+    width: 100%;
+    padding: 8px;
+    max-height: 100vh;
+    height: 100vh;
+    overflow: hidden !important;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .login-card {
+    width: 100%;
+    padding: var(--espacio-sm) var(--espacio-sm) var(--espacio-md);
+    border-radius: 24px;
+    max-height: 100vh;
+    height: auto;
+    min-height: auto;
+    overflow: hidden !important;
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+    justify-content: center;
+    align-items: center;
+    margin: auto;
+  }
+
+  .login-branding {
+    margin-bottom: var(--espacio-xs);
+    gap: 4px;
+    flex-shrink: 0;
+    margin-top: 0;
+  }
+
+  .login-logo-wrapper {
+    padding: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto;
+  }
+
+  .login-logo-large {
+    width: 70px;
+    height: 70px;
+    margin: 0 auto;
+  }
+
+  .login-brand-title {
+    font-size: 1.3rem;
+  }
+
+  .login-box {
+    gap: 6px;
+    flex: 1;
+    min-height: 0;
+    overflow: visible !important;
+    justify-content: center;
+    align-items: stretch !important;
+    display: flex;
+    flex-direction: column;
+    width: 100% !important;
+    padding-bottom: 12px;
+  }
+
+  .login-title {
+    font-size: 1.2rem;
+    margin-bottom: 2px;
+  }
+
+  .login-welcome-text {
+    font-size: 0.8rem;
+    margin-bottom: var(--espacio-xs);
+  }
+
+  .login-method-tabs {
+    margin-bottom: var(--espacio-xs) !important;
+    padding: 4px !important;
+  }
+
+  .login-method-tab {
+    padding: 8px 12px !important;
+    font-size: 0.75rem !important;
+  }
+
+  .login-input-group {
+    margin-bottom: 6px;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 100% !important;
+    box-sizing: border-box !important;
+    display: block !important;
+    flex: none !important;
+    flex-shrink: 0 !important;
+  }
+
+  .login-input-wrapper {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 100% !important;
+    box-sizing: border-box !important;
+    position: relative;
+    display: block !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    flex: none !important;
+    flex-shrink: 0 !important;
+  }
+
+  .login-input-group .login-input-wrapper {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 100% !important;
+  }
+
+  .login-input-label {
+    font-size: 0.6rem;
+    margin-bottom: 4px;
+  }
+
+  .login-input {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 100% !important;
+    padding-top: 2px !important;
+    padding-bottom: 2px !important;
+    padding-left: 10px !important;
+    padding-right: 10px !important;
+    font-size: 0.75rem !important;
+    background: rgba(255, 255, 255, 0.06) !important;
+    backdrop-filter: blur(15px) !important;
+    border: 2px solid rgba(255, 255, 255, 0.1) !important;
+    border-radius: 12px !important;
+    color: var(--texto-principal) !important;
+    transition: all 0.3s ease !important;
+    font-weight: 500 !important;
+    box-sizing: border-box !important;
+    line-height: 1.1 !important;
+    height: 26px !important;
+    min-height: 26px !important;
+    max-height: 26px !important;
+    margin: 0 !important;
+    display: block !important;
+    flex: none !important;
+    flex-shrink: 0 !important;
+    overflow: visible !important;
+  }
+
+  .login-input.login-input-password,
+  .login-input-password,
+  .login-input-wrapper .login-input-password,
+  .login-input-wrapper input.login-input-password {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 100% !important;
+    padding-top: 2px !important;
+    padding-bottom: 2px !important;
+    padding-left: 10px !important;
+    padding-right: 24px !important;
+    font-size: 0.75rem !important;
+    background: rgba(255, 255, 255, 0.06) !important;
+    backdrop-filter: blur(15px) !important;
+    border: 2px solid rgba(255, 255, 255, 0.1) !important;
+    border-radius: 12px !important;
+    color: var(--texto-principal) !important;
+    transition: all 0.3s ease !important;
+    font-weight: 500 !important;
+    box-sizing: border-box !important;
+    line-height: 1.1 !important;
+    height: 28px !important;
+    min-height: 28px !important;
+    max-height: 28px !important;
+    margin: 0 !important;
+    display: block !important;
+    flex: none !important;
+    flex-shrink: 0 !important;
+    overflow: visible !important;
+  }
+
+  .login-password-toggle {
+    width: 20px !important;
+    height: 20px !important;
+    font-size: 0.7rem !important;
+    right: 6px !important;
+    padding: 3px !important;
+  }
+
+  .login-input-wrapper .login-input-password,
+  .login-input-wrapper input.login-input-password,
+  .login-input-wrapper .login-input.login-input-password {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  .login-password-toggle {
+    width: 20px;
+    height: 20px;
+    font-size: 0.75rem;
+    right: 6px;
+  }
+
+  .login-bg .btn-green,
+  .login-container .btn-green,
+  .login-card .btn-green,
+  .login-box .btn-green {
+    width: calc(100% - 16px) !important;
+    max-width: calc(100% - 16px) !important;
+    padding: 9px 18px !important;
+    font-size: 0.8rem !important;
+    margin-top: 4px !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+    box-sizing: border-box !important;
+  }
+
+  .otp-input {
+    width: 55px !important;
+    height: 65px !important;
+    max-width: 55px !important;
+    font-size: 26px !important;
+  }
+
+  .otp-box {
+    gap: var(--espacio-xs);
+  }
+}
+
+/* Regla específica para igualar ancho de inputs en PDA pequeño */
+@media (max-width: 520px) {
+  .login-input-group:first-of-type .login-input,
+  .login-input-group:last-of-type .login-input-wrapper,
+  .login-input-group:last-of-type .login-input-wrapper .login-input-password {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 100% !important;
+  }
+}
+
+@media (max-width: 520px) {
+  .login-bg {
+    padding: 0;
+    overflow: hidden !important;
+  }
+
+  .login-container {
+    padding: 6px;
+    max-height: 100vh;
+    height: 100vh;
+    overflow: hidden !important;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .login-card {
+    padding: var(--espacio-sm) var(--espacio-sm) var(--espacio-md);
+    border-radius: 20px;
+    max-height: 100vh;
+    height: auto;
+    min-height: auto;
+    overflow: hidden !important;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    margin: auto;
+  }
+
+  .login-branding {
+    margin-bottom: var(--espacio-xs);
+    gap: 4px;
+    flex-shrink: 0;
+  }
+
+  .login-logo-wrapper {
+    padding: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto;
+  }
+
+  .login-logo-large {
+    width: 60px;
+    height: 60px;
+    margin: 0 auto;
+  }
+
+  .login-brand-title {
+    font-size: 1.2rem;
+  }
+
+  .login-box {
+    gap: 6px;
+    flex: 0 1 auto;
+    min-height: 0;
+    overflow: visible !important;
+    justify-content: center;
+    align-items: stretch !important;
+    display: flex;
+    flex-direction: column;
+    width: 100% !important;
+    margin: 0;
+    padding-bottom: 12px;
+  }
+  
+  .login-branding {
+    margin-bottom: var(--espacio-xs);
+    flex-shrink: 0;
+    margin-top: 0;
+  }
+
+  .login-title {
+    font-size: 1.1rem;
+    margin-bottom: 2px;
+  }
+
+  .login-welcome-text {
+    font-size: 0.75rem;
+    margin-bottom: var(--espacio-xs);
+  }
+
+  .login-method-tabs {
+    margin-bottom: var(--espacio-xs) !important;
+    padding: 3px !important;
+  }
+
+  .login-method-tab {
+    padding: 7px 10px !important;
+    font-size: 0.7rem !important;
+  }
+
+  .login-input-group {
+    margin-bottom: 6px;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 100% !important;
+    box-sizing: border-box !important;
+    display: block !important;
+    flex: none !important;
+    flex-shrink: 0 !important;
+  }
+
+  .login-input-wrapper {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 100% !important;
+    box-sizing: border-box !important;
+    position: relative;
+    display: block !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    flex: none !important;
+    flex-shrink: 0 !important;
+  }
+
+  .login-input-group .login-input-wrapper {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 100% !important;
+  }
+
+  .login-input-label {
+    font-size: 0.55rem;
+    margin-bottom: 3px;
+  }
+
+  .login-input {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 100% !important;
+    padding-top: 1px !important;
+    padding-bottom: 1px !important;
+    padding-left: 9px !important;
+    padding-right: 9px !important;
+    font-size: 0.7rem !important;
+    background: rgba(255, 255, 255, 0.06) !important;
+    backdrop-filter: blur(15px) !important;
+    border: 2px solid rgba(255, 255, 255, 0.1) !important;
+    border-radius: 12px !important;
+    color: var(--texto-principal) !important;
+    transition: all 0.3s ease !important;
+    font-weight: 500 !important;
+    box-sizing: border-box !important;
+    line-height: 1.1 !important;
+    height: 24px !important;
+    min-height: 24px !important;
+    max-height: 24px !important;
+    margin: 0 !important;
+    display: block !important;
+    flex: none !important;
+    flex-shrink: 0 !important;
+    overflow: visible !important;
+  }
+
+  .login-input.login-input-password,
+  .login-input-password,
+  .login-input-wrapper .login-input-password,
+  .login-input-wrapper input.login-input-password {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 100% !important;
+    padding-top: 1px !important;
+    padding-bottom: 1px !important;
+    padding-left: 9px !important;
+    padding-right: 24px !important;
+    font-size: 0.7rem !important;
+    background: rgba(255, 255, 255, 0.06) !important;
+    backdrop-filter: blur(15px) !important;
+    border: 2px solid rgba(255, 255, 255, 0.1) !important;
+    border-radius: 12px !important;
+    color: var(--texto-principal) !important;
+    transition: all 0.3s ease !important;
+    font-weight: 500 !important;
+    box-sizing: border-box !important;
+    line-height: 1.1 !important;
+    height: 24px !important;
+    min-height: 24px !important;
+    max-height: 24px !important;
+    margin: 0 !important;
+    display: block !important;
+    flex: none !important;
+    flex-shrink: 0 !important;
+    overflow: visible !important;
+  }
+
+  .login-password-toggle {
+    width: 16px !important;
+    height: 16px !important;
+    font-size: 0.65rem !important;
+    right: 5px !important;
+    padding: 2px !important;
+  }
+
+  .login-input-wrapper .login-input-password,
+  .login-input-wrapper input.login-input-password,
+  .login-input-wrapper .login-input.login-input-password {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  .login-password-toggle {
+    width: 18px;
+    height: 18px;
+    font-size: 0.7rem;
+    right: 6px;
+  }
+
+  .login-bg .btn-green,
+  .login-container .btn-green,
+  .login-card .btn-green,
+  .login-box .btn-green {
+    width: calc(100% - 16px) !important;
+    max-width: calc(100% - 16px) !important;
+    padding: 8px 16px !important;
+    font-size: 0.75rem !important;
+    margin-top: 4px !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+    box-sizing: border-box !important;
+  }
+
+  .otp-input {
+    width: 40px !important;
+    height: 50px !important;
+    max-width: 40px !important;
+    font-size: 20px !important;
+  }
+
+  .otp-box {
+    gap: 4px;
+    margin-bottom: 6px;
+  }
+
+  .login-mini {
+    padding: 6px var(--espacio-xs);
+    font-size: 0.75rem;
+    margin-top: 4px;
+  }
+
+  .login-step-title {
+    font-size: 1rem;
+    margin-bottom: 2px;
+  }
+
+  .login-step-subtitle {
+    font-size: 0.75rem;
+    margin-bottom: 6px;
+  }
+}
+
+/* =======================================================
+   REGLAS FINALES PARA IGUALAR ALTURA Y ANCHO DE INPUTS
+   ====================================================== */
+
+/* FORZAR MISMA ALTURA, ANCHO Y TAMAÑO DE FUENTE PARA AMBOS INPUTS - MÁXIMA ESPECIFICIDAD */
+html body .login-bg .login-container .login-card .login-box .login-input-group .login-input,
+html body .login-bg .login-container .login-card .login-box .login-input-group .login-input-wrapper .login-input,
+html body .login-bg .login-container .login-card .login-box .login-input-group .login-input-wrapper .login-input-password,
+html body .login-bg .login-container .login-card .login-box .login-input-group input.login-input,
+html body .login-bg .login-container .login-card .login-box .login-input-group .login-input-wrapper input.login-input-password,
+html body .login-bg .login-container .login-card .login-box .login-input-group input[type="text"].login-input,
+html body .login-bg .login-container .login-card .login-box .login-input-group input[type="password"].login-input-password {
+  height: 30px !important;
+  min-height: 30px !important;
+  max-height: 30px !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 100% !important;
+  box-sizing: border-box !important;
+  padding-top: 3px !important;
+  padding-bottom: 3px !important;
+  line-height: 1.1 !important;
+  margin: 0 !important;
+  flex: none !important;
+  flex-shrink: 0 !important;
+  font-size: 0.85rem !important;
+  font-weight: 500 !important;
+  overflow: visible !important;
+}
+
+/* Forzar mismo tamaño de fuente en placeholders */
+html body .login-bg .login-container .login-card .login-box .login-input-group .login-input::placeholder,
+html body .login-bg .login-container .login-card .login-box .login-input-group .login-input-wrapper .login-input::placeholder,
+html body .login-bg .login-container .login-card .login-box .login-input-group .login-input-wrapper .login-input-password::placeholder,
+html body .login-bg .login-container .login-card .login-box .login-input-group input.login-input::placeholder,
+html body .login-bg .login-container .login-card .login-box .login-input-group .login-input-wrapper input.login-input-password::placeholder {
+  font-size: 0.85rem !important;
+  font-weight: 500 !important;
+}
+
+/* Reglas específicas para PDA */
+@media (max-width: 520px) {
+  html body .login-bg .login-container .login-card .login-box .login-input-group .login-input,
+  html body .login-bg .login-container .login-card .login-box .login-input-group .login-input-wrapper .login-input,
+  html body .login-bg .login-container .login-card .login-box .login-input-group .login-input-wrapper .login-input-password,
+  html body .login-bg .login-container .login-card .login-box .login-input-group input.login-input,
+  html body .login-bg .login-container .login-card .login-box .login-input-group .login-input-wrapper input.login-input-password {
+    height: 24px !important;
+    min-height: 24px !important;
+    max-height: 24px !important;
+    font-size: 0.7rem !important;
+    overflow: visible !important;
+  }
+
+  html body .login-bg .login-container .login-card .login-box .login-input-group .login-input::placeholder,
+  html body .login-bg .login-container .login-card .login-box .login-input-group .login-input-wrapper .login-input::placeholder,
+  html body .login-bg .login-container .login-card .login-box .login-input-group .login-input-wrapper .login-input-password::placeholder,
+  html body .login-bg .login-container .login-card .login-box .login-input-group input.login-input::placeholder,
+  html body .login-bg .login-container .login-card .login-box .login-input-group .login-input-wrapper input.login-input-password::placeholder {
+    font-size: 0.7rem !important;
+    font-weight: 500 !important;
+  }
+}
+
+@media (max-width: 768px) {
+  html body .login-bg .login-container .login-card .login-box .login-input-group .login-input,
+  html body .login-bg .login-container .login-card .login-box .login-input-group .login-input-wrapper .login-input {
+    height: 26px !important;
+    min-height: 26px !important;
+    max-height: 26px !important;
+    font-size: 0.75rem !important;
+    overflow: visible !important;
+  }
+
+  html body .login-bg .login-container .login-card .login-box .login-input-group .login-input-wrapper .login-input-password,
+  html body .login-bg .login-container .login-card .login-box .login-input-group .login-input-wrapper input.login-input-password {
+    height: 28px !important;
+    min-height: 28px !important;
+    max-height: 28px !important;
+    font-size: 0.75rem !important;
+    overflow: visible !important;
+  }
+
+  html body .login-bg .login-container .login-card .login-box .login-input-group .login-input::placeholder,
+  html body .login-bg .login-container .login-card .login-box .login-input-group .login-input-wrapper .login-input::placeholder,
+  html body .login-bg .login-container .login-card .login-box .login-input-group .login-input-wrapper .login-input-password::placeholder,
+  html body .login-bg .login-container .login-card .login-box .login-input-group input.login-input::placeholder,
+  html body .login-bg .login-container .login-card .login-box .login-input-group .login-input-wrapper input.login-input-password::placeholder {
+    font-size: 0.75rem !important;
+    font-weight: 500 !important;
+  }
+}
+
+/* Asegurar que ambos inputs tengan el mismo ancho en todos los tamaños */
+.login-box .login-input-group,
+.login-box .login-input-group .login-input-wrapper {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 100% !important;
+}
+
+.login-box .login-input-group .login-input,
+.login-box .login-input-group .login-input-wrapper .login-input,
+.login-box .login-input-group .login-input-wrapper .login-input-password {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 100% !important;
+  box-sizing: border-box !important;
+}

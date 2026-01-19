@@ -1,0 +1,905 @@
+/* === ESTILOS GLOBALES PARA INPUTS Y SELECTS === */
+input[type="text"],
+input[type="number"],
+input[type="date"],
+select {
+  border-radius: var(--radio-full) !important;
+  background: var(--fondo-input) !important;
+  color: var(--texto-principal) !important;
+  border: 1px solid var(--borde-medio) !important;
+  padding: 6px 10px !important;
+  font-size: 0.9rem !important;
+}
+
+input[type="text"]::placeholder,
+input[type="number"]::placeholder,
+input[type="date"]::placeholder {
+  color: var(--texto-terciario) !important;
+  opacity: 0.7 !important;
+}
+
+select option {
+  background: var(--fondo-input) !important;
+  color: var(--texto-principal) !important;
+}
+
+input[type="text"]:focus,
+input[type="number"]:focus,
+input[type="date"]:focus,
+select:focus {
+  outline: none !important;
+  border-color: var(--borde-visible) !important;
+  box-shadow: var(--sombra-sm) !important;
+  background: var(--fondo-input-focus) !important;
+  color: var(--texto-principal) !important;
+}
+
+/* Estilos para modal de reporte detallado */
+.reportes-modal-ov {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--overlay-modal, rgba(0, 0, 0, 0.7));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  padding: 20px;
+}
+
+.reportes-modal-content {
+  background: var(--fondo-principal);
+  border-radius: var(--radio-xl);
+  max-width: 95vw;
+  max-height: 95vh;
+  overflow: auto;
+  width: 100%;
+}
+
+/* === Animaciones === */
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    max-height: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    max-height: 1000px;
+    transform: translateY(0);
+  }
+}
+
+/* === Estilos de Reportes === */
+.date-pill {
+  background: var(--fondo-secundario);
+  border: 1px solid var(--borde-sutil);
+  padding: 6px 10px;
+  border-radius: var(--radio-full);
+  font-size: 0.92rem;
+  color: var(--texto-principal);
+  font-weight: 600;
+}
+
+.btn-primary {
+  appearance: none;
+  border: none;
+  cursor: pointer;
+  background: linear-gradient(135deg, var(--azul-primario), var(--azul-secundario));
+  color: var(--texto-boton, white) !important;
+  padding: 8px 12px;
+  border-radius: var(--radio-full);
+  font-weight: 600;
+  transition: all var(--transicion-media);
+}
+
+.btn-primary:hover {
+  box-shadow: var(--sombra-md);
+  transform: translateY(-1px);
+}
+
+/* === Tarjeta general === */
+.reportes-wrapper {
+  display: flex;
+  justify-content: center;
+  padding: 18px;
+  width: 100%;
+}
+
+.reportes-card {
+  background: var(--fondo-card);
+  border-radius: var(--radio-xl);
+  box-shadow: var(--sombra-sm);
+  border: 1px solid var(--borde-sutil);
+  width: 95%;
+  max-width: 1200px;
+  padding: 18px;
+  margin: 10px auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.reportes-card h2 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--texto-principal);
+  margin: 0;
+  padding: 0;
+}
+
+/* === Contenedor de pestañas y cambiar fecha === */
+.tabs-and-date-container {
+  display: flex;
+  align-items: center;
+  gap: var(--espacio-md);
+  flex-wrap: wrap;
+  margin-bottom: var(--espacio-lg);
+}
+
+.tabs-container {
+  display: flex;
+  gap: var(--espacio-xs);
+  flex-wrap: wrap;
+  flex: 1;
+}
+
+.tab-btn {
+  padding: 8px 16px;
+  border-radius: var(--radio-full);
+  background: var(--fondo-input);
+  border: 1px solid var(--borde-sutil);
+  color: var(--texto-principal);
+  cursor: pointer;
+  font-weight: 500;
+  transition: all var(--transicion-media);
+}
+
+.tab-btn:hover {
+  box-shadow: var(--sombra-xs);
+}
+
+.tab-btn.active {
+  background: var(--fondo-secundario);
+  border-color: var(--borde-visible);
+  font-weight: 600;
+}
+
+/* === Cambiar fecha de reporte - Compacto === */
+.cambiar-fecha-contenedor {
+  display: flex;
+  align-items: center;
+  gap: var(--espacio-xs);
+  padding: var(--espacio-xs) var(--espacio-sm);
+  background: var(--fondo-card);
+  border: 1px solid var(--borde-sutil);
+  border-radius: var(--radio-full);
+}
+
+.cf-label {
+  font-size: 0.75rem;
+  color: var(--texto-secundario);
+  white-space: nowrap;
+}
+
+.cf-input {
+  padding: 6px 10px !important;
+  font-size: 0.875rem !important;
+  border-radius: var(--radio-full) !important;
+  background: var(--fondo-input) !important;
+  color: var(--texto-principal) !important;
+  border: 1px solid var(--borde-medio) !important;
+}
+
+.cf-flecha {
+  font-weight: bold;
+  font-size: 0.875rem;
+  color: var(--texto-secundario);
+  margin: 0 2px;
+}
+
+.btn-cambiar {
+  background: linear-gradient(135deg, var(--azul-primario), var(--azul-secundario));
+  border: none;
+  border-radius: var(--radio-full);
+  padding: 6px 14px;
+  color: var(--texto-boton, white) !important;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.875rem;
+  white-space: nowrap;
+  transition: all var(--transicion-media);
+}
+
+.btn-cambiar:hover {
+  box-shadow: var(--sombra-md);
+  transform: translateY(-1px);
+}
+
+/* === Encabezado de mes (acordeón) === */
+.mes-titulo {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--fondo-secundario);
+  padding: 10px 14px;
+  border-radius: var(--radio-full);
+  margin-top: 14px;
+  cursor: pointer;
+  user-select: none;
+  font-weight: 600;
+  color: var(--texto-principal);
+  transition: all var(--transicion-media);
+  border: 1px solid var(--borde-sutil);
+}
+
+.mes-titulo:hover {
+  box-shadow: var(--sombra-xs);
+}
+
+/* === Tabla === */
+.tabla-container {
+  overflow-x: auto;
+}
+
+.tabla-reportes {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 8px;
+  font-size: 0.9rem;
+  background: var(--fondo-card);
+  border-radius: var(--radio-xl);
+  overflow: hidden;
+  box-shadow: var(--sombra-sm);
+  border: 1px solid var(--borde-sutil);
+}
+
+.tabla-reportes th {
+  background: var(--fondo-secundario);
+  color: var(--texto-principal);
+  font-weight: 600;
+  padding: 12px 10px;
+  border-bottom: 2px solid var(--borde-medio);
+  text-align: left;
+  font-size: 0.9rem;
+}
+
+.tabla-reportes td {
+  padding: 10px;
+  border-bottom: 1px solid var(--borde-sutil);
+  text-align: left;
+  color: var(--texto-principal);
+  background: var(--fondo-card);
+  font-size: 0.9rem;
+}
+
+.tabla-reportes tbody tr:hover {
+  box-shadow: inset 2px 0 0 var(--borde-visible);
+}
+
+.tabla-reportes input,
+.tabla-reportes select {
+  background: var(--fondo-input);
+  border: 1px solid var(--borde-medio);
+  color: var(--texto-principal);
+  padding: 6px 8px;
+  border-radius: var(--radio-full);
+  font-size: 0.9rem;
+  transition: all var(--transicion-rapida);
+}
+
+.tabla-reportes input:focus,
+.tabla-reportes select:focus {
+  outline: none;
+  border-color: var(--borde-visible);
+  box-shadow: var(--sombra-sm);
+}
+
+/* === Botones === */
+.btn-ver {
+  background: linear-gradient(135deg, var(--azul-primario), var(--azul-secundario));
+  border: none;
+  color: var(--texto-boton, white) !important;
+  padding: 6px 10px;
+  border-radius: var(--radio-full);
+  cursor: pointer;
+  margin-right: 6px;
+  font-weight: 500;
+  transition: all var(--transicion-media);
+}
+
+.btn-ver:hover {
+  box-shadow: var(--sombra-sm);
+  transform: translateY(-1px);
+}
+
+.btn-borrar {
+  background: linear-gradient(135deg, var(--azul-claro), var(--azul-primario));
+  border: none;
+  color: var(--texto-boton, white) !important;
+  padding: 6px 10px;
+  border-radius: var(--radio-full);
+  cursor: pointer;
+  font-weight: 500;
+  transition: all var(--transicion-media);
+}
+
+.btn-borrar:hover {
+  box-shadow: var(--sombra-sm);
+  transform: translateY(-1px);
+}
+
+.btn-volver {
+  background: var(--fondo-input);
+  color: var(--texto-principal);
+  border: 1px solid var(--borde-sutil);
+  border-radius: var(--radio-full);
+  padding: 6px 12px;
+  cursor: pointer;
+  margin-bottom: 8px;
+  transition: all var(--transicion-media);
+}
+
+.btn-volver:hover {
+  box-shadow: var(--sombra-xs);
+}
+
+/* === Navegación (paginación 6 días) === */
+.paginacion-6 {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  margin: 10px 0 2px;
+}
+
+.btn-mini {
+  background: linear-gradient(135deg, var(--azul-primario), var(--azul-secundario));
+  color: var(--texto-boton, white) !important;
+  border: none;
+  border-radius: var(--radio-full);
+  padding: 4px 8px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: all var(--transicion-media);
+}
+
+.btn-mini:hover {
+  box-shadow: var(--sombra-sm);
+  transform: translateY(-1px);
+}
+
+.pag-idx {
+  font-size: 0.85rem;
+  opacity: 0.8;
+  color: var(--texto-principal);
+}
+
+/* === Punto verde en días con reporte (input date) === */
+.day-dot {
+  position: relative;
+}
+
+.day-dot::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 6px;
+  transform: translateX(-50%);
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--azul-primario);
+}
+
+.bloque-export {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin: 14px 0;
+}
+
+input[type="date"].day-dot::-webkit-calendar-picker-indicator {
+  background: radial-gradient(circle, var(--azul-primario) 40%, transparent 42%);
+  background-repeat: no-repeat;
+  background-position: center;
+}
+
+.botones-exportar {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+  margin-bottom: 10px;
+}
+
+.btn-export,
+.btn-export-dia {
+  background: linear-gradient(135deg, var(--azul-primario), var(--azul-secundario));
+  color: var(--texto-boton, white) !important;
+  border: none;
+  border-radius: var(--radio-full);
+  padding: 6px 10px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all var(--transicion-media);
+}
+
+.btn-export:hover,
+.btn-export-dia:hover {
+  box-shadow: var(--sombra-md);
+  transform: translateY(-1px);
+}
+
+.sin-registros {
+  text-align: center;
+  padding: 20px;
+  color: var(--texto-secundario);
+  font-size: 0.95rem;
+}
+
+/* =============================== */
+/* ESTILOS DE MODALES */
+/* =============================== */
+.devModalFondo {
+  position: fixed !important;
+  inset: 0 !important;
+  background: rgba(15, 23, 42, 0.75) !important;
+  backdrop-filter: blur(4px) !important;
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+  z-index: 500 !important;
+  max-height: calc(100vh - 40px) !important;
+  overflow-y: auto !important;
+  padding: 20px !important;
+  margin: auto !important;
+}
+
+.devModal {
+  background: var(--fondo-card) !important;
+  width: 95%;
+  max-width: 480px;
+  border-radius: var(--radio-xl) !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  animation: popIn 0.25s ease;
+  border: 1px solid var(--borde-sutil) !important;
+  box-shadow: var(--sombra-xl) !important;
+  max-height: calc(100vh - 40px) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  color: var(--texto-principal) !important;
+}
+
+.devModalGrande {
+  max-width: 1200px !important;
+  width: min(90vw, 1200px) !important;
+}
+
+@keyframes popIn {
+  from {
+    transform: scale(0.7);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.devModalHeader {
+  background: var(--fondo-secundario) !important;
+  color: var(--texto-principal) !important;
+  padding: 12px 16px !important;
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  border-bottom: 1px solid var(--borde-sutil) !important;
+}
+
+.devModalHeader h3 {
+  color: var(--texto-principal) !important;
+  margin: 0 !important;
+}
+
+.devModalHeader button {
+  background: transparent !important;
+  border: none !important;
+  color: var(--texto-terciario) !important;
+  font-size: 20px !important;
+  cursor: pointer !important;
+  transition: all var(--transicion-media) !important;
+}
+
+.devModalHeader button:hover {
+  color: var(--texto-principal) !important;
+  transform: scale(1.1) !important;
+}
+
+.devModalBody {
+  padding: 18px !important;
+  overflow-y: auto !important;
+  flex: 1;
+  max-height: calc(100vh - 200px);
+  background: var(--fondo-card) !important;
+  color: var(--texto-principal) !important;
+}
+
+.devModalBody strong {
+  color: var(--texto-principal) !important;
+}
+
+.devModalBody div {
+  color: var(--texto-principal) !important;
+}
+
+.devModalFooter {
+  padding: 12px 16px !important;
+  border-top: 1px solid var(--borde-sutil) !important;
+  display: flex !important;
+  justify-content: flex-end !important;
+  gap: 10px !important;
+  background: var(--fondo-secundario) !important;
+}
+
+.devModalFooter .btn-secundario {
+  background: var(--fondo-input) !important;
+  color: var(--texto-principal) !important;
+  border: 1px solid var(--borde-medio) !important;
+  padding: 10px 20px !important;
+  border-radius: var(--radio-full) !important;
+  cursor: pointer !important;
+  font-weight: 600 !important;
+  transition: all 0.2s ease !important;
+}
+
+.devModalFooter .btn-secundario:hover {
+  background: var(--fondo-secundario) !important;
+  box-shadow: var(--sombra-md) !important;
+  transform: translateY(-1px) !important;
+}
+
+.devModalMensaje {
+  text-align: center !important;
+  padding: 30px 20px !important;
+  color: var(--texto-secundario) !important;
+  font-size: 0.9rem !important;
+  background: var(--fondo-card) !important;
+}
+
+/* En PC, hacer los mensajes más grandes */
+@media (min-width: 769px) {
+  .devModalMensaje {
+    padding: 60px 50px !important;
+    font-size: 1.3rem !important;
+    font-weight: 500 !important;
+  }
+}
+
+.devModalTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+}
+
+.devModalTable thead {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.devModalTable thead tr {
+  background: var(--fondo-secundario) !important;
+  border-bottom: 2px solid var(--borde-medio);
+}
+
+.devModalTable th {
+  padding: 12px;
+  text-align: left;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--texto-principal);
+  background: var(--fondo-secundario) !important;
+  border-bottom: 2px solid var(--borde-medio);
+}
+
+.devModalTable tbody tr {
+  border-bottom: 1px solid var(--borde-sutil);
+  background: var(--fondo-card);
+}
+
+.devModalTable tbody tr:hover {
+  background: var(--fondo-card-hover);
+}
+
+.devModalTable td {
+  padding: 10px;
+  font-size: 0.95rem;
+  color: var(--texto-principal);
+}
+
+/* Badges */
+.badge-apto {
+  padding: 4px 8px !important;
+  border-radius: var(--radio-sm) !important;
+  background: rgba(16, 185, 129, 0.2) !important;
+  color: var(--exito) !important;
+  font-size: 0.85rem !important;
+  font-weight: 600 !important;
+}
+
+.badge-no-apto {
+  padding: 4px 8px !important;
+  border-radius: var(--radio-sm) !important;
+  background: rgba(239, 68, 68, 0.2) !important;
+  color: var(--error) !important;
+  font-size: 0.85rem !important;
+  font-weight: 600 !important;
+}
+
+.badge-activo {
+  padding: 4px 8px !important;
+  border-radius: var(--radio-sm) !important;
+  background: rgba(59, 130, 246, 0.2) !important;
+  color: var(--azul-primario) !important;
+  font-size: 0.85rem !important;
+  font-weight: 600 !important;
+}
+
+.badge-inactivo {
+  padding: 4px 8px !important;
+  border-radius: var(--radio-sm) !important;
+  background: var(--fondo-secundario) !important;
+  color: var(--texto-secundario) !important;
+  font-size: 0.85rem !important;
+  font-weight: 600 !important;
+}
+
+/* Títulos de sección */
+.seccion-titulo {
+  margin-bottom: 10px;
+  color: var(--texto-principal) !important;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+/* Mensaje sin productos/pedidos */
+.sin-productos {
+  background: var(--fondo-secundario) !important;
+  border-radius: var(--radio-md) !important;
+  text-align: center !important;
+  color: var(--texto-secundario) !important;
+  font-style: italic;
+  padding: 20px !important;
+}
+
+/* En PC, hacer los mensajes más grandes */
+@media (min-width: 769px) {
+  .sin-productos {
+    padding: 40px 30px !important;
+    font-size: 1.1rem !important;
+  }
+  
+  .seccion-titulo {
+    font-size: 1.3rem !important;
+  }
+}
+
+/* Asegurar que todas las celdas de tabla usen el tema oscuro */
+.tabla-reportes td {
+  background: var(--fondo-card) !important;
+  color: var(--texto-principal) !important;
+}
+
+.tabla-reportes tbody tr {
+  background: var(--fondo-card) !important;
+}
+
+.tabla-reportes tbody tr:hover {
+  background: var(--fondo-card-hover) !important;
+  box-shadow: inset 2px 0 0 var(--azul-primario) !important;
+}
+
+/* Título de pedidos */
+.titulo-pedidos {
+  color: var(--texto-principal) !important;
+  font-size: 1.5rem !important;
+  font-weight: 600 !important;
+  padding-bottom: 10px !important;
+  border-bottom: 2px solid var(--azul-primario) !important;
+  margin: 0 !important;
+}
+
+/* Buscador de pedidos */
+.buscador-pedidos {
+  padding: 8px 16px !important;
+  border: 2px solid var(--borde-medio) !important;
+  border-radius: var(--radio-md) !important;
+  font-size: 0.9rem !important;
+  width: 300px !important;
+  outline: none !important;
+  transition: border-color 0.2s !important;
+  background: var(--fondo-input) !important;
+  color: var(--texto-principal) !important;
+}
+
+.buscador-pedidos:focus {
+  border-color: var(--azul-primario) !important;
+}
+
+/* Tarjeta de pedido */
+.tarjeta-pedido {
+  border: 1px solid var(--borde-sutil) !important;
+  border-radius: var(--radio-lg) !important;
+  padding: 10px 12px !important;
+  background: var(--fondo-card) !important;
+  transition: all 0.3s ease !important;
+  overflow: hidden !important;
+  position: relative !important;
+  display: grid !important;
+  gap: 8px !important;
+  align-items: center !important;
+}
+
+.tarjeta-pedido:hover {
+  border-color: var(--borde-visible) !important;
+  box-shadow: var(--sombra-sm) !important;
+}
+
+.fecha-pedido {
+  font-size: 0.85rem !important;
+  color: var(--texto-secundario) !important;
+}
+
+.flecha-pedido {
+  font-size: 1rem !important;
+  transition: transform 0.3s !important;
+  color: var(--texto-secundario) !important;
+}
+
+.contenido-pedido {
+  padding: 12px 0 !important;
+  border-top: 1px solid var(--borde-sutil) !important;
+  animation: slideDown 0.3s ease !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 12px !important;
+}
+
+.info-pedido {
+  font-size: 0.9rem !important;
+  color: var(--texto-principal) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 8px !important;
+}
+
+.info-pedido strong {
+  color: var(--texto-principal) !important;
+}
+
+/* Fotos */
+.thumb-foto {
+  width: 120px !important;
+  height: 120px !important;
+  position: relative !important;
+  border-radius: var(--radio-md) !important;
+  overflow: hidden !important;
+  box-shadow: var(--sombra-sm) !important;
+  cursor: pointer !important;
+  transition: transform 0.2s !important;
+  background: var(--fondo-secundario) !important;
+  border: 1px solid var(--borde-sutil) !important;
+}
+
+.thumb-foto:hover {
+  transform: scale(1.05) !important;
+  box-shadow: var(--sombra-md) !important;
+}
+
+.error-foto {
+  padding: 20px !important;
+  text-align: center !important;
+  color: var(--texto-secundario) !important;
+}
+
+.sin-fotos {
+  padding: 20px !important;
+  opacity: 0.7 !important;
+  color: var(--texto-secundario) !important;
+  width: 100% !important;
+  text-align: center !important;
+}
+
+/* Viewer de fotos */
+.devModalViewer {
+  max-width: 1400px !important;
+  width: min(95vw, 1400px) !important;
+}
+
+.viewer-imagen-container {
+  width: 100% !important;
+  max-height: 75vh !important;
+  min-height: 300px !important;
+  overflow: hidden !important;
+  border-radius: var(--radio-lg) !important;
+  box-shadow: var(--sombra-xl) !important;
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+  background: #000 !important;
+  padding: 10px !important;
+}
+
+.viewer-imagen {
+  max-width: 100% !important;
+  max-height: 75vh !important;
+  width: auto !important;
+  height: auto !important;
+  object-fit: contain !important;
+  display: block !important;
+}
+
+.viewer-controles {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 20px !important;
+}
+
+.btn-viewer {
+  padding: 12px 24px !important;
+  border: 1px solid var(--borde-medio) !important;
+  background: var(--fondo-input) !important;
+  border-radius: var(--radio-lg) !important;
+  cursor: pointer !important;
+  font-size: 1rem !important;
+  font-weight: 600 !important;
+  transition: all 0.2s !important;
+  color: var(--texto-principal) !important;
+}
+
+.btn-viewer:hover {
+  background: var(--fondo-secundario) !important;
+  transform: scale(1.05) !important;
+  box-shadow: var(--sombra-md) !important;
+}
+
+.viewer-contador {
+  font-weight: 600 !important;
+  min-width: 80px !important;
+  text-align: center !important;
+  font-size: 1.1rem !important;
+  color: var(--texto-principal) !important;
+}
+
+/* Info detalle pedido */
+.info-pedido-detalle {
+  margin-bottom: 16px !important;
+  display: grid !important;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)) !important;
+  gap: 12px !important;
+}
+
+.info-pedido-detalle div {
+  color: var(--texto-principal) !important;
+}
+
+.info-pedido-detalle strong {
+  color: var(--texto-principal) !important;
+}
+
+.separador-modal {
+  opacity: 0.3 !important;
+  margin: 16px 0 !important;
+  border-color: var(--borde-sutil) !important;
+}
+
+.titulo-fotos {
+  display: block !important;
+  margin-bottom: 12px !important;
+  color: var(--texto-principal) !important;
+}

@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="referrer" content="no-referrer">
+
+    <meta name="theme-color" content="#000000" />
+    <title>IXORA</title>
+
+    <link rel="icon" type="image/x-icon" href="%PUBLIC_URL%/favicon.ico" />
+
+    <meta name="description" content="Inventario y Control de Operaciones y Recursos Atlas" />
+
+    <!-- Android / PWA -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    
+    <!-- Aplicar tema INMEDIATAMENTE antes de que React cargue -->
+    <!-- Esto evita el flash de colores por defecto y conflictos -->
+    <script>
+      (function() {
+        try {
+          // Obtener tema del localStorage
+          var temaGuardado = localStorage.getItem('tema-actual') || 'azul';
+          
+          // Temas básicos (solo los colores esenciales para evitar flash)
+          var temas = {
+            azul: {
+              '--fondo-principal': '#15192e',
+              '--fondo-secundario': '#1a1f2e',
+              '--azul-primario': '#3b82f6',
+              '--azul-secundario': '#2563eb',
+              '--texto-principal': '#f1f5f9'
+            },
+            verde: {
+              '--fondo-principal': '#0f1b0f',
+              '--fondo-secundario': '#141f14',
+              '--azul-primario': '#10b981',
+              '--azul-secundario': '#059669',
+              '--texto-principal': '#f1f5f9'
+            },
+            rojo: {
+              '--fondo-principal': '#1b0f0f',
+              '--fondo-secundario': '#1f1414',
+              '--azul-primario': '#ef4444',
+              '--azul-secundario': '#dc2626',
+              '--texto-principal': '#f1f5f9'
+            },
+            morado: {
+              '--fondo-principal': '#1a0f1b',
+              '--fondo-secundario': '#1f141f',
+              '--azul-primario': '#a855f7',
+              '--azul-secundario': '#9333ea',
+              '--texto-principal': '#f1f5f9'
+            },
+            naranja: {
+              '--fondo-principal': '#1b150f',
+              '--fondo-secundario': '#1f1914',
+              '--azul-primario': '#f97316',
+              '--azul-secundario': '#ea580c',
+              '--texto-principal': '#f1f5f9'
+            },
+            rosa: {
+              '--fondo-principal': '#1b0f15',
+              '--fondo-secundario': '#1f1419',
+              '--azul-primario': '#ec4899',
+              '--azul-secundario': '#db2777',
+              '--texto-principal': '#f1f5f9'
+            },
+            cyan: {
+              '--fondo-principal': '#0f1b1b',
+              '--fondo-secundario': '#141f1f',
+              '--azul-primario': '#06b6d4',
+              '--azul-secundario': '#0891b2',
+              '--texto-principal': '#f1f5f9'
+            },
+            amarillo: {
+              '--fondo-principal': '#1b1b0f',
+              '--fondo-secundario': '#1f1f14',
+              '--azul-primario': '#eab308',
+              '--azul-secundario': '#ca8a04',
+              '--texto-principal': '#f1f5f9'
+            }
+          };
+          
+          // Aplicar tema básico inmediatamente
+          var tema = temas[temaGuardado] || temas.azul;
+          var root = document.documentElement;
+          for (var variable in tema) {
+            if (tema.hasOwnProperty(variable)) {
+              root.style.setProperty(variable, tema[variable]);
+            }
+          }
+        } catch(e) {
+          // Silenciar errores en caso de que localStorage no esté disponible
+        }
+      })();
+    </script>
+  </head>
+
+<script src="https://cdn.jsdelivr.net/gh/zebra-technologies/browser-print/js/BrowserPrint-3.0.216.min.js"></script>
+
+  <body>
+    <noscript>Necesitas habilitar JavaScript para usar esta aplicación.</noscript>
+    <div id="root"></div>
+  </body>
+</html>

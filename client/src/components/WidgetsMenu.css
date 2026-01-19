@@ -1,0 +1,340 @@
+/* Botón circular inferior con menú radial - SIEMPRE VISIBLE EN VIEWPORT */
+.widgets-menu-container {
+  position: fixed !important;
+  bottom: calc(20px + env(safe-area-inset-bottom, 0px)) !important;
+  right: 20px !important;
+  z-index: 99999 !important;
+  pointer-events: auto !important;
+  will-change: transform !important;
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  /* Asegurar que no tenga fondo visible */
+  background: none !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  border: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+.widgets-notifications-container {
+  position: fixed !important;
+  bottom: calc(20px + env(safe-area-inset-bottom, 0px)) !important;
+  left: 20px !important;
+  z-index: 99999 !important;
+  pointer-events: auto !important;
+  /* Completamente transparente - sin ningún fondo visible */
+  background: none !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  -webkit-box-shadow: none !important;
+  -moz-box-shadow: none !important;
+  border: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  /* Asegurar que no haya ningún efecto visual de fondo */
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+.widgets-notifications-container.top-right {
+  top: calc(20px + env(safe-area-inset-top, 0px)) !important;
+  right: 20px !important;
+  left: auto !important;
+  bottom: auto !important;
+  /* Asegurar que no tenga fondo visible */
+  background: none !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  border: none !important;
+}
+
+.widgets-notifications-button {
+  width: 56px;
+  height: 56px;
+  border-radius: 50% !important;
+  /* Fondo con color del tema */
+  background: linear-gradient(135deg, var(--azul-primario), var(--azul-secundario)) !important;
+  background-color: var(--azul-primario) !important;
+  border: none !important;
+  color: white !important;
+  font-size: 1.4rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  box-shadow: var(--sombra-sm) !important;
+  outline: none !important;
+  -webkit-tap-highlight-color: transparent;
+  padding: 0 !important;
+  margin: 0 !important;
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.widgets-notifications-button:hover {
+  background: linear-gradient(135deg, var(--azul-hover, var(--azul-secundario)), var(--azul-primario)) !important;
+  background-color: var(--azul-hover, var(--azul-secundario)) !important;
+  color: white !important;
+  box-shadow: var(--sombra-md) !important;
+  border: none !important;
+  transform: scale(1.1);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.widgets-notifications-button:focus,
+.widgets-notifications-button:active {
+  background: linear-gradient(135deg, var(--azul-primario), var(--azul-secundario)) !important;
+  background-color: var(--azul-primario) !important;
+  outline: none !important;
+  box-shadow: var(--sombra-sm) !important;
+  border: none !important;
+  transform: scale(0.95);
+}
+
+.widgets-notifications-container.chat-open {
+  z-index: 1 !important;
+  pointer-events: none !important;
+  background: none !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  border: none !important;
+}
+
+.widgets-menu-container.chat-open {
+  z-index: 3000 !important;
+}
+
+.widgets-menu-button {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  /* Completamente transparente - sin ningún fondo visible */
+  background: none !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  border: none !important;
+  color: var(--texto-principal);
+  font-size: 1.5rem;
+  cursor: pointer;
+  box-shadow: none !important;
+  -webkit-box-shadow: none !important;
+  -moz-box-shadow: none !important;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100000;
+  will-change: transform;
+  transform: translateZ(0);
+  position: relative;
+  pointer-events: auto;
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  backdrop-filter: none !important;
+  text-shadow: none !important;
+}
+
+.widgets-menu-dot {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #ef4444;
+  border: 2px solid rgba(255, 255, 255, 0.9);
+  box-shadow: 0 0 6px rgba(239, 68, 68, 0.7);
+}
+
+.widgets-menu-button:hover {
+  transform: scale(1.1) translateZ(0);
+  box-shadow: none !important;
+  -webkit-box-shadow: none !important;
+  -moz-box-shadow: none !important;
+  background: none !important;
+  background-color: transparent !important;
+  background-image: none !important;
+}
+
+.widgets-menu-button.abierto {
+  transform: rotate(45deg) translateZ(0);
+  background: none !important;
+  background-color: transparent !important;
+  background-image: none !important;
+}
+
+.widgets-menu-icon {
+  display: block;
+  line-height: 1;
+}
+
+/* Menú radial tipo "rama" */
+.widgets-menu-radial {
+  position: absolute;
+  bottom: 70px;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: flex-end;
+  animation: slideUp 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.widget-menu-item {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--fondo-card) !important;
+  border: 2px solid var(--azul-primario) !important;
+  color: var(--texto-principal);
+  font-size: 1.3rem;
+  cursor: pointer;
+  box-shadow: none !important;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  will-change: transform;
+  transform: translateZ(0);
+  position: relative;
+}
+
+.widget-menu-item-icon {
+  line-height: 1;
+}
+
+.widgets-menu-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #ef4444;
+  color: #ffffff;
+  font-size: 0.65rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--fondo-card);
+  box-shadow: 0 0 6px rgba(239, 68, 68, 0.6);
+  pointer-events: none;
+}
+
+.widget-menu-item:hover {
+  transform: scale(1.15) translateZ(0);
+  box-shadow: none !important;
+  border-color: var(--azul-hover) !important;
+}
+
+.widget-menu-item:active {
+  transform: scale(0.95) translateZ(0);
+}
+
+.widget-menu-chat {
+  border-color: var(--exito);
+}
+
+.widget-menu-chat:hover {
+  border-color: #059669 !important;
+  background: var(--exito) !important;
+  color: white !important;
+}
+
+.widget-menu-ia {
+  border-color: var(--azul-primario);
+}
+
+.widget-menu-ia:hover {
+  background: var(--azul-primario) !important;
+  color: white !important;
+}
+
+.widget-menu-notificaciones {
+  border-color: #f59e0b;
+}
+
+.widget-menu-notificaciones:hover {
+  background: #f59e0b !important;
+  color: white !important;
+}
+
+/* Responsive - Mantener position fixed en todas las plataformas */
+@media screen and (max-width: 768px) {
+  .widgets-menu-container {
+    position: fixed !important;
+    bottom: calc(20px + env(safe-area-inset-bottom, 0px)) !important;
+    right: 20px !important;
+    z-index: 99999 !important;
+    background: none !important;
+    background-color: transparent !important;
+    background-image: none !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+
+  .widgets-notifications-container {
+    bottom: calc(20px + env(safe-area-inset-bottom, 0px)) !important;
+    left: 20px !important;
+  }
+
+  .widgets-notifications-container.top-right {
+    top: calc(16px + env(safe-area-inset-top, 0px)) !important;
+    right: 16px !important;
+    left: auto !important;
+    bottom: auto !important;
+  }
+  
+  .widgets-menu-button {
+    width: 52px;
+    height: 52px;
+    font-size: 1.4rem;
+    background: none !important;
+    background-color: transparent !important;
+    background-image: none !important;
+    border: none !important;
+    box-shadow: none !important;
+    -webkit-box-shadow: none !important;
+    -moz-box-shadow: none !important;
+  }
+
+  .widgets-notifications-button {
+    width: 52px;
+    height: 52px;
+    font-size: 1.3rem;
+    border-radius: 50% !important;
+    background: linear-gradient(135deg, var(--azul-primario), var(--azul-secundario)) !important;
+    background-color: var(--azul-primario) !important;
+    border: none !important;
+    box-shadow: var(--sombra-sm) !important;
+  }
+  
+  .widget-menu-item {
+    width: 44px;
+    height: 44px;
+    font-size: 1.2rem;
+  }
+}

@@ -1,0 +1,1111 @@
+/* =======================================================
+   📝 ESTILOS GLOBALES PARA INPUTS Y SELECTS
+=========================================== */
+input[type="text"],
+input[type="number"],
+input[type="date"],
+select {
+  border-radius: var(--radio-full) !important;
+  background: var(--fondo-input);
+  color: var(--texto-principal);
+  border: 1px solid var(--borde-medio);
+  padding: 6px 10px !important;
+  font-size: 0.9rem !important;
+}
+
+input[type="text"]:focus,
+input[type="number"]:focus,
+input[type="date"]:focus,
+select:focus {
+  outline: none !important;
+  border-color: var(--azul-primario);
+  box-shadow: 0 0 0 3px rgba(74, 158, 255, 0.15) !important;
+}
+
+.control-calidad {
+  padding: 20px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.btn-add-area,
+.btn-agregar-registro {
+  margin-bottom: 20px;
+  padding: 12px 24px !important;
+  background: linear-gradient(135deg, var(--azul-primario), var(--azul-secundario)) !important;
+  color: var(--texto-boton, var(--texto-principal)) !important;
+  border: none !important;
+  border-radius: var(--radio-full) !important;
+  font-size: 0.9rem !important;
+  font-weight: 600 !important;
+  box-shadow: var(--sombra-sm) !important;
+  transition: all var(--transicion-media);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-add-area:hover,
+.btn-agregar-registro:hover {
+  box-shadow: var(--sombra-md) !important;
+  transform: translateY(-2px);
+}
+
+.btn-add-area:active,
+.btn-agregar-registro:active {
+  transform: translateY(0) scale(0.98);
+  box-shadow: var(--sombra-xs) !important;
+}
+
+.modal-area {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 20px;
+  overflow-y: auto;
+}
+
+.modal-content {
+  background: var(--fondo-card);
+  padding: 20px;
+  border-radius: var(--radio-xl);
+  width: min(300px, 95vw);
+  max-width: calc(100vw - 40px);
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  margin: auto;
+}
+
+/* Selector de área */
+.area-selector {
+  margin-bottom: 24px;
+  padding: 16px;
+  background: var(--fondo-secundario);
+  border-radius: var(--radio-xl);
+  border: 1px solid var(--borde-sutil);
+}
+
+.area-selector label {
+  display: block;
+  margin-bottom: 10px;
+  font-weight: 700;
+  font-size: 1rem;
+  color: var(--texto-principal);
+}
+
+.area-selector select {
+  padding: 12px 16px !important;
+  font-size: 1rem !important;
+  border-radius: var(--radio-lg) !important;
+  border: 2px solid var(--azul-primario) !important;
+  width: 100%;
+  max-width: 400px;
+  background: var(--fondo-input) !important;
+  color: var(--texto-boton, var(--texto-principal)) !important;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.area-selector select:focus {
+  border-color: var(--azul-primario) !important;
+  box-shadow: 0 0 0 3px var(--azul-primario-transparente) !important;
+}
+
+.area-selector p {
+  margin-top: 8px;
+  font-size: 0.875rem;
+  color: var(--texto-terciario);
+  font-style: italic;
+}
+
+.area-selector strong {
+  color: var(--texto-principal);
+}
+
+/* Estilos para botones de agregar en dropdowns */
+.btn-dropdown-add {
+  position: absolute;
+  right: 2px;
+  top: 2px;
+  background: linear-gradient(135deg, var(--azul-primario), var(--azul-secundario)) !important;
+  color: var(--texto-boton, var(--texto-principal)) !important;
+  border: none !important;
+  border-radius: var(--radio-md) !important;
+  padding: 4px 8px !important;
+  font-size: 0.75rem !important;
+  cursor: pointer;
+  font-weight: 600;
+  box-shadow: var(--sombra-xs);
+  transition: all var(--transicion-media);
+  min-width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-dropdown-add:hover {
+  box-shadow: var(--sombra-md);
+  transform: scale(1.1);
+}
+
+.btn-dropdown-add:active {
+  transform: scale(0.95);
+}
+
+.btn-dropdown-confirm {
+  padding: 4px 8px !important;
+  background: linear-gradient(135deg, var(--exito), #059669) !important;
+  color: var(--texto-boton, var(--texto-principal)) !important;
+  border: none !important;
+  border-radius: var(--radio-md) !important;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.75rem;
+  box-shadow: var(--sombra-xs);
+  transition: all var(--transicion-media);
+}
+
+.btn-dropdown-confirm:hover {
+  box-shadow: var(--sombra-md);
+  transform: translateY(-1px);
+}
+
+.btn-dropdown-cancel {
+  padding: 4px 8px !important;
+  background: linear-gradient(135deg, var(--error), #dc2626) !important;
+  color: var(--texto-boton, var(--texto-principal)) !important;
+  border: none !important;
+  border-radius: var(--radio-md) !important;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.75rem;
+  box-shadow: var(--sombra-xs);
+  transition: all var(--transicion-media);
+}
+
+.btn-dropdown-cancel:hover {
+  box-shadow: var(--sombra-md);
+  transform: translateY(-1px);
+}
+
+.dropdown-input-new {
+  flex: 1;
+  padding: 6px 10px !important;
+  font-size: 0.8rem !important;
+  border: 1px solid var(--borde-medio) !important;
+  border-radius: var(--radio-md) !important;
+  background: var(--fondo-input) !important;
+  color: var(--texto-boton, var(--texto-principal)) !important;
+}
+
+.dropdown-input-new:focus {
+  border-color: var(--azul-primario) !important;
+  box-shadow: 0 0 0 2px var(--azul-primario-transparente) !important;
+}
+
+.dropdown-new-options {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.modal-content h4 {
+  margin-top: 0;
+  color: var(--texto-principal);
+}
+
+.modal-content input {
+  width: 100%;
+  padding: 8px;
+  margin-bottom: 10px;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  background: transparent !important;
+}
+
+.tabla-calidad,
+.tabla-calidad-completa {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--fondo-card);
+  border-radius: var(--radio-xl);
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  font-size: 0.85rem;
+}
+
+.tabla-calidad th, .tabla-calidad td,
+.tabla-calidad-completa th, .tabla-calidad-completa td {
+  border-bottom: 1px solid var(--borde-sutil);
+  padding: 10px 8px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.tabla-calidad th,
+.tabla-calidad-completa th {
+  background: var(--fondo-secundario);
+  color: var(--texto-principal);
+  font-weight: 600;
+  font-size: 0.85rem;
+  border-bottom: 2px solid var(--borde-visible);
+  white-space: nowrap;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.tabla-calidad td,
+.tabla-calidad-completa td {
+  background: var(--fondo-card);
+  color: var(--texto-secundario);
+  font-size: 0.85rem;
+}
+
+.tabla-calidad tbody tr:hover,
+.tabla-calidad-completa tbody tr:hover {
+  background: var(--fondo-card-hover);
+  transition: background 0.2s ease;
+}
+
+.tabla-calidad select, .tabla-calidad input,
+.tabla-calidad-completa select, .tabla-calidad-completa input {
+  width: 100%;
+  padding: 6px 8px;
+  background: var(--fondo-input);
+  border: 1px solid var(--borde-medio);
+  color: var(--texto-principal);
+  border-radius: var(--radio-md);
+  font-size: 0.85rem;
+  transition: all 0.2s ease;
+  min-width: 120px;
+}
+
+.tabla-calidad select:focus, .tabla-calidad input:focus,
+.tabla-calidad-completa select:focus, .tabla-calidad-completa input:focus {
+  outline: none;
+  border-color: var(--azul-primario);
+  box-shadow: 0 0 0 2px var(--azul-primario-transparente);
+}
+
+/* Estilos para dropdowns con botón de agregar */
+.tabla-calidad-completa td > div {
+  position: relative;
+  width: 100%;
+}
+
+.tabla-calidad-completa td select {
+  padding-right: 30px;
+}
+
+/* Colores para clasificación de etiqueta */
+.tabla-calidad-completa td select option[value="B"] {
+  background: #b3e5fc;
+}
+
+.tabla-calidad-completa td select option[value="C"] {
+  background: #fff9c4;
+}
+
+.tabla-calidad-completa td select option[value="D"] {
+  background: #90caf9;
+}
+
+.tabla-calidad-completa td select option[value="Importación"] {
+  background: #d1c4e9;
+}
+
+/* Colores para destino */
+.tabla-calidad-completa td select option[value="Reacondicionamiento"] {
+  background: #ffccbc;
+}
+
+.tabla-calidad-completa td select option[value="Outlet"] {
+  background: #81d4fa;
+}
+
+.tabla-calidad-completa td select option[value="Merma"] {
+  background: #ffab91;
+}
+
+/* ========================================================
+   📐 FORMULARIO (reutilizado de Devoluciones)
+======================================================= */
+.gestion-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.gestion-header h3 {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.gestion-top-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  margin-bottom: 6px;
+  width: 100%;
+}
+
+.gestion-top-actions-right {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.gestion-top-actions-right .btn-plain {
+  border-radius: var(--radio-full) !important;
+  padding: 3px 8px;
+  font-weight: 600;
+  font-size: 0.7rem;
+  white-space: nowrap;
+  background: var(--fondo-input);
+  color: var(--texto-principal);
+  border: 1px solid var(--borde-medio);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.gestion-top-actions-right .btn-plain:hover {
+  box-shadow: var(--sombra-xs);
+  transform: translateY(-1px);
+}
+
+.gestion-top-actions-right .btn-plain:active {
+  transform: translateY(0) scale(0.98);
+}
+
+.gestion-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 6px;
+  padding: 6px 8px;
+  background: var(--fondo-secundario);
+  border-radius: var(--radio-full);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.gestion-form-row {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-end;
+  gap: 6px;
+  flex-wrap: nowrap;
+  width: 100%;
+  justify-content: flex-start;
+}
+
+.gestion-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: var(--texto-secundario);
+  min-width: 0;
+  flex-shrink: 0;
+}
+
+.gestion-form-row label:nth-child(1) {
+  flex: 0 0 180px;
+  width: 180px;
+}
+
+/* Input de Lote más ancho - selector por posición */
+/* Cuando hay Área (calidad): Área(1), Código(2), Nombre(3), Lote(4), Cantidad(5) */
+.gestion-form-row label:nth-child(4) {
+  flex: 0 0 220px !important;
+  width: 220px !important;
+  min-width: 220px !important;
+  max-width: 220px !important;
+}
+
+/* Cuando NO hay Área: Código(1), Nombre(2), Lote(3), Cantidad(4) */
+.gestion-form-row:not(:has(select)) label:nth-child(3) {
+  flex: 0 0 220px !important;
+  width: 220px !important;
+  min-width: 220px !important;
+  max-width: 220px !important;
+}
+
+/* Asegurar que el input dentro también sea ancho */
+.gestion-form-row label:nth-child(4) input,
+.gestion-form-row label:nth-child(3) input {
+  width: 100% !important;
+  min-width: 100% !important;
+}
+
+.gestion-form-row label:nth-child(2) {
+  flex: 0 0 200px;
+  width: 200px;
+}
+
+.gestion-form-row label:nth-child(3) {
+  flex: 0 0 200px;
+  width: 200px;
+}
+
+.gestion-form-row label:nth-child(4) {
+  flex: 0 0 150px;
+  width: 150px;
+}
+
+.gestion-form-row label:nth-child(5) {
+  flex: 0 0 150px;
+  width: 150px;
+}
+
+.gestion-form-row label:nth-child(6) {
+  flex: 0 0 150px;
+  width: 150px;
+}
+
+.gestion-form-row-boton {
+  display: flex;
+  justify-content: flex-start;
+  margin-top: 4px;
+}
+
+.gestion-form-row-boton .btn-green {
+  width: auto !important;
+  padding: 3px 6px !important;
+  font-size: 0.55rem !important;
+  border-radius: var(--radio-full) !important;
+  height: auto !important;
+  white-space: nowrap !important;
+  line-height: 1.4 !important;
+  box-sizing: border-box !important;
+  margin-top: 1px !important;
+  border: none !important;
+  background: linear-gradient(135deg, var(--azul-primario), var(--azul-secundario)) !important;
+  color: var(--texto-boton, var(--texto-principal)) !important;
+  cursor: pointer !important;
+  font-weight: 600 !important;
+  transition: all var(--transicion-media) !important;
+  box-shadow: var(--sombra-xs) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.gestion-form-row:last-child label:nth-child(2) {
+  width: 45px !important;
+  flex: 0 0 45px !important;
+  max-width: 45px !important;
+  min-width: 45px !important;
+}
+
+.gestion-form-row:last-child label:nth-child(2) input {
+  width: 45px !important;
+  max-width: 45px !important;
+  min-width: 45px !important;
+  padding: 6px 4px !important;
+  box-sizing: border-box;
+  border-radius: var(--radio-full) !important;
+  background: var(--fondo-input);
+  color: var(--texto-principal);
+  border: 1px solid var(--borde-medio);
+}
+
+.gestion-form-row .btn-green {
+  width: 50px !important;
+  flex: 0 0 50px !important;
+  padding: 3px 6px !important;
+  font-size: 0.55rem !important;
+  border-radius: 3px !important;
+  background: linear-gradient(135deg, var(--azul-primario), var(--azul-secundario)) !important;
+  color: var(--texto-boton, var(--texto-principal)) !important;
+  border: none !important;
+  cursor: pointer !important;
+  font-weight: 600 !important;
+  transition: all var(--transicion-media) !important;
+  white-space: nowrap !important;
+  box-shadow: var(--sombra-xs) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  height: auto !important;
+  white-space: nowrap;
+  align-self: flex-end;
+  flex-shrink: 0;
+  line-height: 1.4 !important;
+  min-width: 50px !important;
+  max-width: 50px !important;
+  box-sizing: border-box !important;
+  margin-top: 1px !important;
+  min-height: auto !important;
+  border: 1px solid transparent !important;
+}
+
+.gestion-form input,
+.gestion-form select {
+  padding: 6px 10px !important;
+  border: 1px solid var(--borde-medio) !important;
+  border-radius: var(--radio-full) !important;
+  font-size: 0.9rem !important;
+  transition: all 0.2s;
+  width: 100%;
+  box-sizing: border-box;
+  min-width: 0;
+  background: var(--fondo-input) !important;
+  color: var(--texto-boton, var(--texto-principal)) !important;
+}
+
+.gestion-form button.btn-green {
+  width: 60px !important;
+  flex: 0 0 60px !important;
+  padding: 1px 4px !important;
+  font-size: 0.6rem !important;
+  border-radius: 2px !important;
+  background: linear-gradient(135deg, var(--azul-primario), var(--azul-secundario)) !important;
+  color: var(--texto-boton, var(--texto-principal)) !important;
+  border: none !important;
+  cursor: pointer !important;
+  font-weight: 600 !important;
+  transition: all var(--transicion-media) !important;
+  white-space: nowrap !important;
+  box-shadow: var(--sombra-xs) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  height: fit-content;
+  white-space: nowrap;
+  align-self: flex-end;
+  flex-shrink: 0;
+  line-height: 1.2;
+}
+
+.gestion-form input:focus,
+.gestion-form select:focus {
+  outline: none;
+  border-color: var(--azul-primario);
+  box-shadow: 0 0 0 3px rgba(74, 158, 255, 0.15);
+}
+
+.gestion-table-wrapper {
+  overflow-x: auto;
+  margin-top: 16px;
+}
+
+.gestion-loader,
+.gestion-empty {
+  text-align: center;
+  padding: 40px;
+  color: var(--texto-terciario);
+}
+
+/* ========================================================
+   🔄 SWITCH (Activo/Inactivo)
+======================================================= */
+/* Switch styles ahora están en global.css con colores verde/rojo y tamaño pequeño */
+
+/* ========================================================
+   📋 MODAL DE ACTIVACIÓN MASIVA
+======================================================= */
+.activation-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 10000;
+  padding: 20px;
+  overflow-y: auto;
+}
+
+.activation-modal {
+  background: var(--fondo-card);
+  border-radius: var(--radio-xl);
+  max-width: min(600px, 95vw);
+  width: 100%;
+  max-width: calc(100vw - 40px);
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  box-shadow: var(--sombra-xl);
+  border: 1px solid var(--borde-sutil);
+  color: var(--texto-principal);
+  margin: auto;
+}
+
+.activation-modal__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--borde-sutil);
+  background: var(--fondo-secundario);
+}
+
+.activation-modal__header h4 {
+  margin: 0;
+  font-size: 1.2rem;
+  color: var(--texto-principal);
+}
+
+.activation-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.activation-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--borde-sutil);
+  background: var(--fondo-card);
+}
+
+.activation-list li:last-child {
+  border-bottom: none;
+}
+
+.activation-list li:hover {
+  background: var(--fondo-card-hover);
+}
+
+.activation-list li > div:first-child {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.activation-list strong {
+  font-size: 1rem;
+  color: var(--texto-principal);
+}
+
+.activation-code {
+  font-size: 0.85rem;
+  color: var(--texto-terciario);
+  font-family: monospace;
+}
+
+.activation-lote {
+  font-size: 0.85rem;
+  color: var(--texto-terciario);
+}
+
+.activation-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.activation-controls span {
+  font-weight: 600;
+  color: var(--azul-primario);
+}
+
+/* ========================================================
+   🔗 MODAL DE CÓDIGO ALTERNO
+======================================================= */
+.alias-results {
+  max-height: 300px;
+  overflow-y: auto;
+  margin: 12px 0;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  padding: 8px;
+}
+
+.alias-item {
+  display: block;
+  width: 100%;
+  padding: 10px;
+  margin-bottom: 4px;
+  text-align: left;
+  background: var(--fondo-secundario);
+  border: 1px solid var(--borde-sutil);
+  border-radius: var(--radio-full);
+  cursor: pointer;
+  transition: all 0.2s;
+  color: var(--texto-principal);
+}
+
+.alias-item:hover {
+  background: var(--fondo-card-hover);
+  border-color: var(--azul-primario);
+}
+
+.alias-item.selected {
+  background: var(--azul-primario);
+  border-color: var(--azul-primario);
+  color: var(--texto-boton, var(--texto-principal));
+}
+
+.alias-item strong {
+  color: var(--azul-primario);
+  margin-right: 8px;
+}
+
+.alias-item.selected strong {
+  color: var(--texto-principal);
+}
+
+.alias-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+/* ========================================================
+   🎨 BOTONES
+======================================================= */
+.btn-green {
+  background: linear-gradient(135deg, var(--azul-primario), var(--azul-secundario)) !important;
+  color: var(--texto-boton, var(--texto-principal)) !important;
+  border: none !important;
+  border-radius: var(--radio-full) !important;
+  padding: 4px 10px !important;
+  cursor: pointer !important;
+  font-weight: 600 !important;
+  font-size: 0.75rem !important;
+  transition: all var(--transicion-media) !important;
+  white-space: nowrap !important;
+  box-shadow: var(--sombra-xs) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.btn-green:hover:not(:disabled) {
+  box-shadow: var(--sombra-md) !important;
+  transform: translateY(-1px) !important;
+}
+
+.btn-green:active:not(:disabled) {
+  transform: translateY(0) scale(0.98) !important;
+  box-shadow: var(--sombra-xs) !important;
+}
+
+.btn-green:disabled {
+  opacity: 0.5 !important;
+  cursor: not-allowed !important;
+}
+
+.btn-plain {
+  background: var(--fondo-input);
+  color: var(--texto-principal);
+  border: 1px solid var(--borde-medio);
+  border-radius: var(--radio-full);
+  padding: 4px 10px;
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 0.75rem;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.btn-plain:hover {
+  box-shadow: var(--sombra-xs);
+  transform: translateY(-1px);
+}
+
+.btn-plain:active {
+  transform: translateY(0) scale(0.98);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .control-calidad {
+    padding: 8px;
+  }
+
+  .gestion-form {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+    padding: 6px;
+    width: 100%;
+  }
+
+  .gestion-form-row {
+    flex-direction: row;
+    align-items: flex-end;
+    gap: 4px;
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .gestion-form-row:first-child label:nth-child(1) {
+    flex: 0 0 calc(33.333% - 3px) !important;
+    width: calc(33.333% - 3px) !important;
+    max-width: calc(33.333% - 3px) !important;
+    min-width: calc(33.333% - 3px) !important;
+  }
+
+  .gestion-form-row:first-child label:nth-child(2) {
+    flex: 0 0 calc(66.666% - 3px) !important;
+    width: calc(66.666% - 3px) !important;
+    max-width: calc(66.666% - 3px) !important;
+    min-width: calc(66.666% - 3px) !important;
+  }
+
+  .gestion-form-row:first-child label:nth-child(3),
+  .gestion-form-row:first-child label:nth-child(4),
+  .gestion-form-row:first-child label:nth-child(5),
+  .gestion-form-row:first-child label:nth-child(6) {
+    display: none;
+  }
+
+  .gestion-form-row:nth-child(2) label:nth-child(1) {
+    flex: 0 0 calc(40% - 3px) !important;
+    width: calc(40% - 3px) !important;
+    max-width: calc(40% - 3px) !important;
+    min-width: calc(40% - 3px) !important;
+  }
+
+  .gestion-form-row:nth-child(2) label:nth-child(2) {
+    flex: 0 0 calc(30% - 3px) !important;
+    width: calc(30% - 3px) !important;
+    max-width: calc(30% - 3px) !important;
+    min-width: calc(30% - 3px) !important;
+  }
+
+  .gestion-form label {
+    font-size: 0.65rem;
+    gap: 1px;
+  }
+
+  .gestion-form input,
+  .gestion-form select {
+    padding: 4px 6px;
+    font-size: 0.7rem;
+    width: 100% !important;
+  }
+
+  .gestion-form-row-boton {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 4px;
+    width: 100%;
+  }
+
+  .gestion-form-row-boton .btn-green {
+    width: auto !important;
+    min-width: 80px !important;
+    max-width: 120px !important;
+    padding: 4px 8px !important;
+    font-size: 0.7rem !important;
+    flex: 0 0 auto !important;
+  }
+
+  .gestion-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+    margin-bottom: 4px;
+  }
+
+  .gestion-header h3 {
+    font-size: 0.85rem;
+  }
+
+  .gestion-top-actions {
+    margin-bottom: 4px;
+  }
+
+  .gestion-top-actions-right .btn-plain {
+    font-size: 0.65rem;
+    padding: 3px 6px;
+  }
+
+  .activation-modal {
+    max-width: 95%;
+    padding: 10px;
+  }
+
+  .activation-modal__header {
+    padding: 8px 10px;
+  }
+
+  .activation-modal__header h4 {
+    font-size: 0.9rem;
+  }
+
+  .tabla-calidad {
+    font-size: 0.75rem;
+  }
+
+  .tabla-calidad th,
+  .tabla-calidad td {
+    padding: 5px 3px;
+  }
+}
+
+@media (max-width: 480px) {
+  .control-calidad {
+    padding: 6px;
+  }
+
+  .gestion-form {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 5px;
+    gap: 3px;
+    width: 100%;
+  }
+
+  .gestion-form-row {
+    flex-direction: row;
+    align-items: flex-end;
+    gap: 3px;
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .gestion-form-row:first-child label:nth-child(1) {
+    flex: 0 0 calc(33.333% - 2px) !important;
+    width: calc(33.333% - 2px) !important;
+    max-width: calc(33.333% - 2px) !important;
+    min-width: calc(33.333% - 2px) !important;
+  }
+
+  .gestion-form-row:first-child label:nth-child(2) {
+    flex: 0 0 calc(66.666% - 2px) !important;
+    width: calc(66.666% - 2px) !important;
+    max-width: calc(66.666% - 2px) !important;
+    min-width: calc(66.666% - 2px) !important;
+  }
+
+  .gestion-form-row:first-child label:nth-child(3),
+  .gestion-form-row:first-child label:nth-child(4),
+  .gestion-form-row:first-child label:nth-child(5),
+  .gestion-form-row:first-child label:nth-child(6) {
+    display: none;
+  }
+
+  .gestion-form-row:nth-child(2) label:nth-child(1) {
+    flex: 0 0 calc(40% - 2px) !important;
+    width: calc(40% - 2px) !important;
+    max-width: calc(40% - 2px) !important;
+    min-width: calc(40% - 2px) !important;
+  }
+
+  .gestion-form-row:nth-child(2) label:nth-child(2) {
+    flex: 0 0 calc(30% - 2px) !important;
+    width: calc(30% - 2px) !important;
+    max-width: calc(30% - 2px) !important;
+    min-width: calc(30% - 2px) !important;
+  }
+
+  .gestion-form label {
+    font-size: 0.6rem;
+    gap: 1px;
+  }
+
+  .gestion-form input,
+  .gestion-form select {
+    padding: 10px 12px !important;
+    font-size: 16px !important; /* Evita zoom en iOS */
+    width: 100% !important;
+    min-height: 44px !important; /* Tamaño mínimo táctil */
+    box-sizing: border-box !important;
+  }
+
+  .gestion-form-row-boton {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 3px;
+    width: 100%;
+  }
+
+  .gestion-form-row-boton .btn-green {
+    width: auto !important;
+    min-width: 70px !important;
+    max-width: 100px !important;
+    padding: 3px 6px !important;
+    font-size: 0.65rem !important;
+    flex: 0 0 auto !important;
+  }
+
+  .gestion-top-actions-right .btn-plain {
+    font-size: 0.6rem;
+    padding: 2px 5px;
+  }
+
+  .tabla-calidad {
+    font-size: 0.65rem;
+  }
+
+  .tabla-calidad th,
+  .tabla-calidad td {
+    padding: 3px 2px;
+  }
+
+  .gestion-header h3 {
+    font-size: 0.85rem;
+  }
+  
+  /* Asegurar que todos los inputs sean visibles y táctiles en PDA */
+  input[type="text"],
+  input[type="number"],
+  input[type="date"],
+  select,
+  textarea {
+    font-size: 16px !important; /* Evita zoom en iOS */
+    padding: 10px 12px !important;
+    min-height: 44px !important; /* Tamaño mínimo táctil */
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+}
+
+/* =============================== */
+/* INPUTS RESPONSIVOS PARA PDA - GLOBAL */
+/* =============================== */
+@media (max-width: 768px) {
+  /* Asegurar que todos los inputs sean visibles y táctiles en PDA */
+  input[type="text"],
+  input[type="number"],
+  input[type="date"],
+  select,
+  textarea {
+    font-size: 16px !important; /* Evita zoom en iOS */
+    padding: 10px 12px !important;
+    min-height: 44px !important; /* Tamaño mínimo táctil */
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+}
+
+@media (max-width: 480px) {
+  /* Asegurar que todos los inputs sean visibles y táctiles en PDA pequeño */
+  input[type="text"],
+  input[type="number"],
+  input[type="date"],
+  select,
+  textarea {
+    font-size: 16px !important; /* Evita zoom en iOS */
+    padding: 10px 12px !important;
+    min-height: 44px !important; /* Tamaño mínimo táctil */
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+}

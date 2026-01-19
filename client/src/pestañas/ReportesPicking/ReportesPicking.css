@@ -1,0 +1,846 @@
+/* =======================================================
+   🎨 REPORTES - COMPLETAMENTE BLANCO
+   CON DETALLES ROJOS Y NEGROS
+   ====================================================== */
+
+/* Variables CSS ahora se heredan de tema.css */
+
+input[type="text"],
+input[type="number"],
+input[type="date"],
+select {
+  border-radius: var(--radio-full) !important;
+  background: var(--fondo-input) !important;
+  color: var(--texto-principal) !important;
+  border: 1px solid var(--borde-medio) !important;
+  padding: 10px 14px !important;
+  font-size: 1rem !important;
+}
+
+input[type="text"]::placeholder,
+input[type="number"]::placeholder,
+input[type="date"]::placeholder {
+  color: var(--texto-terciario) !important;
+  opacity: 0.7 !important;
+}
+
+select option {
+  background: var(--fondo-input) !important;
+  color: var(--texto-principal) !important;
+}
+
+input[type="text"]:focus,
+input[type="number"]:focus,
+input[type="date"]:focus,
+select:focus {
+  outline: none !important;
+  border-color: var(--borde-visible) !important;
+  box-shadow: var(--sombra-sm) !important;
+  background: var(--fondo-input-focus) !important;
+  color: var(--texto-principal) !important;
+}
+
+.reportes-wrap{
+  background: var(--fondo-card);
+  padding: 18px;
+  border-radius: var(--radio-xl);
+  box-shadow: var(--sombra-md);
+  margin: 10px auto;
+  width: 95%;
+  max-width: 1200px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border: 1px solid var(--borde-sutil);
+}
+
+.header-row{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.header-row h2{
+  margin: 0;
+}
+
+/* === Contenedor de cambiar fecha === */
+.tabs-and-date-container {
+  display: flex;
+  align-items: center;
+  gap: var(--espacio-md);
+  flex-wrap: wrap;
+  margin-bottom: var(--espacio-lg);
+}
+
+/* === Cambiar fecha de reporte - Compacto === */
+.cambiar-fecha-contenedor {
+  display: flex;
+  align-items: center;
+  gap: var(--espacio-xs);
+  padding: var(--espacio-xs) var(--espacio-sm);
+  background: var(--fondo-card);
+  border: 1px solid var(--borde-sutil);
+  border-radius: var(--radio-full);
+}
+
+.cf-label {
+  font-size: 0.75rem;
+  color: var(--texto-secundario);
+  white-space: nowrap;
+}
+
+.cf-input {
+  padding: 6px 10px !important;
+  font-size: 0.875rem !important;
+  border-radius: var(--radio-full) !important;
+  background: var(--fondo-input) !important;
+  color: var(--texto-principal) !important;
+  border: 1px solid var(--borde-medio) !important;
+}
+
+.cf-flecha {
+  font-weight: bold;
+  font-size: 0.875rem;
+  color: var(--texto-secundario);
+  margin: 0 2px;
+}
+
+.btn-cambiar {
+  background: linear-gradient(135deg, var(--azul-primario), var(--azul-secundario));
+  border: none;
+  border-radius: var(--radio-full);
+  padding: 6px 14px;
+  color: var(--texto-boton, #ffffff) !important;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.875rem;
+  white-space: nowrap;
+  transition: all var(--transicion-media);
+}
+
+.btn-cambiar:hover {
+  box-shadow: var(--sombra-md);
+  transform: translateY(-1px);
+}
+
+.reportes-wrap h2 {
+  font-size: 1.8rem;
+  color: var(--texto-principal) !important;
+  font-weight: 700;
+  margin-bottom: 20px;
+  text-align: center;
+  letter-spacing: 2px;
+}
+
+.pill{
+  background: var(--azul-sutil);
+  border: 1px solid var(--borde-sutil);
+  padding: var(--espacio-xs) var(--espacio-sm);
+  border-radius: var(--radio-full);
+  font-size: 0.875rem;
+  color: var(--texto-principal);
+  font-weight: 600;
+}
+
+.pill.loading{ 
+  animation: pulse 1.2s infinite; 
+}
+
+@keyframes pulse { 
+  0%{opacity: .6} 
+  50%{opacity:1} 
+  100%{opacity:.6} 
+}
+
+.meses-list{ 
+  display: flex; 
+  flex-direction: column; 
+  gap: 10px; 
+}
+
+.mes-card{
+  border: 1px solid var(--borde-medio);
+  border-radius: var(--radio-xl);
+  overflow: hidden;
+  background: var(--fondo-card);
+}
+
+/* Máxima especificidad para mes-header - debe sobrescribir reglas globales */
+.reportes-wrap .mes-card .mes-header,
+.mes-card .mes-header,
+.mes-header {
+  appearance: none !important; 
+  border: none !important; 
+  background: var(--azul-primario) !important;
+  width: 100% !important; 
+  text-align: left !important;
+  padding: 14px 18px !important; 
+  display: flex !important; 
+  gap: 12px !important; 
+  align-items: center !important;
+  cursor: pointer !important;
+  border-bottom: 2px solid var(--borde-sutil) !important;
+  /* Asegurar que el texto sea visible en cualquier tema */
+  color: var(--texto-boton, #ffffff) !important;
+}
+
+/* Forzar color en todos los elementos hijos del mes-header, excepto los botones */
+.reportes-wrap .mes-card .mes-header > *:not(.mes-actions),
+.mes-card .mes-header > *:not(.mes-actions),
+.mes-header > *:not(.mes-actions) {
+  color: var(--texto-boton, #ffffff) !important;
+}
+
+/* Asegurar que mes-txt, mes-total y chev sean blancos con máxima especificidad */
+.reportes-wrap .mes-card .mes-header .mes-txt,
+.reportes-wrap .mes-card .mes-header .mes-total,
+.reportes-wrap .mes-card .mes-header .chev,
+.mes-card .mes-header .mes-txt,
+.mes-card .mes-header .mes-total,
+.mes-card .mes-header .chev,
+.mes-header .mes-txt,
+.mes-header .mes-total,
+.mes-header .chev {
+  color: var(--texto-boton, #ffffff) !important;
+}
+
+.mes-header:hover {
+  box-shadow: var(--sombra-xs);
+  transform: translateX(2px);
+  background: var(--azul-hover) !important;
+}
+
+.mes-header:active {
+  transform: translateX(1px) scale(0.99);
+}
+
+/* Ajuste específico para tema blanco y negro - mejor contraste en el texto de fecha */
+/* Las barras del mes tienen fondo negro cuando el tema usa --azul-primario como negro */
+/* Usar --texto-boton (blanco) cuando existe, sino mantener --texto-principal */
+.reportes-wrap .mes-card .mes-header .mes-txt,
+.mes-card .mes-header .mes-txt,
+.mes-header .mes-txt { 
+  font-weight: 700 !important; 
+  color: var(--texto-boton, #ffffff) !important;
+  text-transform: capitalize !important; 
+  font-size: 1.1rem !important;
+  letter-spacing: 0.5px !important;
+}
+
+.reportes-wrap .mes-card .mes-header .mes-total,
+.mes-card .mes-header .mes-total,
+.mes-header .mes-total {
+  margin-left: auto !important; 
+  color: var(--texto-boton, #ffffff) !important;
+  opacity: 0.95 !important;
+  font-size: 1rem !important;
+  font-weight: 600 !important;
+}
+
+.reportes-wrap .mes-card .mes-header .chev,
+.mes-card .mes-header .chev,
+.mes-header .chev { 
+  color: var(--texto-boton, #ffffff) !important; 
+  font-size: 1.2rem !important;
+}
+
+/* Asegurar que los botones pequeños también tengan buen contraste */
+.mes-header .mes-actions .btn-small {
+  background: var(--fondo-card) !important;
+  border: 1px solid var(--borde-medio) !important;
+  color: var(--texto-principal) !important;
+}
+
+.mes-header .mes-actions .btn-small:hover {
+  background: var(--fondo-secundario) !important;
+  border-color: var(--borde-visible) !important;
+  color: var(--texto-principal) !important;
+}
+
+.mes-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-left: auto;
+  margin-right: 12px;
+}
+
+.btn-small {
+  background: var(--fondo-card);
+  border: 1px solid var(--borde-medio);
+  color: var(--texto-principal);
+  padding: 6px 12px;
+  border-radius: var(--radio-full);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transicion-rapida);
+  white-space: nowrap;
+}
+
+.btn-small:hover {
+  box-shadow: var(--sombra-sm);
+  transform: translateY(-1px);
+}
+
+.btn-small:active {
+  transform: translateY(0) scale(0.98);
+}
+
+.mes-body{ 
+  padding: 12px; 
+  display: flex; 
+  flex-direction: column; 
+  gap: 10px; 
+  background: var(--fondo-card);
+}
+
+.dias-head{
+  display: grid;
+  grid-template-columns: 1.2fr .8fr .8fr 1.2fr;
+  gap: 16px;
+  padding: 12px 14px;
+  background: var(--fondo-card);
+  border: 1px solid var(--borde-medio);
+  border-radius: var(--radio-full);
+  font-weight: 700;
+  color: var(--texto-principal) !important;
+  font-size: 0.95rem !important;
+}
+
+.dias-block{
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.dia-row{
+  display: grid;
+  grid-template-columns: 1.2fr .8fr .8fr 1.2fr;
+  gap: 16px;
+  align-items: center;
+  border: 1px solid var(--borde-medio);
+  border-radius: var(--radio-full);
+  padding: 12px 14px;
+  background: var(--fondo-card) !important;
+  font-size: 0.95rem !important;
+}
+
+.dia-row > div {
+  color: var(--texto-principal) !important;
+  font-weight: 500;
+}
+
+.date-pill{
+  background: var(--fondo-card);
+  border: 1px solid var(--borde-medio);
+  padding: 8px 14px;
+  border-radius: var(--radio-full);
+  font-size: 1rem !important;
+  font-weight: 600;
+  color: var(--texto-principal) !important;
+}
+
+.col-fecha{ 
+  display: flex; 
+  align-items: center; 
+}
+
+.col-acc{ 
+  display: flex; 
+  gap: 10px; 
+  justify-content: flex-end; 
+  align-items: center;
+  padding-left: 8px;
+}
+
+.pager{
+  display: flex; 
+  align-items: center; 
+  justify-content: center; 
+  gap: 12px;
+  margin-top: 12px;
+  font-size: 1rem !important;
+  font-weight: 600;
+  color: var(--texto-principal) !important;
+}
+
+.btn-primary{
+  appearance: none; 
+  border: 1px solid var(--borde-medio); 
+  cursor: pointer;
+  background: linear-gradient(135deg, var(--azul-primario), var(--azul-secundario));
+  color: var(--texto-boton, #ffffff) !important; 
+  padding: 10px 16px; 
+  border-radius: var(--radio-full); 
+  font-weight: 600;
+  font-size: 0.95rem !important;
+  transition: all var(--transicion-media);
+}
+
+.btn-primary:hover {
+  box-shadow: var(--sombra-lg);
+  transform: translateY(-2px);
+}
+
+.btn-primary:active {
+  transform: translateY(0) scale(0.95);
+  box-shadow: var(--sombra-sm);
+}
+
+.btn-primary.wide{ 
+  width: 100%; 
+  padding: 10px 14px; 
+}
+
+.btn-plain{
+  appearance: none; 
+  border: none; 
+  background: transparent; 
+  cursor: pointer;
+  padding: 8px 12px; 
+  border-radius: var(--radio-full); 
+  color: var(--texto-principal); 
+  font-weight: 600;
+  font-size: 1rem !important;
+}
+
+.btn-plain:hover {
+  box-shadow: var(--sombra-xs);
+  opacity: 0.8;
+}
+
+.btn-plain:active {
+  transform: scale(0.95);
+}
+
+.empty{
+  padding: 14px; 
+  border: 2px dashed var(--borde-sutil); 
+  border-radius: var(--radio-full); 
+  text-align: center; 
+  color: var(--texto-principal);
+  background: var(--fondo-card);
+  font-size: 1rem !important;
+  font-weight: 500;
+}
+
+/* =======================================================
+   MODAL ESTILOS
+   ====================================================== */
+.reportes-modal-ov {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--overlay-modal, rgba(0, 0, 0, 0.7));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  padding: 20px;
+}
+
+/* Pestañas del modal */
+.reportes-modal-tabs {
+  display: flex;
+  gap: 10px;
+  padding: 15px;
+  border-bottom: 2px solid var(--borde-sutil);
+  background: var(--fondo-card);
+}
+
+.reportes-tab-btn {
+  padding: 10px 20px;
+  border: none;
+  background: var(--fondo-input);
+  color: var(--texto-principal);
+  border-radius: var(--radio-full);
+  cursor: pointer;
+  font-weight: 600;
+  transition: all var(--transicion-media);
+  border: 1px solid var(--borde-medio);
+}
+
+.reportes-tab-btn:hover {
+  background: var(--fondo-secundario);
+  box-shadow: var(--sombra-xs);
+}
+
+.reportes-tab-btn.active {
+  background: var(--exito, #10b981);
+  color: var(--texto-boton, #ffffff) !important;
+  border-color: var(--exito, #10b981);
+}
+
+.reportes-modal {
+  background: var(--fondo-card);
+  border: 1px solid var(--borde-sutil);
+  border-radius: var(--radio-xl);
+  max-width: 95%;
+  max-height: 90vh;
+  width: 1000px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.reportes-modal-head {
+  padding: 18px 20px;
+  border-bottom: 2px solid var(--borde-sutil);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--fondo-card);
+}
+
+.reportes-modal-head h4 {
+  margin: 0;
+  font-size: 1.4rem !important;
+  font-weight: 700;
+  color: var(--texto-principal);
+  letter-spacing: 1px;
+}
+
+.reportes-modal-body {
+  padding: 20px;
+  overflow-y: auto;
+  flex: 1;
+  background: var(--fondo-card);
+}
+
+.reportes-modal-body .tbl {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.reportes-modal-body .tbl th {
+  background: var(--fondo-secundario);
+  border: 1px solid var(--borde-sutil);
+  padding: var(--espacio-sm) var(--espacio-xs);
+  text-align: left;
+  font-weight: 600;
+  color: var(--texto-principal);
+  font-size: 0.95rem !important;
+  white-space: nowrap;
+}
+
+.reportes-modal-body .tbl td {
+  border: 1px solid var(--borde-sutil);
+  padding: 10px 8px;
+  background: var(--fondo-card);
+  color: var(--texto-principal);
+  font-size: 0.9rem !important;
+}
+
+.reportes-modal-body .tbl input {
+  width: 100%;
+  max-width: 120px;
+  padding: 6px 10px;
+  border: 1px solid var(--borde-medio);
+  border-radius: var(--radio-full);
+  font-size: 0.9rem !important;
+  background: var(--fondo-card);
+  color: var(--texto-principal);
+}
+
+.reportes-modal-body .tbl input:focus {
+  outline: none;
+  border-color: var(--borde-visible);
+  box-shadow: var(--sombra-sm);
+}
+
+.reportes-modal-foot {
+  padding: 18px 20px;
+  border-top: 2px solid var(--borde-sutil);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  background: var(--fondo-card);
+}
+
+.btn-borrar {
+  appearance: none;
+  border: 1px solid var(--borde-medio);
+  background: var(--fondo-card);
+  color: var(--texto-principal);
+  padding: 6px 10px;
+  border-radius: var(--radio-full);
+  cursor: pointer;
+  font-size: 1.1rem !important;
+  transition: all var(--transicion-rapida);
+}
+
+.btn-borrar:hover {
+  box-shadow: var(--sombra-sm);
+  transform: translateY(-1px);
+}
+
+.btn-borrar:active {
+  transform: translateY(0) scale(0.95);
+}
+
+/* =======================================================
+   RESPONSIVE - PDA Y DISPOSITIVOS PEQUEÑOS
+   ====================================================== */
+
+@media (max-width: 768px) {
+  .reportes-wrap {
+    width: 98%;
+    padding: 12px;
+  }
+
+  .header-row h2,
+  .reportes-wrap h2 {
+    font-size: 1.2rem;
+  }
+
+  .mes-header {
+    padding: 10px 12px;
+  }
+
+  .mes-header .mes-txt {
+    font-size: 1rem !important;
+  }
+
+  .mes-header .mes-total {
+    font-size: 0.9rem !important;
+  }
+
+  .dias-head,
+  .dia-row {
+    grid-template-columns: 1.2fr 0.9fr 0.9fr 1.2fr;
+    gap: 12px;
+    padding: 10px 12px;
+    font-size: 0.85rem !important;
+  }
+
+  .btn-small {
+    padding: 5px 10px;
+    font-size: 0.8rem;
+  }
+
+  .btn-primary {
+    padding: 8px 12px;
+    font-size: 0.85rem !important;
+  }
+}
+
+@media (max-width: 520px) {
+  .reportes-wrap {
+    width: 100%;
+    padding: 10px;
+    margin: 5px auto;
+  }
+
+  .header-row h2,
+  .reportes-wrap h2 {
+    font-size: 1rem;
+    letter-spacing: 0.5px;
+  }
+
+  .mes-header {
+    padding: 8px 10px;
+    flex-wrap: wrap;
+  }
+
+  .mes-header .mes-txt {
+    font-size: 0.9rem !important;
+  }
+
+  .mes-header .mes-total {
+    font-size: 0.85rem !important;
+  }
+
+  .mes-actions {
+    margin-left: 0;
+    margin-right: 0;
+    margin-top: 6px;
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .dias-head,
+  .dia-row {
+    grid-template-columns: 1fr;
+    gap: 6px;
+    padding: 8px 10px;
+    font-size: 0.8rem !important;
+  }
+
+  .col-fecha,
+  .col-acc {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .btn-small {
+    padding: 4px 8px;
+    font-size: 0.75rem;
+  }
+
+  .btn-primary {
+    padding: 6px 10px;
+    font-size: 0.8rem !important;
+  }
+
+  .reportes-modal {
+    width: 95%;
+    max-height: 95vh;
+  }
+
+  .reportes-modal-head {
+    padding: 12px 14px;
+  }
+
+  .reportes-modal-head h4 {
+    font-size: 1.1rem !important;
+  }
+
+  .reportes-modal-body {
+    padding: 12px;
+  }
+
+  .reportes-modal-body .tbl th,
+  .reportes-modal-body .tbl td {
+    padding: 6px 4px;
+    font-size: 0.8rem !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .reportes-wrap {
+    padding: 8px;
+  }
+
+  .header-row h2,
+  .reportes-wrap h2 {
+    font-size: 0.9rem;
+  }
+
+  .mes-header {
+    padding: 6px 8px;
+  }
+
+  .mes-header .mes-txt {
+    font-size: 0.85rem !important;
+  }
+
+  .dias-head,
+  .dia-row {
+    padding: 6px 8px;
+    font-size: 0.75rem !important;
+  }
+
+  .btn-small,
+  .btn-primary,
+  .btn-borrar {
+    padding: 4px 6px;
+    font-size: 0.7rem;
+  }
+
+  .date-pill {
+    padding: 4px 8px;
+    font-size: 0.85rem !important;
+  }
+
+  .reportes-modal-head h4 {
+    font-size: 1rem !important;
+  }
+
+  .reportes-modal-body .tbl th,
+  .reportes-modal-body .tbl td {
+    font-size: 0.75rem !important;
+    padding: 4px 2px;
+  }
+}
+
+/* =======================================================
+   MODAL REPORTE DETALLADO
+   ====================================================== */
+.modal-reporte-detallado-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--overlay-modal, rgba(0, 0, 0, 0.85));
+  z-index: 10001;
+  overflow: auto;
+  padding: var(--espacio-lg);
+}
+
+.modal-reporte-detallado-content {
+  max-width: 100%;
+  margin: 0 auto;
+  background: transparent;
+}
+
+/* Asegurar que el reporte detallado dentro del modal use el tema */
+.modal-reporte-detallado-overlay .reporte-detallado-container {
+  background: var(--fondo-principal);
+  color: var(--texto-principal) !important;
+}
+
+/* =======================================================
+   ESTILOS PARA PEDIDOS DE DEVOLUCIONES
+   ====================================================== */
+.devoluciones-pedidos-container {
+  width: 100%;
+}
+
+.devoluciones-pedidos-container h3 {
+  color: var(--texto-principal) !important;
+  font-weight: 700;
+  margin-bottom: 16px;
+}
+
+.devoluciones-pedidos-container input[type="text"] {
+  width: 100%;
+  max-width: 300px;
+  padding: 8px 12px;
+  border-radius: var(--radio-full);
+  border: 1px solid var(--borde-medio);
+  background: var(--fondo-input);
+  color: var(--texto-principal);
+  font-size: 0.9rem;
+}
+
+.devoluciones-pedidos-container input[type="text"]:focus {
+  outline: none;
+  border-color: var(--borde-visible);
+  box-shadow: var(--sombra-sm);
+}
+
+/* Tarjeta de pedido */
+.devoluciones-pedidos-container > div > div > div {
+  transition: all var(--transicion-media);
+}
+
+.devoluciones-pedidos-container > div > div > div:hover {
+  box-shadow: var(--sombra-md);
+  transform: translateY(-2px);
+}
+
+/* Scrollbar personalizado para la lista de pedidos */
+.devoluciones-pedidos-container > div > div::-webkit-scrollbar {
+  width: 8px;
+}
+
+.devoluciones-pedidos-container > div > div::-webkit-scrollbar-track {
+  background: var(--fondo-input);
+  border-radius: 4px;
+}
+
+.devoluciones-pedidos-container > div > div::-webkit-scrollbar-thumb {
+  background: var(--borde-medio);
+  border-radius: 4px;
+}
+
+.devoluciones-pedidos-container > div > div::-webkit-scrollbar-thumb:hover {
+  background: var(--borde-visible);
+}

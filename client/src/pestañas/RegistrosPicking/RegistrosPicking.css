@@ -1,0 +1,972 @@
+/* =======================================================
+   🎨 REGISTROS - DISEÑO PROFESIONAL EMPRESARIAL
+   ====================================================== */
+
+
+input[type="text"],
+input[type="number"],
+select {
+  border-radius: var(--radio-full) !important;
+  background: var(--fondo-input) !important;
+  color: var(--texto-principal) !important;
+  border: 1px solid var(--borde-medio) !important;
+  padding: var(--espacio-sm) var(--espacio-md);
+  font-size: 0.95rem;
+  transition: all var(--transicion-media);
+}
+
+input[type="text"]::placeholder,
+input[type="number"]::placeholder {
+  color: var(--texto-terciario) !important;
+  opacity: 0.7 !important;
+}
+
+select option {
+  background: var(--fondo-input) !important;
+  color: var(--texto-principal) !important;
+}
+
+input[type="text"]:focus,
+input[type="number"]:focus,
+select:focus {
+  outline: none !important;
+  border-color: var(--borde-visible) !important;
+  box-shadow: var(--sombra-sm) !important;
+  background: var(--fondo-input-focus) !important;
+  color: var(--texto-principal) !important;
+}
+
+/* =======================================================
+   PESTAÑAS DE FILTROS
+   ====================================================== */
+
+.registros-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  width: 100%;
+}
+
+.registros-tabs button {
+  display: flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+  padding: 6px 10px !important;
+  border: 1px solid var(--borde-medio) !important;
+  border-radius: 10px !important;
+  background: var(--fondo-input) !important;
+  color: var(--texto-principal) !important;
+  font-size: 0.75rem !important;
+  font-weight: 500 !important;
+  cursor: pointer !important;
+  transition: all var(--transicion-media) !important;
+  box-shadow: var(--sombra-xs) !important;
+  flex: 1 !important;
+  min-width: 0 !important;
+  justify-content: center !important;
+  white-space: nowrap !important;
+}
+
+.registros-tabs button:hover {
+  box-shadow: var(--sombra-md) !important;
+  transform: translateY(-1px) !important;
+  background: var(--fondo-secundario) !important;
+  color: var(--texto-principal) !important;
+}
+
+.registros-tabs button:active {
+  transform: translateY(0) scale(0.98) !important;
+}
+
+.registros-tabs button.tab-activa {
+  background: var(--azul-primario) !important;
+  border-color: var(--azul-primario) !important;
+  color: var(--texto-boton, #ffffff) !important;
+  font-weight: 600 !important;
+  box-shadow: var(--sombra-sm) !important;
+}
+
+.registros-tabs button.tab-activa:hover {
+  background: var(--azul-hover, var(--azul-primario)) !important;
+  color: var(--texto-boton, #ffffff) !important;
+}
+
+.registros-tabs button .tab-icon {
+  font-size: 0.8rem !important;
+  flex-shrink: 0 !important;
+  color: inherit !important; /* Heredar el color del botón */
+}
+
+.registros-tabs button .tab-label {
+  font-size: 0.7rem !important;
+  font-weight: 600 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  color: inherit !important; /* Heredar el color del botón */
+}
+
+.registros-tabs button.tab-activa .tab-icon,
+.registros-tabs button.tab-activa .tab-label {
+  color: var(--texto-boton, #ffffff) !important;
+}
+
+/* =======================================================
+   CONTADORES - EN UNA SOLA LÍNEA
+   ====================================================== */
+
+.registros-contadores {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  width: 100%;
+}
+
+.registros-contadores .contador-card {
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  padding: 8px 10px !important;
+  border: 1px solid var(--borde-sutil) !important;
+  border-radius: 10px !important;
+  background: var(--fondo-card) !important;
+  flex: 1 !important;
+  min-width: 0 !important;
+  box-shadow: var(--sombra-sm) !important;
+  transition: all var(--transicion-media) !important;
+}
+
+.registros-contadores .contador-card:hover {
+  box-shadow: var(--sombra-md) !important;
+  transform: translateY(-1px) !important;
+  background: var(--fondo-card-hover, var(--fondo-secundario)) !important;
+}
+
+.registros-contadores .contador-icon {
+  font-size: 1rem !important;
+  flex-shrink: 0 !important;
+  opacity: 0.9 !important;
+}
+
+.registros-contadores .contador-titulo {
+  font-size: 0.75rem !important;
+  font-weight: 500 !important;
+  color: var(--texto-secundario) !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+.registros-contadores .contador-valor {
+  font-size: 1rem !important;
+  font-weight: 700 !important;
+  color: var(--texto-principal) !important;
+  margin-left: auto !important;
+  flex-shrink: 0 !important;
+}
+
+/* =======================================================
+   TABLA - BLANCA CON BORDES NEGROS
+   ====================================================== */
+
+.tabla-container.registros-tabla {
+  overflow-x: auto;
+  width: 100%;
+  border-radius: var(--radio-lg);
+  border: 1px solid var(--borde-sutil);
+  box-shadow: var(--sombra-sm);
+  background: var(--fondo-card);
+  padding: 4px 0;
+}
+
+.tabla-registros {
+  width: 100%;
+  background: var(--fondo-card);
+  color: var(--texto-principal);
+  border-collapse: collapse;
+  border-spacing: 0;
+  min-width: 1500px; /* Aumentado para acomodar columna de lote más ancha */
+}
+
+.tabla-registros th {
+  background: var(--fondo-secundario);
+  color: var(--texto-principal);
+  font-weight: 600;
+  border-bottom: 2px solid var(--borde-medio);
+  padding: 8px 6px;
+  font-size: 0.75rem;
+  text-align: left;
+  white-space: nowrap;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  line-height: 1.2;
+}
+
+.tabla-registros th:nth-child(1) { width: 85px; } /* Fecha */
+.tabla-registros th:nth-child(2) { width: 110px; } /* Código */
+.tabla-registros th:nth-child(3) { width: 300px; min-width: 250px; } /* Nombre - AUMENTADO */
+.tabla-registros th:nth-child(4) { 
+  width: 180px !important; 
+  min-width: 170px !important; 
+} /* Lote */
+.tabla-registros th:nth-child(5) { width: 70px; text-align: center; } /* Cajas */
+.tabla-registros th:nth-child(6) { width: 70px; text-align: center; } /* Piezas */
+.tabla-registros th:nth-child(7) { width: 70px; text-align: center; } /* Extras */
+.tabla-registros th:nth-child(8) { width: 65px; text-align: center; } /* Total */
+.tabla-registros th:nth-child(9) { width: 160px; } /* Observaciones */
+.tabla-registros th:nth-child(10) { width: 70px; text-align: center; } /* Surtido */
+.tabla-registros th:nth-child(11) { width: 110px; text-align: center; } /* Disponible */
+.tabla-registros th:nth-child(12) { width: 110px; } /* Hora Solicitud */
+.tabla-registros th:nth-child(13) { width: 110px; } /* Hora Surtido */
+.tabla-registros th:nth-child(14) { width: 110px; } /* Categoría */
+.tabla-registros th:nth-child(15) { width: 90px; text-align: center; } /* Acción */
+
+.tabla-registros td {
+  border-bottom: 1px solid var(--borde-sutil);
+  padding: 6px 6px;
+  background: var(--fondo-card);
+  color: var(--texto-principal);
+  font-size: 0.8rem;
+  vertical-align: middle;
+  line-height: 1.3;
+}
+
+/* Asegurar que la columna de Lote muestre el contenido completo */
+.tabla-registros td:nth-child(4) {
+  overflow: visible !important;
+  text-overflow: clip !important;
+  white-space: normal !important;
+  word-wrap: break-word !important;
+  word-break: break-word !important;
+  max-width: 180px !important;
+  min-width: 170px !important;
+  width: 180px !important;
+}
+
+/* Input de lote - PC: tamaño adecuado */
+.input-lote {
+  width: 160px !important;
+  min-width: 160px !important;
+  max-width: 160px !important;
+  font-size: 0.8rem !important;
+  padding: 6px 8px !important;
+  min-height: 32px !important;
+  max-height: 34px !important;
+  box-sizing: border-box !important;
+}
+
+/* Inputs numéricos (cajas, piezas, extras, total) - PC: tamaño adecuado */
+.input-numero {
+  width: 50px !important;
+  min-width: 50px !important;
+  max-width: 50px !important;
+  text-align: center !important;
+  font-size: 0.75rem !important;
+  padding: 4px 6px !important;
+  min-height: 28px !important;
+  max-height: 30px !important;
+  box-sizing: border-box !important;
+}
+
+.input-observaciones {
+  min-width: 150px !important;
+  width: 100% !important;
+  font-size: 0.75rem !important;
+  padding: 4px 6px !important;
+  min-height: 28px !important;
+  max-height: 30px !important;
+  box-sizing: border-box !important;
+}
+
+.tabla-registros td:nth-child(5),
+.tabla-registros td:nth-child(6),
+.tabla-registros td:nth-child(7),
+.tabla-registros td:nth-child(8),
+.tabla-registros td:nth-child(10),
+.tabla-registros td:nth-child(11),
+.tabla-registros td:nth-child(15) {
+  text-align: center;
+}
+
+.tabla-registros tbody tr:hover {
+  box-shadow: inset 2px 0 0 var(--borde-visible);
+}
+
+.tabla-registros tbody tr:hover td {
+  color: var(--texto-principal) !important;
+}
+
+.tabla-registros tbody tr:hover td input {
+  background: var(--fondo-input) !important;
+  color: var(--texto-principal) !important;
+}
+
+.fila-roja,
+.fila-verde {
+  background: var(--fondo-card) !important;
+}
+
+.nombre-reg {
+  max-width: 300px;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  line-height: 1.3;
+  font-size: 0.75rem;
+  color: var(--texto-principal) !important;
+  word-wrap: break-word;
+  word-break: break-word;
+}
+
+
+
+/* =======================================================
+   BOTONES - ROJOS CON BORDES NEGROS
+   ====================================================== */
+
+.btn-surtir {
+  background: linear-gradient(135deg, var(--azul-primario), var(--azul-secundario));
+  color: white;
+  border: 1px solid var(--borde-sutil);
+  border-radius: var(--radio-full);
+  padding: 8px 16px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: var(--sombra-sm);
+  transition: all var(--transicion-media);
+}
+
+.btn-borrar,
+.btn-no-disponible {
+  background: linear-gradient(135deg, var(--azul-claro), var(--azul-primario));
+  color: white;
+  border: none;
+  border-radius: var(--radio-full);
+  padding: 8px 16px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: var(--sombra-sm);
+  transition: all var(--transicion-media);
+}
+
+.btn-borrar:hover,
+.btn-no-disponible:hover {
+  box-shadow: var(--sombra-lg);
+  transform: translateY(-1px);
+}
+
+.btn-borrar:active,
+.btn-no-disponible:active {
+  transform: translateY(0) scale(0.95);
+  box-shadow: var(--sombra-sm);
+}
+
+/* =======================================================
+   INPUTS EN TABLA - BLANCOS
+   ====================================================== */
+
+.tabla-registros input {
+  background: var(--fondo-input) !important;
+  color: var(--texto-principal) !important;
+  border: 1px solid var(--borde-sutil);
+  border-radius: var(--radio-full);
+  padding: 4px 6px;
+  font-size: 0.75rem;
+  transition: all var(--transicion-rapida);
+  box-sizing: border-box;
+  min-height: 28px;
+  max-height: 30px;
+}
+
+/* Inputs generales en tabla - ancho 100% excepto los que tienen clase específica */
+.tabla-registros input:not(.input-lote):not(.input-numero) {
+  width: 100%;
+}
+
+
+
+.tabla-registros input:focus {
+  outline: none;
+  border-color: var(--borde-visible);
+  box-shadow: var(--sombra-sm);
+}
+
+.tabla-registros input:disabled {
+  background: var(--fondo-secundario) !important;
+  color: var(--texto-secundario) !important;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* Quitar flechitas en inputs type=number */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+/* =======================================================
+   MODAL SURTIR PRODUCTO
+   ====================================================== */
+
+.reg-modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  padding: 20px;
+  animation: fadeIn 0.2s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.reg-modal {
+  background: var(--fondo-card) !important;
+  border: 1px solid var(--borde-medio) !important;
+  border-radius: 18px !important;
+  padding: 16px;
+  max-width: 420px;
+  width: 90%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  animation: slideUp 0.3s ease-out;
+  position: relative;
+}
+
+/* Animación para el micrófono activo */
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(76, 175, 80, 0.9), 0 0 40px rgba(76, 175, 80, 0.6), 0 0 60px rgba(76, 175, 80, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 30px rgba(76, 175, 80, 1), 0 0 60px rgba(76, 175, 80, 0.8), 0 0 90px rgba(76, 175, 80, 0.5);
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.reg-modal-row {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+}
+
+.reg-modal-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.reg-modal-row-three {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+}
+
+.reg-modal-col-three {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.reg-modal-single {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.reg-modal h3 {
+  margin: 0 0 10px 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--texto-principal) !important;
+  text-align: center;
+  letter-spacing: -0.2px;
+}
+
+.reg-modal p {
+  margin: 3px 0;
+  color: var(--texto-principal) !important;
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+.reg-modal p strong {
+  color: var(--texto-principal) !important;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.reg-modal label {
+  display: block;
+  margin-bottom: 0;
+  font-weight: 600;
+  color: var(--texto-principal) !important;
+  font-size: 0.8rem;
+  margin-bottom: 3px;
+}
+
+/* Estilos unificados para todos los inputs del modal */
+.reg-modal input[type="text"],
+.reg-modal input[type="number"],
+input[type="text"].reg-modal,
+input[type="number"].reg-modal {
+  width: 100% !important;
+  padding: 8px 12px !important;
+  border: 1px solid var(--borde-medio) !important;
+  border-radius: 10px !important;
+  -webkit-border-radius: 10px !important;
+  -moz-border-radius: 10px !important;
+  background: var(--fondo-input) !important;
+  color: var(--texto-principal) !important;
+  font-size: 0.85rem !important;
+  box-sizing: border-box !important;
+  transition: all 0.2s ease !important;
+  -webkit-appearance: none !important;
+  -moz-appearance: textfield !important;
+  appearance: none !important;
+  margin: 0 !important;
+  font-family: inherit !important;
+  line-height: 1.4 !important;
+}
+
+.reg-modal input[type="text"]:focus,
+.reg-modal input[type="number"]:focus,
+input[type="text"].reg-modal:focus,
+input[type="number"].reg-modal:focus {
+  outline: none !important;
+  border: 1px solid var(--borde-visible) !important;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2), 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+  transform: translateY(-1px);
+}
+
+.reg-modal input[type="text"]:not(:focus),
+.reg-modal input[type="number"]:not(:focus),
+input[type="text"].reg-modal:not(:focus),
+input[type="number"].reg-modal:not(:focus) {
+  border: 1px solid var(--borde-medio) !important;
+  box-shadow: none !important;
+}
+
+.reg-modal input[type="text"]:disabled,
+.reg-modal input[type="number"]:disabled,
+input[type="text"].reg-modal:disabled,
+input[type="number"].reg-modal:disabled {
+  background: var(--fondo-secundario) !important;
+  color: var(--texto-secundario) !important;
+  cursor: not-allowed !important;
+  border: 1px solid var(--borde-medio) !important;
+  border-radius: 10px !important;
+  -webkit-border-radius: 10px !important;
+  -moz-border-radius: 10px !important;
+  opacity: 0.7 !important;
+}
+
+.reg-modal input[type="number"]::-webkit-inner-spin-button,
+.reg-modal input[type="number"]::-webkit-outer-spin-button,
+input[type="number"].reg-modal::-webkit-inner-spin-button,
+input[type="number"].reg-modal::-webkit-outer-spin-button {
+  -webkit-appearance: none !important;
+  margin: 0 !important;
+  display: none !important;
+}
+
+.reg-modal input[type="number"]::-moz-appearance,
+input[type="number"].reg-modal::-moz-appearance {
+  -moz-appearance: textfield !important;
+}
+
+.total-box {
+  padding: 10px 14px;
+  background: linear-gradient(135deg, var(--fondo-secundario), var(--fondo-input)) !important;
+  border: 1px solid var(--borde-visible) !important;
+  border-radius: 12px !important;
+  text-align: center;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--texto-principal) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  margin: 2px 0;
+}
+
+.total-box strong {
+  color: var(--texto-principal) !important;
+  font-size: 1rem;
+  font-weight: 700;
+  display: inline-block;
+  margin-left: 5px;
+}
+
+.modal-buttons {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 2px;
+  background: transparent;
+  padding-top: 2px;
+}
+
+.modal-buttons button {
+  padding: 8px 16px;
+  border-radius: 10px !important;
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s ease !important;
+  border: 1px solid transparent;
+  min-width: 90px;
+}
+
+.modal-buttons .btn-cancelar {
+  background: var(--fondo-input);
+  color: var(--texto-principal);
+  border-color: var(--borde-medio);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.modal-buttons .btn-cancelar:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  transform: translateY(-2px);
+  background: var(--fondo-secundario);
+}
+
+.modal-buttons .btn-cancelar:active {
+  transform: translateY(0) scale(0.98);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+}
+
+.modal-buttons .btn-surtir {
+  background: linear-gradient(135deg, var(--azul-primario), var(--azul-secundario));
+  color: white;
+  box-shadow: 0 4px 16px rgba(59, 130, 246, 0.3);
+}
+
+.modal-buttons .btn-surtir:hover {
+  box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4);
+  transform: translateY(-2px);
+  filter: brightness(1.1);
+}
+
+.modal-buttons .btn-surtir:active {
+  transform: translateY(0) scale(0.98);
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+}
+
+.btn-corregir {
+  background: var(--advertencia);
+  color: white;
+  border: none;
+  border-radius: var(--radio-full);
+  padding: var(--espacio-xs) var(--espacio-md);
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: var(--sombra-xs);
+  transition: all var(--transicion-media);
+}
+
+.btn-corregir:hover {
+  box-shadow: var(--sombra-md);
+  transform: translateY(-1px);
+}
+
+.btn-corregir:active {
+  transform: translateY(0) scale(0.95);
+}
+
+.scan-input-reg {
+  width: 100%;
+  max-width: 400px;
+  margin: 0 auto var(--espacio-lg) auto;
+  display: block;
+  padding: var(--espacio-sm) var(--espacio-md);
+  border: 1px solid var(--borde-medio);
+  border-radius: var(--radio-full);
+  background: var(--fondo-input);
+  color: var(--texto-principal);
+  font-size: 0.95rem;
+  text-align: center;
+  transition: all var(--transicion-media);
+}
+
+.scan-input-reg:focus {
+  outline: none;
+  border-color: var(--borde-visible);
+  box-shadow: var(--sombra-sm);
+}
+
+/* =======================================================
+   RESPONSIVE PDA
+   ====================================================== */
+
+@media (max-width: 520px) {
+  .registros-tabs {
+    gap: 4px !important;
+    margin-bottom: 12px !important;
+  }
+
+  .registros-tabs button {
+    padding: 5px 8px !important;
+    font-size: 0.7rem !important;
+    gap: 3px !important;
+    min-width: calc(50% - 4px) !important;
+    flex: 0 0 calc(50% - 4px) !important;
+  }
+
+  .tab-icon {
+    font-size: 0.75rem !important;
+  }
+
+  .tab-label {
+    font-size: 0.65rem !important;
+  }
+
+  .tabla-registros {
+    min-width: 1300px; /* Aumentado para PDA */
+  }
+
+  .tabla-registros th:nth-child(3),
+  .tabla-registros td:nth-child(3) {
+    width: 220px !important;
+    max-width: 220px !important;
+    min-width: 200px !important;
+  }
+
+  .nombre-reg {
+    max-width: 220px !important;
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+    line-height: 1.3 !important;
+    font-size: 0.7rem !important;
+    color: var(--texto-principal) !important;
+    word-wrap: break-word !important;
+    word-break: break-word !important;
+  }
+
+  /* Columna de Lote para PDA - más ancha y visible */
+  .tabla-registros th:nth-child(4) {
+    width: 180px !important;
+    min-width: 170px !important;
+  }
+
+  .tabla-registros td:nth-child(4) {
+    width: 180px !important;
+    min-width: 170px !important;
+    max-width: 200px !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+    white-space: normal !important;
+    word-wrap: break-word !important;
+    word-break: break-word !important;
+  }
+
+
+  .tabla-registros input:not(.input-lote):not(.input-numero):not(.input-observaciones) {
+    padding: 10px 12px !important;
+    font-size: 0.9rem !important;
+    min-height: 48px !important;
+    max-height: 50px !important;
+    width: 100% !important;
+  }
+  
+  .input-observaciones {
+    padding: 10px 12px !important;
+    font-size: 0.85rem !important;
+    min-height: 48px !important;
+    max-height: 50px !important;
+  }
+
+  /* Input de lote en PDA - tamaño adecuado */
+  .input-lote {
+    width: 160px !important;
+    min-width: 160px !important;
+    max-width: 160px !important;
+    font-size: 0.9rem !important;
+    padding: 10px 12px !important;
+    min-height: 48px !important;
+    max-height: 50px !important;
+    box-sizing: border-box !important;
+    overflow: visible !important;
+    white-space: normal !important;
+  }
+
+
+  /* Inputs numéricos en PDA - tamaño adecuado */
+  .input-numero {
+    width: 70px !important;
+    min-width: 70px !important;
+    max-width: 70px !important;
+    font-size: 0.95rem !important;
+    padding: 12px 10px !important;
+    min-height: 48px !important;
+    max-height: 50px !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Contadores más pequeños para PDA - solo emojis y números */
+  .registros-contadores {
+    gap: 6px !important;
+    margin-bottom: 12px !important;
+  }
+
+  .contador-card {
+    padding: 6px 8px !important;
+    gap: 4px !important;
+    min-width: 0 !important;
+    flex: 0 0 calc(33.333% - 4px) !important;
+  }
+
+  .contador-icon {
+    font-size: 0.9rem !important;
+    flex-shrink: 0 !important;
+  }
+
+  .contador-titulo {
+    display: none !important; /* Ocultar texto, solo mostrar emojis y números */
+    visibility: hidden !important;
+    width: 0 !important;
+    height: 0 !important;
+    overflow: hidden !important;
+    opacity: 0 !important;
+    font-size: 0 !important;
+    line-height: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  .contador-valor {
+    font-size: 0.95rem !important;
+    margin-left: auto !important;
+    flex-shrink: 0 !important;
+  }
+}
+
+/* También para tablets/PDAs más grandes */
+@media (max-width: 768px) {
+  /* Tabla más compacta para tablets */
+  .tabla-registros th {
+    padding: 6px 4px !important;
+    font-size: 0.7rem !important;
+  }
+
+  .tabla-registros td {
+    padding: 5px 4px !important;
+    font-size: 0.7rem !important;
+  }
+
+  .tabla-registros th:nth-child(3),
+  .tabla-registros td:nth-child(3) {
+    width: 250px !important;
+    min-width: 220px !important;
+  }
+
+  .tabla-registros th:nth-child(4) {
+    width: 190px !important;
+    min-width: 180px !important;
+  }
+
+  .tabla-registros td:nth-child(4) {
+    width: 190px !important;
+    min-width: 180px !important;
+    max-width: 210px !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+    white-space: normal !important;
+    word-wrap: break-word !important;
+    word-break: break-word !important;
+  }
+
+  .nombre-reg {
+    max-width: 250px !important;
+    font-size: 0.7rem !important;
+    color: var(--texto-principal) !important;
+    white-space: normal !important;
+    overflow: visible !important;
+  }
+
+  /* Input de lote en tablet - tamaño adecuado */
+  .input-lote {
+    width: 160px !important;
+    min-width: 160px !important;
+    max-width: 160px !important;
+    font-size: 0.9rem !important;
+    padding: 10px 12px !important;
+    min-height: 42px !important;
+    max-height: 44px !important;
+    box-sizing: border-box !important;
+  }
+
+  .contador-titulo {
+    font-size: 0.75rem !important;
+  }
+
+  .contador-card {
+    padding: 8px 12px !important;
+  }
+}
+
+/* Media query adicional para asegurar que funcione en PDAs */
+@media (max-width: 480px) {
+  .contador-titulo {
+    display: none !important;
+    visibility: hidden !important;
+    width: 0 !important;
+    height: 0 !important;
+    overflow: hidden !important;
+    opacity: 0 !important;
+    font-size: 0 !important;
+    line-height: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  .contador-card {
+    padding: 6px 8px !important;
+    gap: 4px !important;
+  }
+
+  .contador-icon {
+    font-size: 0.9rem !important;
+  }
+
+  .contador-valor {
+    font-size: 0.9rem !important;
+  }
+}

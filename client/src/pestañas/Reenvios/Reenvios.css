@@ -1,0 +1,1267 @@
+/* ===========================================
+   TARJETA PRINCIPAL
+=========================================== */
+
+.reenvios-card {
+  background: var(--fondo-card);
+  border-radius: var(--radio-xl);
+  padding: var(--espacio-md);
+  box-shadow: var(--sombra-sm);
+  border: 1px solid var(--borde-sutil);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow-x: hidden;
+}
+
+.reenvios-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.reenvios-header h2 {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 600;
+  color: var(--texto-principal);
+}
+
+.reenvios-buscador-container {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex: 1;
+  justify-content: center;
+  min-width: 0;
+}
+
+.reenvios-buscador-input {
+  padding: 4px 6px;
+  font-size: 0.75rem;
+  border-radius: 4px;
+  border: 1px solid #ccc;
+  background-color: var(--fondo-card);
+  color: var(--texto-principal);
+  width: 140px;
+  max-width: 140px;
+  min-width: 100px;
+}
+
+.reenvios-header-actions {
+  display: flex;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+/* ===========================================
+   CONTADOR DE REENVÍOS POR PAQUETERÍA
+=========================================== */
+
+.reenvios-contador {
+  display: flex;
+  gap: 10px;
+  padding: 8px 12px;
+  background: var(--fondo-secundario);
+  border-radius: var(--radio-lg);
+  border: 1px solid var(--borde-sutil);
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+}
+
+.contador-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: var(--radio-full);
+  border: 1px solid transparent;
+  box-shadow: var(--sombra-xs);
+  transition: all var(--transicion-media);
+  user-select: none;
+}
+
+.contador-item:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--sombra-sm);
+}
+
+.contador-item.activo {
+  transform: scale(1.05);
+  box-shadow: var(--sombra-md);
+  border-width: 2px;
+  font-weight: 700;
+}
+
+.contador-item.activo.dhl {
+  box-shadow: 0 4px 12px rgba(251, 191, 36, 0.4);
+}
+
+.contador-item.activo.estafeta {
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
+}
+
+.contador-item.activo.fedex {
+  box-shadow: 0 4px 12px rgba(168, 85, 247, 0.4);
+}
+
+.contador-item.activo.contador-total {
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+}
+
+/* DHL - Amarillo */
+.contador-item.dhl {
+  background: linear-gradient(135deg, #fbbf24, #f59e0b);
+  border-color: #f59e0b;
+}
+
+.contador-item.dhl .contador-label,
+.contador-item.dhl .contador-valor {
+  color: white;
+}
+
+/* ESTAFETA - Rojo */
+.contador-item.estafeta {
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+  border-color: #dc2626;
+}
+
+.contador-item.estafeta .contador-label,
+.contador-item.estafeta .contador-valor {
+  color: white;
+}
+
+/* FEDEX - Morado */
+.contador-item.fedex {
+  background: linear-gradient(135deg, #a855f7, #9333ea);
+  border-color: #9333ea;
+}
+
+.contador-item.fedex .contador-label,
+.contador-item.fedex .contador-valor {
+  color: white;
+}
+
+.contador-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.contador-valor {
+  font-size: 0.8rem;
+  font-weight: 600;
+  min-width: 50px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.contador-item.contador-total {
+  background: #2563eb !important; /* Azul sólido para el cuerpo */
+  border-color: #1d4ed8 !important;
+  color: white !important;
+}
+
+.contador-item.contador-total .contador-label,
+.contador-item.contador-total .contador-valor {
+  color: white !important;
+}
+
+.contador-item.contador-total.activo {
+  background: #1d4ed8 !important; /* Un poco más oscuro cuando está activo */
+  border-color: #1e40af !important;
+  color: white !important;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+}
+
+@media (max-width: 768px) {
+  .reenvios-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .reenvios-header h2 {
+    font-size: 1.1rem;
+    text-align: center;
+  }
+
+  .reenvios-buscador-container {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .reenvios-buscador-input {
+    width: 100% !important;
+    min-width: 100% !important;
+    padding: 8px 12px;
+    font-size: 0.9rem;
+  }
+
+  .reenvios-header-actions {
+    width: 100%;
+    flex-direction: row;
+    gap: 8px;
+  }
+
+  .reenvios-header-actions button {
+    flex: 1;
+    width: auto;
+    min-width: 0;
+  }
+
+  .reenvios-contador {
+    gap: 3px;
+    padding: 2px 4px;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .reenvios-contador::-webkit-scrollbar {
+    height: 2px;
+  }
+
+  .reenvios-contador::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 2px;
+  }
+
+  .contador-item {
+    padding: 2px 4px;
+    gap: 1px;
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  .contador-label {
+    font-size: 0.5rem;
+    font-weight: 600;
+  }
+
+  .contador-valor {
+    font-size: 0.5rem;
+    font-weight: 600;
+    min-width: 28px;
+  }
+}
+
+@media (max-width: 480px) {
+  .reenvios-header h2 {
+    font-size: 1rem;
+  }
+
+  .reenvios-buscador-input {
+    padding: 10px 14px;
+    font-size: 1rem;
+  }
+}
+
+/* Estilos para pantallas grandes (PC) */
+@media (min-width: 769px) {
+  .reenvios-buscador-input {
+    width: 140px !important;
+    max-width: 140px !important;
+    padding: 4px 8px;
+    font-size: 0.75rem;
+  }
+}
+
+/* ===========================================
+   BOTONES
+=========================================== */
+
+.btn,
+.btn-primary,
+.btn-warn,
+.btn-ok {
+  padding: 8px 14px !important;
+  border-radius: var(--radio-full) !important;
+  font-size: 0.85rem !important;
+  font-weight: 600 !important;
+  cursor: pointer;
+  transition: all var(--transicion-media);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: none !important;
+  box-shadow: var(--sombra-xs) !important;
+}
+
+.btn {
+  background: var(--fondo-input) !important;
+  color: var(--texto-principal) !important;
+  border: 1px solid var(--borde-sutil) !important;
+}
+
+.btn:hover {
+  box-shadow: var(--sombra-xs) !important;
+  transform: translateY(-1px);
+}
+
+.btn:active {
+  transform: translateY(0) scale(0.98);
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--azul-primario), var(--azul-secundario)) !important;
+  color: var(--texto-boton, var(--texto-principal)) !important;
+}
+
+.btn-primary:hover {
+  box-shadow: var(--sombra-md) !important;
+  transform: translateY(-2px);
+}
+
+.btn-primary:active {
+  transform: translateY(0) scale(0.95);
+  box-shadow: var(--sombra-xs) !important;
+}
+
+.btn-warn {
+  background: linear-gradient(135deg, var(--azul-claro), var(--azul-primario)) !important;
+  color: var(--texto-boton, var(--texto-principal)) !important;
+}
+
+.btn-warn:hover {
+  box-shadow: var(--sombra-md) !important;
+  transform: translateY(-1px);
+}
+
+.btn-warn:active {
+  transform: translateY(0) scale(0.95);
+}
+
+.btn-ok {
+  background: linear-gradient(135deg, var(--azul-primario), var(--azul-secundario)) !important;
+  color: var(--texto-boton, var(--texto-principal)) !important;
+}
+
+.btn-ok:hover {
+  box-shadow: var(--sombra-md) !important;
+  transform: translateY(-1px);
+}
+
+.btn-ok:active {
+  transform: translateY(0) scale(0.95);
+}
+
+/* ===========================================
+   GRID DE REENVÍOS
+=========================================== */
+
+.reenvios-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+@media (max-width: 1400px) {
+  .reenvios-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 1024px) {
+  .reenvios-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .reenvios-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.vacio {
+  text-align: center;
+  padding: 30px;
+  border: 2px dashed #d1d5db;
+  border-radius: var(--radio-xl);
+  color: #6b7280;
+  grid-column: 1 / -1;
+}
+
+/* ===========================================
+   TARJETA INDIVIDUAL
+=========================================== */
+
+.reenvio-card {
+  background: var(--fondo-card);
+  border-radius: var(--radio-xl);
+  padding: 14px;
+  box-shadow: 0 3px 8px rgba(15, 23, 42, 0.08);
+  cursor: pointer;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-left: 5px solid transparent;
+  transition: all 0.2s ease;
+  min-height: 220px;
+}
+
+.reenvio-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.15);
+  background: var(--fondo-card);
+}
+
+@media (max-width: 768px) {
+  .reenvio-card {
+    font-size: 0.9rem;
+    min-height: 180px;
+  }
+}
+
+/* Colores de borde por paquetería */
+.reenvio-card.paqueteria-estafeta {
+  border-left-color: #ef4444 !important; /* Rojo para Estafeta */
+}
+
+.reenvio-card.paqueteria-dhl {
+  border-left-color: #fbbf24 !important; /* Amarillo para DHL */
+}
+
+.reenvio-card.paqueteria-fedex {
+  border-left-color: #a855f7 !important; /* Morado para FedEx */
+}
+
+.reenvio-card .pedido {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--texto-principal);
+  margin-top: 4px;
+}
+
+@media (max-width: 768px) {
+  .reenvio-card .pedido {
+    font-size: 1rem;
+  }
+}
+
+.card-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-right: 30px;
+}
+
+/* Ajustar fecha en PC para que no se solape con el botón de cerrar */
+@media (min-width: 769px) {
+  .card-row {
+    padding-right: 40px;
+  }
+  
+  .reenvio-card .fecha {
+    margin-left: 4px;
+  }
+}
+
+.badge-estatus {
+  padding: 2px 8px;
+  border-radius: 8px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: white;
+}
+
+@media (max-width: 768px) {
+  .badge-estatus {
+    font-size: 0.7rem;
+  }
+}
+
+/* Colores por estatus - solo en el badge, el borde lo determina la paquetería */
+.estatus-enviado .badge-estatus { background: #10b981; }
+.estatus-reemplazado .badge-estatus { background: #6366f1; }
+.estatus-cancelado .badge-estatus { background: #dc2626; }
+.estatus-detenido .badge-estatus { background: #f59e0b; }
+.estatus-listo-para-enviar .badge-estatus { background: #3b82f6; }
+
+/* Botón "Marcar como enviado" en la tarjeta */
+.btn-marcar-enviado {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  background: linear-gradient(135deg, #10b981, #059669) !important;
+  color: white !important;
+  border: none !important;
+  padding: 6px 12px !important;
+  border-radius: 8px !important;
+  font-size: 0.8rem !important;
+  font-weight: 600 !important;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 2px 6px rgba(16, 185, 129, 0.3) !important;
+  z-index: 10;
+}
+
+.btn-marcar-enviado:hover {
+  background: linear-gradient(135deg, #059669, #047857) !important;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(16, 185, 129, 0.4) !important;
+}
+
+.btn-marcar-enviado:active {
+  transform: translateY(0);
+}
+
+@media (max-width: 768px) {
+  .btn-marcar-enviado {
+    font-size: 0.75rem !important;
+    padding: 5px 10px !important;
+  }
+}
+
+/* Close button */
+.card-close {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  background: transparent;
+  border: none;
+  color: #9ca3af;
+  font-size: 1.2rem;
+  cursor: pointer;
+  z-index: 10;
+}
+
+.card-close:hover {
+  color: #ef4444;
+}
+
+@media (max-width: 768px) {
+  .card-close {
+    top: 4px;
+    right: 4px;
+    font-size: 1.1rem;
+  }
+}
+
+/* ===========================================
+   TARJETAS COLAPSABLES EN MÓVIL
+=========================================== */
+
+/* Pestaña visible cuando está colapsada */
+.tarjeta-pestana-movil {
+  display: none;
+}
+
+/* Contenido completo siempre visible en desktop */
+.tarjeta-contenido-movil {
+  display: block;
+}
+
+/* En móviles pequeños, mostrar pestaña y ocultar contenido por defecto */
+@media (max-width: 520px) {
+  .reenvios-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .reenvio-card {
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    transition: all 0.3s ease;
+  }
+
+  /* Pestaña visible cuando está colapsada */
+  .reenvio-card.colapsada-movil .tarjeta-pestana-movil {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 12px 16px;
+    cursor: pointer;
+    min-height: 50px;
+    background: var(--fondo-card);
+    border-radius: var(--radio-xl);
+    position: relative;
+  }
+
+  .reenvio-card.colapsada-movil .tarjeta-contenido-movil {
+    display: none;
+  }
+
+  /* Contenido visible cuando está expandida */
+  .reenvio-card.expandida-movil .tarjeta-pestana-movil {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 12px 16px;
+    cursor: pointer;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+    min-height: 50px;
+    background: var(--fondo-card);
+    border-radius: var(--radio-xl) var(--radio-xl) 0 0;
+    position: relative;
+  }
+
+  /* Mantener colores de paquetería en la parte superior de la pestaña */
+  .reenvio-card.colapsada-movil.paqueteria-estafeta .tarjeta-pestana-movil::before,
+  .reenvio-card.expandida-movil.paqueteria-estafeta .tarjeta-pestana-movil::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: #ef4444;
+    border-radius: var(--radio-xl) var(--radio-xl) 0 0;
+  }
+
+  .reenvio-card.colapsada-movil.paqueteria-dhl .tarjeta-pestana-movil::before,
+  .reenvio-card.expandida-movil.paqueteria-dhl .tarjeta-pestana-movil::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: #fbbf24;
+    border-radius: var(--radio-xl) var(--radio-xl) 0 0;
+  }
+
+  .reenvio-card.colapsada-movil.paqueteria-fedex .tarjeta-pestana-movil::before,
+  .reenvio-card.expandida-movil.paqueteria-fedex .tarjeta-pestana-movil::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: #a855f7;
+    border-radius: var(--radio-xl) var(--radio-xl) 0 0;
+  }
+
+  .reenvio-card.expandida-movil .tarjeta-contenido-movil {
+    display: block;
+    padding: 12px 16px;
+  }
+
+.pedido-pestana {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--texto-principal);
+  text-align: center;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.badge-enviado-movil {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #10b981;
+  color: white;
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1;
+  flex-shrink: 0;
+  box-shadow: 0 1px 3px rgba(16, 185, 129, 0.3);
+}
+
+  .icono-expandir {
+    position: absolute;
+    right: 16px;
+    font-size: 0.8rem;
+    color: var(--texto-secundario);
+    transition: transform 0.3s ease;
+  }
+
+  .reenvio-card.expandida-movil .icono-expandir {
+    transform: rotate(0deg);
+  }
+
+  .reenvio-card.colapsada-movil .icono-expandir {
+    transform: rotate(-90deg);
+  }
+
+  /* Estilos para botón "Enviado" en móvil */
+  .btn-marcar-enviado-movil {
+    background: linear-gradient(135deg, #10b981, #059669) !important;
+    color: white !important;
+    border: none !important;
+  }
+
+  /* Botones de acción en móvil */
+  .tarjeta-acciones-movil {
+    display: flex;
+    flex-direction: row;
+    gap: 4px;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(0, 0, 0, 0.1);
+  }
+
+  .tarjeta-acciones-movil button {
+    flex: 1;
+    padding: 6px 4px;
+    font-size: 0.7rem;
+    margin: 0;
+    min-width: 0;
+  }
+
+  /* Ajustar altura mínima cuando está colapsada */
+  .reenvio-card.colapsada-movil {
+    min-height: 50px;
+    max-height: 50px;
+  }
+
+  .reenvio-card.expandida-movil {
+    min-height: auto;
+    max-height: none;
+  }
+
+  /* Botón de cerrar visible en la pestaña */
+  .reenvio-card.colapsada-movil .card-close,
+  .reenvio-card.expandida-movil .card-close {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    z-index: 20;
+  }
+
+  /* Asegurar que la pestaña tenga posición relativa para el botón de cerrar */
+  .reenvio-card.colapsada-movil .tarjeta-pestana-movil,
+  .reenvio-card.expandida-movil .tarjeta-pestana-movil {
+    position: relative;
+  }
+}
+
+@media (max-width: 768px) {
+  .card-close {
+    top: 4px;
+    right: 4px;
+    font-size: 1.1rem;
+  }
+  
+  .card-row {
+    padding-right: 30px;
+  }
+}
+
+/* Información de la tarjeta */
+.reenvio-card .info {
+  font-size: 0.85rem;
+  line-height: 1.5;
+  margin-top: 4px;
+  margin-bottom: 35px;
+}
+
+.reenvio-card .info div {
+  margin-bottom: 4px;
+}
+
+.reenvio-card .info strong {
+  font-weight: 600;
+  color: var(--texto-principal);
+}
+
+.reenvio-card .fecha {
+  font-size: 0.8rem;
+  color: var(--texto-secundario);
+}
+
+@media (max-width: 768px) {
+  .reenvio-card .info {
+    font-size: 0.8rem;
+  }
+  
+  .reenvio-card .fecha {
+    font-size: 0.75rem;
+  }
+}
+
+/* ===========================================
+   MODALES (Overlay general)
+=========================================== */
+
+.modal-overlay,
+.edit-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--overlay-modal, rgba(15, 23, 42, 0.45));
+  z-index: 3000;
+
+  display: flex;
+  justify-content: center;
+  align-items: center;
+
+  padding: 20px; /* evita que el modal pegue en bordes */
+  overflow-y: auto;
+}
+
+/* Asegurar que el modal de edición tenga el z-index correcto */
+.edit-modal-overlay {
+  z-index: 3000 !important;
+}
+
+.edit-modal {
+  position: relative;
+  z-index: 1;
+  overflow: hidden;
+  max-height: calc(100vh - 40px);
+  display: flex;
+  flex-direction: column;
+}
+
+/* Ocultar mensaje de bienvenida cuando el modal de edición está abierto */
+.edit-modal-overlay ~ .mensaje-bienvenida,
+body:has(.edit-modal-overlay) .mensaje-bienvenida,
+body:has(.edit-modal-overlay) #mensaje-bienvenida-editable {
+  display: none !important;
+  z-index: 1 !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  visibility: hidden !important;
+}
+
+/* Ocultar cualquier elemento con position fixed que no sea un modal cuando el modal de edición está abierto */
+body:has(.edit-modal-overlay) > div[style*="position: fixed"]:not(.modal-overlay):not(.edit-modal-overlay):not(.alert-modal-overlay):not([class*="toast"]),
+body:has(.edit-modal-overlay) div[style*="position: fixed"]:not(.modal-overlay):not(.edit-modal-overlay):not(.alert-modal-overlay):not([class*="toast"]) {
+  z-index: 1 !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  visibility: hidden !important;
+}
+
+/* Asegurar que el modal de edición esté por encima de todo */
+.edit-modal-overlay {
+  z-index: 3000 !important;
+  position: fixed !important;
+}
+
+.edit-modal {
+  z-index: 3001 !important;
+  position: relative !important;
+}
+
+/* Regla más agresiva: ocultar cualquier elemento con z-index alto cuando el modal de edición está abierto */
+body:has(.edit-modal-overlay) * {
+  &[style*="z-index"][style*="position: fixed"]:not(.edit-modal-overlay):not(.edit-modal):not(.modal-overlay):not(.alert-modal-overlay):not([class*="toast"]) {
+    z-index: 1 !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+    visibility: hidden !important;
+  }
+}
+
+/* Ocultar específicamente elementos con z-index muy alto (como 999999) */
+body:has(.edit-modal-overlay) [style*="z-index: 999"]:not(.edit-modal-overlay):not(.edit-modal):not(.modal-overlay):not(.alert-modal-overlay),
+body:has(.edit-modal-overlay) [style*="z-index: 99"]:not(.edit-modal-overlay):not(.edit-modal):not(.modal-overlay):not(.alert-modal-overlay) {
+  z-index: 1 !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  visibility: hidden !important;
+  display: none !important;
+}
+
+/* ===========================================
+   MODAL GENERAL
+=========================================== */
+
+.modal,
+.edit-modal,
+.detalle-modal,
+.viewer-modal {
+  position: relative;
+  background: var(--fondo-card);
+  border-radius: 14px;
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.35);
+
+  width: min(500px, 92vw);
+  max-width: calc(100vw - 40px);
+  max-height: calc(100vh - 40px);
+
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+
+  /* 🔥 fuerza a mantenerse centrado correctamente */
+  transform: translateY(0);
+  margin: auto;
+}
+
+/* Modal de nuevo reenvio: mas compacto y estetico */
+.nuevo-reenvio-modal {
+  width: min(640px, 92vw);
+  max-height: min(85vh, 780px);
+  border: 1px solid var(--borde-sutil);
+  box-shadow: 0 20px 45px rgba(15, 23, 42, 0.35);
+}
+
+.nuevo-reenvio-modal .modal-body {
+  padding: 18px;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.nuevo-reenvio-modal .steps {
+  margin: 0 16px 6px;
+}
+
+.nuevo-reenvio-modal .modal-body label {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--texto-principal);
+}
+
+.nuevo-reenvio-modal .modal-body input,
+.nuevo-reenvio-modal .modal-body select,
+.nuevo-reenvio-modal .modal-body textarea {
+  width: 100%;
+  padding: 10px 12px;
+  font-size: 0.98rem;
+  border-radius: 10px;
+  border: 1px solid var(--borde-sutil, #d1d5db);
+  background: var(--fondo-input, var(--fondo-card));
+  color: var(--texto-principal);
+  box-sizing: border-box;
+}
+
+.nuevo-reenvio-modal .modal-body input::placeholder,
+.nuevo-reenvio-modal .modal-body textarea::placeholder {
+  color: var(--texto-secundario);
+}
+
+.nuevo-reenvio-modal .modal-actions {
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.nuevo-reenvio-modal .steps {
+  gap: 12px;
+}
+
+.nuevo-reenvio-modal .step {
+  width: 30px;
+  height: 30px;
+  font-size: 0.9rem;
+}
+
+@media (max-width: 520px) {
+  .nuevo-reenvio-modal {
+    position: relative !important;
+    top: auto !important;
+    right: auto !important;
+    bottom: auto !important;
+    left: auto !important;
+    inset: auto !important;
+    width: min(520px, 92vw) !important;
+    max-height: 86vh !important;
+  }
+}
+
+.modal-header,
+.edit-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--borde-sutil);
+  background: var(--fondo-secundario);
+  color: var(--texto-principal);
+}
+
+.modal-header h3,
+.edit-modal h3 {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--texto-principal);
+}
+
+.modal-close,
+.edit-close {
+  background: transparent;
+  border: none;
+  font-size: 1.3rem;
+  cursor: pointer;
+  color: var(--texto-secundario);
+}
+.modal-close:hover,
+.edit-close:hover {
+  color: var(--error);
+}
+
+.modal-body {
+  padding: 16px;
+  overflow-y: auto;
+  max-height: calc(85vh - 60px); /* cabe perfecto dentro del modal */
+  background: var(--fondo-card);
+  color: var(--texto-principal);
+}
+
+.modal-actions {
+  margin-top: 14px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  background: transparent !important;
+}
+
+/* ===========================================
+   WIZARD PASOS
+=========================================== */
+
+.steps {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  padding: 6px 0;
+}
+
+.step {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--fondo-input);
+  color: var(--texto-principal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.step.active {
+  background: var(--azul-primario);
+  color: var(--texto-boton);
+}
+
+/* ===========================================
+   THUMBS FOTOS
+=========================================== */
+
+.thumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 10px 0;
+}
+
+.thumb {
+  width: 80px;
+  height: 80px;
+  position: relative;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.15);
+}
+
+.thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.thumb-del {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  background: #ef4444;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+.thumb-del:hover {
+  filter: brightness(1.1);
+}
+
+.empty-thumbs {
+  padding: 10px;
+  opacity: 0.7;
+}
+
+/* ===========================================
+   DETALLE DE PEDIDO
+=========================================== */
+
+.detalle-modal {
+  width: min(500px, 90vw);
+}
+
+.detalle-modal .modal-body div {
+  margin-bottom: 6px;
+}
+
+/* ===========================================
+   MODAL VIEWER
+=========================================== */
+
+.viewer-modal {
+  width: min(600px, 95vw);
+}
+
+.viewer-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-bottom: 16px;
+}
+
+.viewer-img-wrap {
+  width: 100%;
+  max-height: 70vh;
+  min-height: 300px;
+  overflow: hidden;
+  margin-bottom: 12px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: #000;
+  border-radius: 10px;
+}
+
+.viewer-img {
+  max-width: 100%;
+  max-height: 70vh;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  border-radius: 10px;
+  display: block;
+}
+
+.viewer-controls {
+  display: flex;
+  justify-content: center;
+  gap: 14px;
+  margin-bottom: 10px;
+}
+
+.viewer-actions {
+  margin-top: 4px;
+}
+
+/* ===========================================
+   MODAL DE EDICIÓN
+=========================================== */
+
+.edit-modal {
+  width: min(450px, 90vw);
+  max-width: calc(100vw - 40px);
+  max-height: calc(100vh - 40px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
+}
+
+.edit-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid #e5e7eb;
+  flex-shrink: 0;
+}
+
+.edit-modal-header h3 {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.edit-modal-body {
+  padding: 16px;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.edit-modal-body label {
+  display: block;
+  margin-top: 12px;
+  margin-bottom: 6px;
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--texto-principal);
+}
+
+.edit-modal-body label:first-child {
+  margin-top: 0;
+}
+
+.edit-modal-body input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  background: var(--fondo-input);
+  color: var(--texto-principal);
+  box-sizing: border-box;
+  transition: border-color 0.2s;
+}
+
+.edit-modal-body input:focus {
+  outline: none;
+  border-color: var(--azul-primario);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.edit-modal-body .edit-btn-ok {
+  margin-top: 16px;
+  width: 100%;
+  padding: 10px;
+  background: linear-gradient(135deg, var(--azul-primario), var(--azul-secundario));
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.edit-modal-body .edit-btn-ok:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+.edit-modal-body .edit-btn-ok:active {
+  transform: translateY(0);
+}
+
+.edit-modal .edit-close {
+  background: transparent;
+  border: none;
+  font-size: 1.3rem;
+  cursor: pointer;
+  color: #6b7280;
+  padding: 4px 8px;
+  line-height: 1;
+  transition: color 0.2s;
+}
+
+.edit-modal .edit-close:hover {
+  color: #ef4444;
+}

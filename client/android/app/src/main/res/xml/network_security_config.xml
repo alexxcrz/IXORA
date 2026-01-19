@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- Permitir tráfico HTTP para la IP específica del servidor -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">172.16.30.12</domain>
+    </domain-config>
+    
+    <!-- Permitir todo el tráfico HTTP como fallback (necesario para servidores locales sin HTTPS) -->
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>
+

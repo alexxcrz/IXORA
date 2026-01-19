@@ -1,0 +1,193 @@
+/* =======================================================
+   FIX ESPECÍFICO PARA TEMA MODO OSCURO - TODOS LOS ELEMENTOS CON FONDO CLARO
+   Este archivo asegura que TODOS los elementos con fondo claro tengan texto oscuro
+   en el modo oscuro. Se carga al final para tener máxima prioridad.
+   ====================================================== */
+
+/* Regla con máxima especificidad para modo oscuro - BOTONES .btn-green */
+html body #root .btn-green,
+html body #root button.btn-green,
+html body button.btn-green.btn-green,
+html body .app .btn-green,
+html body .card .btn-green,
+html body .gestion-actions .btn-green,
+html body .gestion-form-row-boton .btn-green,
+html body .gestion-form-row .btn-green,
+html body button.btn-green {
+  /* Forzar uso de variables del tema */
+  background: linear-gradient(135deg, var(--azul-primario), var(--azul-secundario)) !important;
+  background-color: var(--azul-primario) !important;
+  color: var(--texto-boton, var(--texto-principal)) !important;
+  border: 1px solid var(--borde-sutil) !important;
+}
+
+html body #root .btn-green:hover:not(:disabled),
+html body #root button.btn-green:hover:not(:disabled),
+html body button.btn-green.btn-green:hover:not(:disabled),
+html body .app .btn-green:hover:not(:disabled),
+html body .card .btn-green:hover:not(:disabled),
+html body .gestion-actions .btn-green:hover:not(:disabled),
+html body .gestion-form-row-boton .btn-green:hover:not(:disabled),
+html body .gestion-form-row .btn-green:hover:not(:disabled),
+html body button.btn-green:hover:not(:disabled) {
+  background: linear-gradient(135deg, var(--azul-hover), var(--azul-primario)) !important;
+  color: var(--texto-boton, var(--texto-principal)) !important;
+}
+
+html body #root .btn-green:active:not(:disabled),
+html body #root button.btn-green:active:not(:disabled),
+html body button.btn-green.btn-green:active:not(:disabled),
+html body .app .btn-green:active:not(:disabled),
+html body .card .btn-green:active:not(:disabled),
+html body button.btn-green:active:not(:disabled) {
+  color: var(--texto-boton, var(--texto-principal)) !important;
+}
+
+html body #root .btn-green:disabled,
+html body #root button.btn-green:disabled,
+html body button.btn-green.btn-green:disabled,
+html body .app .btn-green:disabled,
+html body .card .btn-green:disabled,
+html body button.btn-green:disabled {
+  color: var(--texto-boton, var(--texto-principal)) !important;
+  opacity: 0.5 !important;
+}
+
+/* REGLA UNIVERSAL: Todos los botones y elementos con fondo que use --azul-primario, --azul-secundario, --azul-claro o --azul-hover */
+/* Esto asegura que en modo oscuro tengan texto oscuro */
+html body button:not(.login-bg button):not(.login-container button):not(.login-form-side button):not(.login-box button):not(.menu-item):not(.menu-logout):not(.menu-trigger):not(.menu-trigger-inside):not(.ixora-ia-widget-button):not(.chat-input-pro button),
+html body .btn:not(.login-bg .btn):not(.login-container .btn):not(.login-box .btn),
+html body .btn-primary,
+html body .btn-success,
+html body .btn-info,
+html body .btn-corte,
+html body .btn-add-user,
+html body .btn-warn,
+html body .btn-ok,
+html body .btn-danger,
+html body .devolucion-form button,
+html body .gestion-header button,
+html body .btnGuardarIA,
+html body .modal-btn-confirm,
+html body .alert-modal-btn-info,
+html body .alert-modal-btn-confirm,
+html body .alias-item.selected,
+html body .item-buscador.selected,
+html body .badge-estatus.estatus-listo-para-enviar {
+  /* Si tienen fondo con --azul-primario, usar --texto-boton */
+  color: var(--texto-boton, var(--texto-principal)) !important;
+}
+
+/* Mensajes en chat que usan fondo --azul-primario - máxima especificidad */
+/* En modo oscuro, usar un azul oscuro fijo para contraste */
+/* Aumentar especificidad para sobrescribir ChatPro.css */
+html body #root .app .chat-pro-ventana .chat-inner .chat-body-pro .msg-yo-pro,
+html body #root .app .chat-pro-ventana .chat-body-pro .msg-yo-pro,
+html body #root .app .chat-body-pro .msg-yo-pro,
+html body #root .chat-body-pro .msg-yo-pro,
+html body .app .chat-pro-ventana .chat-inner .chat-body-pro .msg-yo-pro,
+html body .app .chat-pro-ventana .chat-body-pro .msg-yo-pro,
+html body .app .chat-body-pro .msg-yo-pro,
+html body .chat-body-pro .msg-yo-pro,
+html body .chat-inner .chat-body-pro .msg-yo-pro,
+html body .msg-yo-pro {
+  background: linear-gradient(135deg, #3b82f6, #2563eb) !important;
+  color: #ffffff !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+}
+
+/* Forzar color blanco en TODOS los elementos dentro de msg-yo-pro */
+html body #root .app .chat-pro-ventana .chat-inner .chat-body-pro .msg-yo-pro div,
+html body #root .app .chat-pro-ventana .chat-inner .chat-body-pro .msg-yo-pro span,
+html body #root .app .chat-pro-ventana .chat-body-pro .msg-yo-pro div,
+html body #root .app .chat-pro-ventana .chat-body-pro .msg-yo-pro span,
+html body #root .app .chat-body-pro .msg-yo-pro div,
+html body #root .app .chat-body-pro .msg-yo-pro span,
+html body #root .chat-body-pro .msg-yo-pro div,
+html body #root .chat-body-pro .msg-yo-pro span,
+html body .app .chat-pro-ventana .chat-inner .chat-body-pro .msg-yo-pro div,
+html body .app .chat-pro-ventana .chat-inner .chat-body-pro .msg-yo-pro span,
+html body .app .chat-pro-ventana .chat-body-pro .msg-yo-pro div,
+html body .app .chat-pro-ventana .chat-body-pro .msg-yo-pro span,
+html body .app .chat-body-pro .msg-yo-pro div,
+html body .app .chat-body-pro .msg-yo-pro span,
+html body .chat-body-pro .msg-yo-pro div,
+html body .chat-body-pro .msg-yo-pro span,
+html body .chat-inner .chat-body-pro .msg-yo-pro div,
+html body .chat-inner .chat-body-pro .msg-yo-pro span,
+html body .msg-yo-pro div,
+html body .msg-yo-pro span,
+html body .msg-yo-pro *,
+html body .msg-yo-label {
+  color: #ffffff !important;
+}
+
+/* Mensajes de otros - texto oscuro */
+html body #root .app .chat-pro-ventana .chat-body-pro .msg-otro-pro,
+html body #root .chat-body-pro .msg-otro-pro,
+html body .app .chat-pro-ventana .chat-body-pro .msg-otro-pro,
+html body .chat-body-pro .msg-otro-pro,
+html body .msg-otro-pro {
+  background: var(--fondo-input) !important;
+  color: var(--texto-principal) !important;
+}
+
+/* Forzar color del texto principal en TODOS los elementos dentro de msg-otro-pro */
+html body #root .app .chat-pro-ventana .chat-body-pro .msg-otro-pro div,
+html body #root .app .chat-pro-ventana .chat-body-pro .msg-otro-pro span,
+html body #root .chat-body-pro .msg-otro-pro div,
+html body #root .chat-body-pro .msg-otro-pro span,
+html body .app .chat-pro-ventana .chat-body-pro .msg-otro-pro div,
+html body .app .chat-pro-ventana .chat-body-pro .msg-otro-pro span,
+html body .chat-body-pro .msg-otro-pro div,
+html body .chat-body-pro .msg-otro-pro span,
+html body .msg-otro-pro div,
+html body .msg-otro-pro span,
+html body .msg-otro-pro * {
+  color: var(--texto-principal) !important;
+}
+
+/* Badges del chat - en modo oscuro necesitan fondo oscuro con texto claro */
+html body .chat-badge-small,
+html body .chat-badge {
+  background: linear-gradient(135deg, #3b82f6, #2563eb) !important;
+  color: #ffffff !important;
+  border: 1px solid var(--borde-sutil) !important;
+}
+
+/* Forzar color blanco en el contenido de los badges */
+html body .chat-badge-small *,
+html body .chat-badge * {
+  color: #ffffff !important;
+}
+
+/* ESPECÍFICO PARA LOGIN: Tabs de método de login activas */
+html body .login-method-tab.active {
+  background: linear-gradient(135deg, var(--azul-primario), var(--azul-secundario)) !important;
+  color: var(--texto-boton, var(--texto-principal)) !important;
+}
+
+/* ESPECÍFICO PARA LOGIN: Botones .btn-green en login */
+html body .login-bg .btn-green,
+html body .login-container .btn-green,
+html body .login-form-side .btn-green,
+html body .login-box .btn-green,
+html body .login-bg button.btn-green,
+html body .login-container button.btn-green,
+html body .login-form-side button.btn-green,
+html body .login-box button.btn-green {
+  background: linear-gradient(135deg, var(--azul-primario) 0%, var(--azul-secundario) 100%) !important;
+  color: var(--texto-boton, var(--texto-principal)) !important;
+}
+
+
+
+
+
+
+
+
+
+
+
+

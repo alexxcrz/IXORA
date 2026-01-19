@@ -1,0 +1,1142 @@
+/* =======================================================
+   🌐 ESTILOS GLOBALES PROFESIONALES EMPRESARIALES
+   ====================================================== */
+
+@import './tema.css';
+
+/* =======================================================
+   RESET PARA RESPONSIVIDAD EN PDA
+   ====================================================== */
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  max-width: 100vw;
+  overflow-x: hidden;
+  box-sizing: border-box;
+  position: relative;
+  background: var(--fondo-principal) !important;
+}
+
+/* Asegurar que body y html no bloqueen el fondo personalizado */
+body.tiene-fondo-personalizado {
+  background: transparent !important;
+}
+
+body.tiene-fondo-personalizado html {
+  background: transparent !important;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+#root {
+  width: 100%;
+  height: 100%;
+  max-width: 100vw;
+  overflow-x: hidden;
+  box-sizing: border-box;
+  font-weight: 700;
+  font-size: 19px;
+  position: relative;
+  min-height: 100vh;
+  min-height: 100dvh;
+  min-height: 100svh;
+}
+
+/* Asegurar que #root no bloquee el fondo personalizado */
+body.tiene-fondo-personalizado #root {
+  background: transparent !important;
+}
+
+/* =======================================================
+   APLICACIÓN PRINCIPAL
+   ====================================================== */
+
+.app {
+  min-height: 100vh;
+  width: 100%;
+  max-width: 100vw;
+  background: var(--fondo-principal);
+  position: relative;
+  padding: var(--espacio-lg) var(--espacio-md) var(--espacio-2xl);
+  box-sizing: border-box;
+  overflow-x: hidden;
+}
+
+.app::before {
+  display: none !important;
+}
+
+/* =======================================================
+   HEADER PRINCIPAL - MINIMALISTA Y PROFESIONAL
+   ====================================================== */
+
+.header-flex {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: var(--fondo-card);
+  padding: var(--espacio-md) var(--espacio-lg);
+  margin-bottom: var(--espacio-lg);
+  border: 1px solid var(--borde-sutil);
+  border-radius: var(--radio-xl);
+  box-shadow: var(--sombra-sm);
+  position: relative;
+  z-index: 1;
+  max-width: 600px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.fecha-reporte input {
+  background: var(--fondo-input);
+  border: 1px solid var(--borde-medio);
+  color: var(--texto-principal);
+  border-radius: var(--radio-full);
+  padding: var(--espacio-sm) var(--espacio-md);
+  font-size: 0.95rem;
+  font-weight: 500;
+  text-align: center;
+  transition: all var(--transicion-media);
+  cursor: pointer;
+}
+
+.fecha-reporte input:hover {
+  box-shadow: var(--sombra-xs);
+}
+
+.fecha-reporte input:focus {
+  outline: none;
+  border-color: var(--borde-visible);
+  box-shadow: var(--sombra-sm);
+}
+
+.fecha-reporte input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* =======================================================
+   CARDS/TARJETAS - PROFESIONALES Y MODERNAS
+   ====================================================== */
+
+.card {
+  background: var(--fondo-card);
+  width: 96%;
+  max-width: 1400px;
+  border-radius: var(--radio-xl);
+  padding: var(--espacio-xl);
+  margin-bottom: var(--espacio-lg);
+  box-shadow: var(--sombra-md);
+  border: 1px solid var(--borde-sutil);
+  position: relative;
+  z-index: 1;
+  transition: all var(--transicion-media);
+}
+
+.card:hover {
+  box-shadow: var(--sombra-lg);
+}
+
+/* =======================================================
+   BOTONES - ESTILO PROFESIONAL
+   ====================================================== */
+
+/* =======================================================
+   ESTILOS GLOBALES PARA .btn-green EN TODA LA APP
+   Máxima especificidad para asegurar que se apliquen
+   ====================================================== */
+
+/* Estilos base para .btn-green en TODA la aplicación excepto login */
+/* Usa variables CSS del tema para adaptarse automáticamente */
+/* Para el modo oscuro: fondo claro necesita texto oscuro */
+body:not(.login-bg) .btn-green,
+body .app .btn-green,
+.app .btn-green,
+.card .btn-green,
+button.btn-green,
+#root .btn-green,
+#root button.btn-green {
+  background: linear-gradient(135deg, var(--azul-primario), var(--azul-secundario)) !important;
+  /* Usar --texto-boton si existe (para temas con fondo claro), sino usar --texto-principal */
+  color: var(--texto-boton, var(--texto-principal)) !important;
+  border: 1px solid var(--borde-sutil) !important;
+  border-radius: var(--radio-xl) !important;
+  padding: 9px 14px !important;
+  cursor: pointer !important;
+  font-weight: 600 !important;
+  font-size: 0.9rem !important;
+  transition: all var(--transicion-media) !important;
+  box-shadow: var(--sombra-xs) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  min-height: 36px !important;
+  height: auto !important;
+  min-width: 36px !important;
+  max-width: none !important;
+  width: auto !important;
+  line-height: 1 !important;
+  box-sizing: border-box !important;
+  flex-shrink: 0 !important;
+  position: relative !important;
+  z-index: 1 !important;
+  white-space: nowrap !important;
+  font-family: var(--font-family) !important;
+}
+
+body:not(.login-bg) .btn-green:hover:not(:disabled),
+body .app .btn-green:hover:not(:disabled),
+.app .btn-green:hover:not(:disabled),
+.card .btn-green:hover:not(:disabled),
+button.btn-green:hover:not(:disabled),
+#root .btn-green:hover:not(:disabled),
+#root button.btn-green:hover:not(:disabled) {
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15) !important;
+  transform: translateY(-1px) !important;
+  background: linear-gradient(135deg, var(--azul-hover), var(--azul-primario)) !important;
+  color: var(--texto-boton, var(--texto-principal)) !important;
+}
+
+body:not(.login-bg) .btn-green:active:not(:disabled),
+body .app .btn-green:active:not(:disabled),
+.app .btn-green:active:not(:disabled),
+.card .btn-green:active:not(:disabled),
+button.btn-green:active:not(:disabled),
+#root .btn-green:active:not(:disabled),
+#root button.btn-green:active:not(:disabled) {
+  transform: translateY(0) scale(0.98) !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1) !important;
+}
+
+body:not(.login-bg) .btn-green:disabled,
+body .app .btn-green:disabled,
+.app .btn-green:disabled,
+.card .btn-green:disabled,
+button.btn-green:disabled,
+#root .btn-green:disabled,
+#root button.btn-green:disabled {
+  opacity: 0.5 !important;
+  cursor: not-allowed !important;
+}
+
+/* =======================================================
+   BOTONES ESTANDARIZADOS - TODOS IGUALES
+   ====================================================== */
+
+button:not(.btn-green):not(.login-method-tab):not(.menu-item):not(.menu-logout):not(.menu-trigger):not(.menu-trigger-inside):not(.pina-ia-widget-button):not(.chat-input-pro button):not(.mes-header):not(.registros-tabs button):not(.widgets-notifications-button):not(.widgets-menu-button),
+.btn:not(.btn-green) {
+  font-family: var(--font-family);
+  font-weight: 600;
+  border-radius: var(--radio-full) !important;
+  border: none !important;
+  transition: all var(--transicion-media);
+  cursor: pointer;
+  padding: 8px 14px !important;
+  font-size: 0.85rem !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: linear-gradient(135deg, var(--azul-primario), var(--azul-secundario)) !important;
+  color: var(--texto-boton, var(--texto-principal)) !important;
+  box-shadow: var(--sombra-xs) !important;
+  white-space: nowrap;
+}
+
+button:not(.btn-green):not(.login-method-tab):not(.menu-item):not(.menu-logout):not(.menu-trigger):not(.menu-trigger-inside):not(.pina-ia-widget-button):not(.chat-input-pro button):not(.mes-header):not(.registros-tabs button):not(.widgets-notifications-button):not(.widgets-menu-button):hover:not(:disabled),
+.btn:not(.btn-green):hover:not(:disabled) {
+  box-shadow: var(--sombra-md) !important;
+  transform: translateY(-1px);
+}
+
+button:not(.btn-green):not(.login-method-tab):not(.menu-item):not(.menu-logout):not(.menu-trigger):not(.menu-trigger-inside):not(.pina-ia-widget-button):not(.chat-input-pro button):not(.mes-header):not(.registros-tabs button):not(.widgets-notifications-button):not(.widgets-menu-button):active:not(:disabled),
+.btn:not(.btn-green):active:not(:disabled) {
+  transform: translateY(0) scale(0.95);
+  box-shadow: var(--sombra-xs) !important;
+}
+
+button:not(.btn-green):not(.login-method-tab):not(.menu-item):not(.menu-logout):not(.menu-trigger):not(.menu-trigger-inside):not(.pina-ia-widget-button):not(.chat-input-pro button):not(.mes-header):not(.registros-tabs button):not(.widgets-notifications-button):not(.widgets-menu-button):disabled,
+.btn:not(.btn-green):disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Variantes de color (mismo tamaño y estilo) */
+.btn-primary {
+  background: linear-gradient(135deg, var(--azul-primario), var(--azul-secundario)) !important;
+  color: var(--texto-boton, var(--texto-principal)) !important;
+}
+
+.btn-secondary {
+  background: var(--fondo-input) !important;
+  color: var(--texto-principal) !important;
+  border: 1px solid var(--borde-sutil) !important;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  box-shadow: var(--sombra-xs) !important;
+  transform: translateY(-1px);
+}
+
+.btn-success {
+  background: linear-gradient(135deg, var(--azul-primario), var(--azul-secundario)) !important;
+  color: var(--texto-boton, var(--texto-principal)) !important;
+}
+
+.btn-error,
+.btn-danger {
+  background: linear-gradient(135deg, var(--azul-claro), var(--azul-primario)) !important;
+  color: var(--texto-boton, var(--texto-principal)) !important;
+}
+
+.btn-corte {
+  background: linear-gradient(135deg, var(--azul-primario), var(--azul-secundario)) !important;
+  color: var(--texto-boton, var(--texto-principal)) !important;
+  padding: 8px 16px !important;
+  font-size: 0.9rem !important;
+  font-weight: 700 !important;
+}
+
+.btn-corte:hover:not(:disabled) {
+  box-shadow: var(--sombra-lg) !important;
+  transform: translateY(-2px);
+}
+
+.btn-corte:active:not(:disabled) {
+  transform: translateY(0) scale(0.95);
+  box-shadow: var(--sombra-xs) !important;
+}
+
+/* =======================================================
+   REGLAS GLOBALES DE CONTRASTE - MÁXIMA PRIORIDAD
+   Asegurar que todos los textos e inputs sean visibles
+   ====================================================== */
+
+/* Forzar color de texto en todos los inputs, selects y textareas */
+input:not(.login-input):not(.otp-input):not(.login-bg input):not(.login-container input):not(.login-form-side input):not(.login-box input),
+select:not(.login-bg select):not(.login-container select):not(.login-form-side select):not(.login-box select),
+textarea:not(.login-bg textarea):not(.login-container textarea):not(.login-form-side textarea):not(.login-box textarea) {
+  color: var(--texto-principal) !important;
+}
+
+/* Asegurar que los placeholders sean visibles pero sutiles */
+input:not(.login-input):not(.otp-input):not(.login-bg input):not(.login-container input):not(.login-form-side input):not(.login-box input)::placeholder,
+textarea:not(.login-bg textarea):not(.login-container textarea):not(.login-form-side textarea):not(.login-box textarea)::placeholder {
+  color: var(--texto-terciario) !important;
+  opacity: 0.7 !important;
+}
+
+/* Asegurar que las opciones de select sean visibles */
+select:not(.login-bg select):not(.login-container select):not(.login-form-side select):not(.login-box select) option {
+  background: var(--fondo-input) !important;
+  color: var(--texto-principal) !important;
+}
+
+/* Asegurar que todos los textos principales sean visibles (excepto los que tienen clases específicas) */
+h1:not(.texto-secundario):not(.texto-terciario),
+h2:not(.texto-secundario):not(.texto-terciario),
+h3:not(.texto-secundario):not(.texto-terciario),
+h4:not(.texto-secundario):not(.texto-terciario),
+h5:not(.texto-secundario):not(.texto-terciario),
+h6:not(.texto-secundario):not(.texto-terciario),
+p:not(.texto-secundario):not(.texto-terciario),
+span:not(.texto-secundario):not(.texto-terciario):not(.mes-txt):not(.mes-total):not(.chev):not(.tab-icon):not(.tab-label):not(.chat-badge-small):not(.chat-badge),
+div:not(.texto-secundario):not(.texto-terciario):not(.msg-yo-pro):not(.msg-otro-pro),
+label:not(.texto-secundario):not(.texto-terciario),
+li:not(.texto-secundario):not(.texto-terciario),
+td:not(.texto-secundario):not(.texto-terciario),
+th:not(.texto-secundario):not(.texto-terciario) {
+  color: var(--texto-principal) !important;
+}
+
+/* Excepciones específicas para elementos dentro de botones con fondo oscuro */
+.mes-header .mes-txt,
+.mes-header .mes-total,
+.mes-header .chev,
+.registros-tabs button .tab-icon,
+.registros-tabs button .tab-label,
+.chat-badge-small,
+.chat-badge {
+  color: inherit !important;
+}
+
+/* Excepciones para mensajes del chat - deben usar sus propios colores */
+/* NOTA: Los estilos específicos están en ChatPro.css con máxima especificidad */
+
+/* Excepciones para textos secundarios y terciarios (deben usar sus variables específicas) */
+.texto-secundario, .texto-terciario {
+  color: var(--texto-secundario) !important;
+}
+
+/* =======================================================
+   INPUTS - MODERNOS Y PROFESIONALES
+   ====================================================== */
+
+/* Excluir elementos del login de los estilos globales */
+input:not(.login-input):not(.otp-input):not(.login-bg input):not(.login-container input):not(.login-form-side input):not(.login-box input),
+select:not(.login-bg select):not(.login-container select):not(.login-form-side select):not(.login-box select),
+textarea:not(.login-bg textarea):not(.login-container textarea):not(.login-form-side textarea):not(.login-box textarea) {
+  font-family: var(--font-family);
+  background: var(--fondo-input);
+  border: 1px solid var(--borde-medio);
+  color: var(--texto-principal) !important;
+  border-radius: var(--radio-full);
+  padding: var(--espacio-sm) var(--espacio-md);
+  font-size: 0.95rem;
+  transition: all var(--transicion-media);
+  width: 100%;
+}
+
+/* Asegurar que todos los inputs tengan texto visible */
+input:not(.login-input):not(.otp-input):not(.login-bg input):not(.login-container input):not(.login-form-side input):not(.login-box input)::placeholder,
+select:not(.login-bg select):not(.login-container select):not(.login-form-side select):not(.login-box select) option,
+textarea:not(.login-bg textarea):not(.login-container textarea):not(.login-form-side textarea):not(.login-box textarea)::placeholder {
+  color: var(--texto-terciario) !important;
+  opacity: 0.7;
+}
+
+input:not(.login-input):not(.otp-input):not(.login-bg input):not(.login-container input):not(.login-form-side input):not(.login-box input):focus,
+select:not(.login-bg select):not(.login-container select):not(.login-form-side select):not(.login-box select):focus,
+textarea:not(.login-bg textarea):not(.login-container textarea):not(.login-form-side textarea):not(.login-box textarea):focus {
+  outline: none;
+  border-color: var(--borde-visible);
+  box-shadow: var(--sombra-sm);
+  color: var(--texto-principal) !important;
+  background: var(--fondo-input-focus) !important;
+}
+
+input:not(.login-input):not(.otp-input):not(.login-bg input):not(.login-container input):not(.login-form-side input):not(.login-box input):hover,
+select:not(.login-bg select):not(.login-container select):not(.login-form-side select):not(.login-box select):hover,
+textarea:not(.login-bg textarea):not(.login-container textarea):not(.login-form-side textarea):not(.login-box textarea):hover {
+  box-shadow: var(--sombra-xs);
+}
+
+input:not(.login-input):not(.otp-input):not(.login-bg input):not(.login-container input):not(.login-form-side input):not(.login-box input)::placeholder,
+textarea:not(.login-bg textarea):not(.login-container textarea):not(.login-form-side textarea):not(.login-box textarea)::placeholder {
+  color: var(--texto-terciario) !important;
+  opacity: 0.7 !important;
+}
+
+/* Asegurar que todos los inputs tengan texto visible en todos los temas */
+input:not(.login-input):not(.otp-input):not(.login-bg input):not(.login-container input):not(.login-form-side input):not(.login-box input),
+select:not(.login-bg select):not(.login-container select):not(.login-form-side select):not(.login-box select),
+textarea:not(.login-bg textarea):not(.login-container textarea):not(.login-form-side textarea):not(.login-box textarea) {
+  color: var(--texto-principal) !important;
+}
+
+/* Asegurar que los selects tengan opciones visibles */
+select:not(.login-bg select):not(.login-container select):not(.login-form-side select):not(.login-box select) option {
+  background: var(--fondo-input) !important;
+  color: var(--texto-principal) !important;
+}
+
+input:not(.login-input):not(.otp-input):not(.login-bg input):not(.login-container input):not(.login-form-side input):not(.login-box input):disabled,
+select:not(.login-bg select):not(.login-container select):not(.login-form-side select):not(.login-box select):disabled,
+textarea:not(.login-bg textarea):not(.login-container textarea):not(.login-form-side textarea):not(.login-box textarea):disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* =======================================================
+   TABLAS - PROFESIONALES Y LEGIBLES
+   ====================================================== */
+
+table {
+  background: var(--fondo-card);
+  border: 1px solid var(--borde-sutil);
+  border-radius: var(--radio-xl);
+  overflow: hidden;
+  width: 100%;
+  border-collapse: collapse;
+}
+
+thead {
+  background: var(--fondo-secundario) !important;
+}
+
+th {
+  background: var(--fondo-secundario) !important;
+  color: var(--texto-principal) !important;
+  border-bottom: 2px solid var(--borde-medio) !important;
+  font-weight: 600;
+  padding: var(--espacio-md);
+  text-align: left;
+  font-size: 0.875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+td {
+  background: var(--fondo-card) !important;
+  color: var(--texto-principal) !important;
+  border-bottom: 1px solid var(--borde-sutil) !important;
+  padding: var(--espacio-md);
+  font-size: 0.9rem;
+}
+
+/* Unificar fondos de contenedores principales de pestañas */
+.app [class$="-container"]:not(.widgets-notifications-container):not(.widgets-menu-container),
+.app [class*="-container "]:not(.widgets-notifications-container):not(.widgets-menu-container) {
+  background: var(--fondo-principal) !important;
+}
+
+/* Unificar paneles y secciones típicas */
+.app [class*="panel"],
+.app [class*="section"],
+.app [class*="wrapper"] {
+  background: var(--fondo-card) !important;
+  color: var(--texto-principal) !important;
+  border-color: var(--borde-sutil) !important;
+}
+
+/* Tabs consistentes con el tema */
+.app .tab-button,
+.app .tab-btn,
+.app button[class*="tab"] {
+  background: var(--fondo-input) !important;
+  color: var(--texto-principal) !important;
+  border: 1px solid var(--borde-sutil) !important;
+}
+
+.app .tab-button.active,
+.app .tab-btn.active,
+.app button[class*="tab"].active {
+  background: linear-gradient(135deg, var(--azul-primario), var(--azul-secundario)) !important;
+  color: var(--texto-boton, var(--texto-principal)) !important;
+  border-color: var(--borde-visible) !important;
+}
+
+/* Asegurar que los inputs dentro de tablas también tengan buen contraste */
+table input,
+table select,
+table textarea {
+  color: var(--texto-principal) !important;
+  background: var(--fondo-input) !important;
+}
+
+tbody tr {
+  transition: all var(--transicion-rapida);
+}
+
+tbody tr:hover {
+  box-shadow: inset 2px 0 0 var(--borde-visible);
+}
+
+
+tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* =======================================================
+   MODALES - PROFESIONALES
+   ====================================================== */
+
+.modal-content,
+.modal-overlay {
+  font-family: var(--font-family);
+}
+
+.modal-overlay {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  background: rgba(0, 0, 0, 0.7) !important;
+  backdrop-filter: blur(4px) !important;
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+  z-index: 9999 !important;
+  overflow-y: auto !important;
+  padding: 20px !important;
+}
+
+.modal-content {
+  background: var(--fondo-card);
+  color: var(--texto-principal);
+  border: 1px solid var(--borde-sutil);
+  border-radius: var(--radio-xl);
+  padding: var(--espacio-xl);
+  box-shadow: var(--sombra-xl);
+  max-width: 600px;
+  width: 90%;
+  margin: auto;
+  position: relative;
+}
+
+.modal-actions,
+.modal-buttons {
+  background: transparent !important;
+  padding: 0;
+  gap: var(--espacio-sm);
+}
+
+/* =======================================================
+   TOASTS - MODERNOS
+   ====================================================== */
+
+.toast {
+  background: var(--fondo-card);
+  color: var(--texto-principal);
+  border: 1px solid var(--borde-sutil);
+  box-shadow: var(--sombra-lg);
+  padding: var(--espacio-md) var(--espacio-lg);
+  border-radius: var(--radio-xl);
+  font-size: 0.9rem;
+}
+
+/* =======================================================
+   REGLA DE MÁXIMA PRIORIDAD PARA .btn-green
+   Se aplica al final para sobrescribir cualquier otro estilo
+   ====================================================== */
+
+/* Regla universal con máxima especificidad - debe ir al final */
+/* Usa variables CSS para adaptarse a todos los temas */
+/* IMPORTANTE: Usa las variables del tema para que funcione con modo oscuro */
+html body #root .btn-green,
+html body #root button.btn-green,
+html body .app .btn-green,
+html body .card .btn-green,
+html body button.btn-green.btn-green,
+html body button.btn-green,
+html body .btn-green,
+body:not(.login-bg) .btn-green,
+body:not(.login-bg) button.btn-green,
+.app .btn-green,
+.app button.btn-green,
+.card .btn-green,
+.card button.btn-green {
+  background: linear-gradient(135deg, var(--azul-primario), var(--azul-secundario)) !important;
+  background-color: var(--azul-primario) !important;
+  background-image: linear-gradient(135deg, var(--azul-primario), var(--azul-secundario)) !important;
+  /* Usar --texto-boton si existe (modo oscuro con fondo claro), sino --texto-principal */
+  color: var(--texto-boton, var(--texto-principal)) !important;
+  border: 1px solid var(--borde-sutil) !important;
+  border-color: var(--borde-sutil) !important;
+}
+
+html body #root .btn-green:not(:disabled):hover,
+html body #root button.btn-green:not(:disabled):hover,
+html body .app .btn-green:not(:disabled):hover,
+html body .card .btn-green:not(:disabled):hover,
+body:not(.login-bg) .btn-green:not(:disabled):hover,
+body:not(.login-bg) button.btn-green:not(:disabled):hover,
+.app .btn-green:not(:disabled):hover,
+.app button.btn-green:not(:disabled):hover,
+.card .btn-green:not(:disabled):hover,
+.card button.btn-green:not(:disabled):hover {
+  background: linear-gradient(135deg, var(--azul-hover), var(--azul-primario)) !important;
+  background-image: linear-gradient(135deg, var(--azul-hover), var(--azul-primario)) !important;
+  color: var(--texto-boton, var(--texto-principal)) !important;
+}
+
+/* =======================================================
+   REGLAS DE MÁXIMA PRIORIDAD PARA MENSAJES DEL CHAT
+   Deben ir al final para sobrescribir cualquier regla global
+   ====================================================== */
+
+/* Máxima especificidad para mensajes propios - texto blanco sobre fondo azul */
+html body #root .app .chat-pro-ventana .chat-body-pro .msg-yo-pro,
+html body #root .chat-body-pro .msg-yo-pro,
+html body .app .chat-pro-ventana .chat-body-pro .msg-yo-pro,
+html body .chat-body-pro .msg-yo-pro,
+body #root .chat-body-pro .msg-yo-pro,
+body .chat-body-pro .msg-yo-pro,
+.chat-body-pro .msg-yo-pro,
+.msg-yo-pro {
+  background: linear-gradient(135deg, var(--azul-primario), var(--azul-secundario)) !important;
+  color: var(--texto-boton, var(--texto-principal)) !important;
+  border-color: var(--borde-visible) !important;
+}
+
+/* Forzar color blanco en TODOS los elementos dentro de msg-yo-pro (divs, spans, etc.) */
+html body #root .app .chat-pro-ventana .chat-body-pro .msg-yo-pro div,
+html body #root .app .chat-pro-ventana .chat-body-pro .msg-yo-pro span,
+html body #root .chat-body-pro .msg-yo-pro div,
+html body #root .chat-body-pro .msg-yo-pro span,
+html body .app .chat-pro-ventana .chat-body-pro .msg-yo-pro div,
+html body .app .chat-pro-ventana .chat-body-pro .msg-yo-pro span,
+html body .chat-body-pro .msg-yo-pro div,
+html body .chat-body-pro .msg-yo-pro span,
+body #root .chat-body-pro .msg-yo-pro div,
+body #root .chat-body-pro .msg-yo-pro span,
+body .chat-body-pro .msg-yo-pro div,
+body .chat-body-pro .msg-yo-pro span,
+.chat-body-pro .msg-yo-pro div,
+.chat-body-pro .msg-yo-pro span,
+.msg-yo-pro div,
+.msg-yo-pro span,
+.msg-yo-pro * {
+  color: var(--texto-boton, var(--texto-principal)) !important;
+}
+
+/* Máxima especificidad para mensajes de otros - texto oscuro sobre fondo claro */
+html body #root .app .chat-pro-ventana .chat-body-pro .msg-otro-pro,
+html body #root .chat-body-pro .msg-otro-pro,
+html body .app .chat-pro-ventana .chat-body-pro .msg-otro-pro,
+html body .chat-body-pro .msg-otro-pro,
+body #root .chat-body-pro .msg-otro-pro,
+body .chat-body-pro .msg-otro-pro,
+.chat-body-pro .msg-otro-pro,
+.msg-otro-pro {
+  background: var(--fondo-input) !important;
+  color: var(--texto-principal) !important;
+  border-color: var(--borde-sutil) !important;
+}
+
+/* Forzar color del texto principal en TODOS los elementos dentro de msg-otro-pro */
+html body #root .app .chat-pro-ventana .chat-body-pro .msg-otro-pro div,
+html body #root .app .chat-pro-ventana .chat-body-pro .msg-otro-pro span,
+html body #root .chat-body-pro .msg-otro-pro div,
+html body #root .chat-body-pro .msg-otro-pro span,
+html body .app .chat-pro-ventana .chat-body-pro .msg-otro-pro div,
+html body .app .chat-pro-ventana .chat-body-pro .msg-otro-pro span,
+html body .chat-body-pro .msg-otro-pro div,
+html body .chat-body-pro .msg-otro-pro span,
+body #root .chat-body-pro .msg-otro-pro div,
+body #root .chat-body-pro .msg-otro-pro span,
+body .chat-body-pro .msg-otro-pro div,
+body .chat-body-pro .msg-otro-pro span,
+.chat-body-pro .msg-otro-pro div,
+.chat-body-pro .msg-otro-pro span,
+.msg-otro-pro div,
+.msg-otro-pro span,
+.msg-otro-pro * {
+  color: var(--texto-principal) !important;
+}
+
+/* =======================================================
+   REGLAS DE MÁXIMA PRIORIDAD PARA GARANTIZAR VISIBILIDAD
+   Estas reglas se aplican al final para sobrescribir cualquier conflicto
+   ====================================================== */
+
+/* Asegurar que TODOS los botones tengan texto visible */
+html body #root .app button:not(.login-bg button):not(.login-container button):not(.login-form-side button):not(.login-box button):not(.menu-item):not(.menu-logout):not(.menu-trigger):not(.menu-trigger-inside):not(.pina-ia-widget-button):not(.chat-input-pro button):not(.mes-header):not(.registros-tabs button):not(.widgets-notifications-button):not(.widgets-menu-button),
+html body #root button:not(.login-bg button):not(.login-container button):not(.login-form-side button):not(.login-box button):not(.menu-item):not(.menu-logout):not(.menu-trigger):not(.menu-trigger-inside):not(.pina-ia-widget-button):not(.chat-input-pro button):not(.mes-header):not(.registros-tabs button):not(.widgets-notifications-button):not(.widgets-menu-button),
+html body .app button:not(.login-bg button):not(.login-container button):not(.login-form-side button):not(.login-box button):not(.menu-item):not(.menu-logout):not(.menu-trigger):not(.menu-trigger-inside):not(.pina-ia-widget-button):not(.chat-input-pro button):not(.mes-header):not(.registros-tabs button):not(.widgets-notifications-button):not(.widgets-menu-button),
+html body button:not(.login-bg button):not(.login-container button):not(.login-form-side button):not(.login-box button):not(.menu-item):not(.menu-logout):not(.menu-trigger):not(.menu-trigger-inside):not(.pina-ia-widget-button):not(.chat-input-pro button):not(.mes-header):not(.registros-tabs button):not(.widgets-notifications-button):not(.widgets-menu-button),
+html body #root .app .btn:not(.login-bg .btn):not(.login-container .btn):not(.login-form-side .btn):not(.login-box .btn),
+html body #root .btn:not(.login-bg .btn):not(.login-container .btn):not(.login-form-side .btn):not(.login-box .btn),
+html body .app .btn:not(.login-bg .btn):not(.login-container .btn):not(.login-form-side .btn):not(.login-box .btn),
+html body .btn:not(.login-bg .btn):not(.login-container .btn):not(.login-form-side .btn):not(.login-box .btn) {
+  color: var(--texto-boton, var(--texto-principal)) !important;
+}
+
+/* Asegurar que TODOS los inputs, selects y textareas tengan texto visible */
+html body #root .app input:not(.login-input):not(.otp-input):not(.login-bg input):not(.login-container input):not(.login-form-side input):not(.login-box input),
+html body #root input:not(.login-input):not(.otp-input):not(.login-bg input):not(.login-container input):not(.login-form-side input):not(.login-box input),
+html body .app input:not(.login-input):not(.otp-input):not(.login-bg input):not(.login-container input):not(.login-form-side input):not(.login-box input),
+html body input:not(.login-input):not(.otp-input):not(.login-bg input):not(.login-container input):not(.login-form-side input):not(.login-box input),
+html body #root .app select:not(.login-bg select):not(.login-container select):not(.login-form-side select):not(.login-box select),
+html body #root select:not(.login-bg select):not(.login-container select):not(.login-form-side select):not(.login-box select),
+html body .app select:not(.login-bg select):not(.login-container select):not(.login-form-side select):not(.login-box select),
+html body select:not(.login-bg select):not(.login-container select):not(.login-form-side select):not(.login-box select),
+html body #root .app textarea:not(.login-bg textarea):not(.login-container textarea):not(.login-form-side textarea):not(.login-box textarea),
+html body #root textarea:not(.login-bg textarea):not(.login-container textarea):not(.login-form-side textarea):not(.login-box textarea),
+html body .app textarea:not(.login-bg textarea):not(.login-container textarea):not(.login-form-side textarea):not(.login-box textarea),
+html body textarea:not(.login-bg textarea):not(.login-container textarea):not(.login-form-side textarea):not(.login-box textarea) {
+  color: var(--texto-principal) !important;
+}
+
+/* Asegurar que TODOS los labels tengan texto visible */
+html body #root .app label:not(.login-bg label):not(.login-container label):not(.login-form-side label):not(.login-box label),
+html body #root label:not(.login-bg label):not(.login-container label):not(.login-form-side label):not(.login-box label),
+html body .app label:not(.login-bg label):not(.login-container label):not(.login-form-side label):not(.login-box label),
+html body label:not(.login-bg label):not(.login-container label):not(.login-form-side label):not(.login-box label) {
+  color: var(--texto-principal) !important;
+}
+
+/* =======================================================
+   RESPONSIVE GLOBAL - PARAGUAS PARA TODAS LAS PESTAÑAS
+   ====================================================== */
+
+@media (max-width: 1024px) {
+  .card {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  /* Grids adaptables en tablet */
+  [class*="grid"] {
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .card {
+    padding: 12px !important;
+    border-radius: 12px !important;
+  }
+
+  /* Imágenes y medios responsivos */
+  img,
+  video,
+  canvas,
+  svg {
+    max-width: 100%;
+    height: auto;
+  }
+
+  /* Fondo personalizado debe cubrir pantalla completa */
+  .app-fondo-personalizado img,
+  .app-fondo-personalizado video {
+    width: 100vw !important;
+    height: 100vh !important;
+    max-width: none !important;
+    max-height: none !important;
+    object-fit: cover !important;
+  }
+
+  /* Contenedores de tablas y tablas con scroll horizontal */
+  .tabla-container,
+  .table-container,
+  .tabla-wrapper,
+  .table-wrapper,
+  .gestion-table-wrapper,
+  .admin-table-wrapper {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+    max-width: 100%;
+  }
+
+  table {
+    display: block;
+    width: 100%;
+    overflow-x: auto;
+  }
+
+  table thead,
+  table tbody,
+  table tfoot {
+    display: table;
+    width: 100%;
+  }
+
+  /* Tabs adaptables */
+  [class*="tabs"],
+  [class*="tab-container"],
+  [class*="subtabs"] {
+    flex-wrap: wrap !important;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    gap: 6px;
+  }
+
+  .tab-btn,
+  .tab-button,
+  button[class*="tab"] {
+    padding: 6px 10px !important;
+    font-size: 0.8rem !important;
+    min-height: 36px;
+  }
+
+  /* Acciones y filtros apilados */
+  [class*="actions"],
+  [class*="filters"],
+  [class*="filtros"],
+  [class*="header-actions"] {
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+  }
+
+  [class*="actions"] > *,
+  [class*="filters"] > *,
+  [class*="filtros"] > *,
+  [class*="header-actions"] > * {
+    flex: 1 1 100% !important;
+    width: 100% !important;
+  }
+}
+
+@media (max-width: 520px) {
+  .card {
+    padding: 10px !important;
+  }
+
+  /* Grids a una columna en móvil */
+  [class*="grid"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  .tab-btn,
+  .tab-button,
+  button[class*="tab"] {
+    padding: 5px 8px !important;
+    font-size: 0.75rem !important;
+  }
+}
+
+/* Asegurar que TODOS los elementos de texto en cards y modales sean visibles */
+html body #root .app .card h1:not(.texto-secundario):not(.texto-terciario),
+html body #root .app .card h2:not(.texto-secundario):not(.texto-terciario),
+html body #root .app .card h3:not(.texto-secundario):not(.texto-terciario),
+html body #root .app .card h4:not(.texto-secundario):not(.texto-terciario),
+html body #root .app .card h5:not(.texto-secundario):not(.texto-terciario),
+html body #root .app .card h6:not(.texto-secundario):not(.texto-terciario),
+html body #root .app .card p:not(.texto-secundario):not(.texto-terciario),
+html body #root .app .card span:not(.texto-secundario):not(.texto-terciario):not(.mes-txt):not(.mes-total):not(.chev):not(.tab-icon):not(.tab-label):not(.chat-badge-small):not(.chat-badge):not(.msg-yo-pro):not(.msg-otro-pro),
+html body #root .app .card div:not(.texto-secundario):not(.texto-terciario):not(.msg-yo-pro):not(.msg-otro-pro),
+html body #root .app .modal-content h1:not(.texto-secundario):not(.texto-terciario),
+html body #root .app .modal-content h2:not(.texto-secundario):not(.texto-terciario),
+html body #root .app .modal-content h3:not(.texto-secundario):not(.texto-terciario),
+html body #root .app .modal-content h4:not(.texto-secundario):not(.texto-terciario),
+html body #root .app .modal-content h5:not(.texto-secundario):not(.texto-terciario),
+html body #root .app .modal-content h6:not(.texto-secundario):not(.texto-terciario),
+html body #root .app .modal-content p:not(.texto-secundario):not(.texto-terciario),
+html body #root .app .modal-content span:not(.texto-secundario):not(.texto-terciario):not(.mes-txt):not(.mes-total):not(.chev):not(.tab-icon):not(.tab-label):not(.chat-badge-small):not(.chat-badge):not(.msg-yo-pro):not(.msg-otro-pro),
+html body #root .app .modal-content div:not(.texto-secundario):not(.texto-terciario):not(.msg-yo-pro):not(.msg-otro-pro) {
+  color: var(--texto-principal) !important;
+}
+
+/* Asegurar que TODOS los elementos de texto en tablas sean visibles */
+html body #root .app table th:not(.texto-secundario):not(.texto-terciario),
+html body #root .app table td:not(.texto-secundario):not(.texto-terciario),
+html body #root .app table label:not(.texto-secundario):not(.texto-terciario),
+html body #root .app table span:not(.texto-secundario):not(.texto-terciario):not(.mes-txt):not(.mes-total):not(.chev):not(.tab-icon):not(.tab-label):not(.chat-badge-small):not(.chat-badge):not(.msg-yo-pro):not(.msg-otro-pro),
+html body #root .app table div:not(.texto-secundario):not(.texto-terciario):not(.msg-yo-pro):not(.msg-otro-pro) {
+  color: var(--texto-principal) !important;
+}
+
+/* Asegurar que TODOS los elementos de texto en listas sean visibles */
+html body #root .app ul li:not(.texto-secundario):not(.texto-terciario),
+html body #root .app ol li:not(.texto-secundario):not(.texto-terciario),
+html body #root .app ul li span:not(.texto-secundario):not(.texto-terciario):not(.mes-txt):not(.mes-total):not(.chev):not(.tab-icon):not(.tab-label):not(.chat-badge-small):not(.chat-badge):not(.msg-yo-pro):not(.msg-otro-pro),
+html body #root .app ol li span:not(.texto-secundario):not(.texto-terciario):not(.mes-txt):not(.mes-total):not(.chev):not(.tab-icon):not(.tab-label):not(.chat-badge-small):not(.chat-badge):not(.msg-yo-pro):not(.msg-otro-pro) {
+  color: var(--texto-principal) !important;
+}
+
+/* Asegurar que TODOS los elementos dentro de botones tengan texto visible */
+html body #root .app button:not(.login-bg button):not(.login-container button):not(.login-form-side button):not(.login-box button):not(.menu-item):not(.menu-logout):not(.menu-trigger):not(.menu-trigger-inside):not(.pina-ia-widget-button):not(.chat-input-pro button):not(.mes-header):not(.registros-tabs button) *,
+html body #root button:not(.login-bg button):not(.login-container button):not(.login-form-side button):not(.login-box button):not(.menu-item):not(.menu-logout):not(.menu-trigger):not(.menu-trigger-inside):not(.pina-ia-widget-button):not(.chat-input-pro button):not(.mes-header):not(.registros-tabs button) *,
+html body .app button:not(.login-bg button):not(.login-container button):not(.login-form-side button):not(.login-box button):not(.menu-item):not(.menu-logout):not(.menu-trigger):not(.menu-trigger-inside):not(.pina-ia-widget-button):not(.chat-input-pro button):not(.mes-header):not(.registros-tabs button) *,
+html body button:not(.login-bg button):not(.login-container button):not(.login-form-side button):not(.login-box button):not(.menu-item):not(.menu-logout):not(.menu-trigger):not(.menu-trigger-inside):not(.pina-ia-widget-button):not(.chat-input-pro button):not(.mes-header):not(.registros-tabs button) *,
+html body #root .app .btn:not(.login-bg .btn):not(.login-container .btn):not(.login-form-side .btn):not(.login-box .btn) *,
+html body #root .btn:not(.login-bg .btn):not(.login-container .btn):not(.login-form-side .btn):not(.login-box .btn) *,
+html body .app .btn:not(.login-bg .btn):not(.login-container .btn):not(.login-form-side .btn):not(.login-box .btn) *,
+html body .btn:not(.login-bg .btn):not(.login-container .btn):not(.login-form-side .btn):not(.login-box .btn) * {
+  color: var(--texto-boton, var(--texto-principal)) !important;
+}
+
+/* Asegurar que TODOS los elementos dentro de inputs, selects y textareas tengan texto visible */
+html body #root .app input:not(.login-input):not(.otp-input):not(.login-bg input):not(.login-container input):not(.login-form-side input):not(.login-box input) *,
+html body #root input:not(.login-input):not(.otp-input):not(.login-bg input):not(.login-container input):not(.login-form-side input):not(.login-box input) *,
+html body .app input:not(.login-input):not(.otp-input):not(.login-bg input):not(.login-container input):not(.login-form-side input):not(.login-box input) *,
+html body input:not(.login-input):not(.otp-input):not(.login-bg input):not(.login-container input):not(.login-form-side input):not(.login-box input) *,
+html body #root .app select:not(.login-bg select):not(.login-container select):not(.login-form-side select):not(.login-box select) *,
+html body #root select:not(.login-bg select):not(.login-container select):not(.login-form-side select):not(.login-box select) *,
+html body .app select:not(.login-bg select):not(.login-container select):not(.login-form-side select):not(.login-box select) *,
+html body select:not(.login-bg select):not(.login-container select):not(.login-form-side select):not(.login-box select) *,
+html body #root .app textarea:not(.login-bg textarea):not(.login-container textarea):not(.login-form-side textarea):not(.login-box textarea) *,
+html body #root textarea:not(.login-bg textarea):not(.login-container textarea):not(.login-form-side textarea):not(.login-box textarea) *,
+html body .app textarea:not(.login-bg textarea):not(.login-container textarea):not(.login-form-side textarea):not(.login-box textarea) *,
+html body textarea:not(.login-bg textarea):not(.login-container textarea):not(.login-form-side textarea):not(.login-box textarea) * {
+  color: var(--texto-principal) !important;
+}
+
+/* =======================================================
+   MODO OSCURO DEL SISTEMA - ADAPTACIÓN AUTOMÁTICA
+   ====================================================== */
+
+/* Cuando el sistema está en modo oscuro, aplicar clase para referencia */
+[data-theme="dark"],
+html.system-dark-mode,
+body.system-dark-mode {
+  color-scheme: dark;
+}
+
+/* Asegurar que los colores se ajusten automáticamente al modo oscuro del sistema */
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* Estos valores pueden ser sobrescritos por los temas, pero sirven como fallback */
+    color-scheme: dark;
+  }
+}
+
+/* =======================================================
+   FIX: Quitar fondos/sombras no deseados en widgets/chat
+   ====================================================== */
+html body #root .widgets-menu-button,
+html body #root .widgets-menu-button:hover,
+html body #root .widgets-menu-button:active,
+html body #root .widgets-menu-button.abierto,
+html body #root .widget-menu-item,
+html body #root .widget-menu-item:hover,
+html body #root .widget-menu-item:active {
+  box-shadow: none !important;
+  background: inherit !important;
+  border-color: inherit !important;
+}
+
+html body #root .widgets-menu-button {
+  background: linear-gradient(135deg, var(--azul-primario), var(--azul-secundario)) !important;
+  color: var(--texto-boton, #fff) !important;
+}
+
+html body #root .widgets-menu-button.abierto {
+  background: linear-gradient(135deg, var(--error), #dc2626) !important;
+}
+
+html body #root .widget-menu-item {
+  background: var(--fondo-card) !important;
+  border: 2px solid var(--azul-primario) !important;
+  color: var(--texto-principal) !important;
+}
+
+html body #root .chat-pro-ventana .usuario-item-pro,
+html body #root .chat-pro-ventana .avatar-container,
+html body #root .chat-pro-ventana .chat-avatar,
+html body #root .chat-pro-ventana .chat-item-header,
+html body #root .chat-pro-ventana .ultimo-mensaje,
+html body #root .chat-pro-ventana .ultimo-mensaje-container,
+html body #root .chat-pro-ventana .ultimo-mensaje-indicador {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+/* Quitar sombras oscuras en botones y widgets */
+html body #root .app button,
+html body #root .app .btn,
+html body #root .widgets-menu-button,
+html body #root .widget-menu-item,
+html body #root .chat-pro-ventana .usuario-item-pro,
+html body #root .chat-pro-ventana .chat-avatar {
+  box-shadow: none !important;
+  filter: none !important;
+}
+
+/* Override de máxima prioridad para WidgetsMenu */
+html body #root .widgets-menu-container,
+html body #root .widgets-menu-container * {
+  background-color: transparent !important;
+  box-shadow: none !important;
+}
+
+html body #root button.widgets-menu-button,
+html body #root .widgets-menu-button {
+  background: linear-gradient(135deg, var(--azul-primario), var(--azul-secundario)) !important;
+  background-image: linear-gradient(135deg, var(--azul-primario), var(--azul-secundario)) !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+html body #root .widgets-menu-button.abierto {
+  background: linear-gradient(135deg, var(--error), #dc2626) !important;
+  background-image: linear-gradient(135deg, var(--error), #dc2626) !important;
+}
+
+html body #root .widget-menu-item {
+  background: var(--fondo-card) !important;
+  border: 2px solid var(--azul-primario) !important;
+  box-shadow: none !important;
+}
+
+/* Quitar fondo/sombra del logo del menú lateral */
+html body #root .menu-logo-section,
+html body #root .menu-logo-section::before,
+html body #root .menu-logo-wrapper,
+html body #root .menu-logo,
+html body #root .menu-logo::before {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+/* =======================================================
+   SWITCHES GLOBALES - PEQUEÑOS Y CON COLORES VERDE/ROJO
+   Aplicado a TODOS los switches de la aplicación
+   ====================================================== */
+.switch,
+.switch-elegant,
+.switch-lote,
+.switch-lote-row {
+  position: relative !important;
+  display: inline-block !important;
+  width: 36px !important;
+  height: 20px !important;
+  flex-shrink: 0;
+}
+
+.switch input,
+.switch-elegant input,
+.switch-lote input,
+.switch-lote-row input {
+  opacity: 0 !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+/* Slider base - todos los tipos */
+.switch .slider,
+.switch-elegant .slider,
+.switch-lote .slider-lote,
+.switch-lote-row .slider-lote-row,
+.switch .slider.round,
+.slider {
+  position: absolute !important;
+  cursor: pointer !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  background-color: var(--error) !important;
+  transition: 0.3s !important;
+  border-radius: 20px !important;
+}
+
+/* Slider before - todos los tipos */
+.switch .slider:before,
+.switch-elegant .slider:before,
+.switch-lote .slider-lote:before,
+.switch-lote-row .slider-lote-row:before,
+.switch .slider.round:before,
+.slider:before {
+  position: absolute !important;
+  content: "" !important;
+  height: 14px !important;
+  width: 14px !important;
+  left: 3px !important;
+  bottom: 3px !important;
+  background-color: var(--fondo-card) !important;
+  transition: 0.3s !important;
+  border-radius: 50% !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2) !important;
+}
+
+/* Switch activado - VERDE */
+.switch input:checked + .slider,
+.switch-elegant input:checked + .slider,
+.switch-lote input:checked + .slider-lote,
+.switch-lote-row input:checked + .slider-lote-row,
+.switch input:checked + .slider.round,
+input:checked + .slider {
+  background-color: var(--exito) !important;
+}
+
+/* Slider before cuando está activado */
+.switch input:checked + .slider:before,
+.switch-elegant input:checked + .slider:before,
+.switch-lote input:checked + .slider-lote:before,
+.switch-lote-row input:checked + .slider-lote-row:before,
+.switch input:checked + .slider.round:before,
+input:checked + .slider:before {
+  transform: translateX(16px) !important;
+}
+
+/* Focus state */
+.switch input:focus + .slider,
+.switch-elegant input:focus + .slider,
+.switch-lote input:focus + .slider-lote,
+.switch-lote-row input:focus + .slider-lote-row,
+.switch input:focus + .slider.round,
+input:focus + .slider {
+  box-shadow: 0 0 0 2px var(--azul-sutil) !important;
+}

@@ -1,0 +1,1142 @@
+/* =============================== */
+/* ESTILOS GLOBALES PARA INPUTS Y SELECTS */
+/* =============================== */
+input[type="text"],
+input[type="number"],
+input[type="date"],
+select {
+  border-radius: var(--radio-md) !important;
+  background: var(--fondo-input);
+  color: var(--texto-principal);
+  border: 1px solid var(--borde-medio);
+  padding: 6px 10px !important;
+  font-size: 0.9rem !important;
+}
+
+input[type="text"]:focus,
+input[type="number"]:focus,
+input[type="date"]:focus,
+select:focus {
+  outline: none !important;
+  border-color: var(--azul-primario);
+  box-shadow: 0 0 0 3px rgba(74, 158, 255, 0.15) !important;
+}
+
+/* =============================== */
+/* CONTENEDOR GENERAL */
+/* =============================== */
+.devProceso {
+  padding: 15px;
+  width: 100%;
+  box-sizing: border-box;
+  animation: fadeIn 0.2s ease-in;
+}
+
+/* =============================== */
+/* INPUT PRINCIPAL */
+/* =============================== */
+.devPrincipalBox {
+  margin-bottom: 20px;
+  display: flex;
+  flex-direction: column;
+}
+
+.devPrincipalBox label {
+  font-weight: bold;
+  margin-bottom: 5px;
+  opacity: 0.8;
+}
+
+.devInputPedido {
+  padding: 12px 16px;
+  border-radius: var(--radio-full);
+  border: 2px solid #d7d7d7;
+  font-size: 18px;
+  outline: none;
+  transition: 0.2s ease;
+  background: var(--fondo-input);
+}
+
+.devInputPedido:focus {
+  border-color: var(--azul-primario);
+  box-shadow: 0 0 0 3px rgba(74, 158, 255, 0.15);
+}
+
+/* =============================== */
+/* SUBTABS */
+/* =============================== */
+.devSubTabs {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 15px;
+}
+
+.devSubTabs button {
+  flex: 1;
+  border: 1px solid var(--borde-sutil);
+  padding: 12px;
+  background: var(--fondo-input);
+  border-radius: var(--radio-full);
+  font-weight: bold;
+  font-size: 15px;
+  cursor: pointer;
+  transition: all var(--transicion-media);
+  color: var(--texto-principal);
+}
+
+.devSubTabs button.active {
+  background: var(--fondo-secundario);
+  color: var(--texto-principal);
+}
+
+.devSubTabs button:hover:not(.active) {
+  box-shadow: var(--sombra-xs);
+  transform: translateY(-1px);
+}
+
+.devSubTabs button:active {
+  transform: translateY(0) scale(0.98);
+}
+
+/* =============================== */
+/* TABLAS */
+/* =============================== */
+.devSubContent {
+  margin-top: 10px;
+  max-height: calc(100vh - 260px);
+  overflow-y: auto;
+}
+
+.devTabla {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+  background: var(--fondo-card);
+  border-radius: var(--radio-xl);
+  overflow: hidden;
+  box-shadow: var(--sombra-xs);
+  border: 1px solid var(--borde-sutil);
+}
+
+.devTabla thead {
+  background: var(--fondo-secundario);
+}
+
+.devTabla th {
+  padding: 12px 10px;
+  border-bottom: 2px solid var(--borde-medio);
+  text-align: center;
+  color: var(--texto-principal);
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.devTabla td {
+  padding: 10px;
+  border-bottom: 1px solid var(--borde-sutil);
+  text-align: center;
+  background: var(--fondo-card);
+  color: var(--texto-principal);
+  font-size: 0.9rem;
+}
+
+.devTabla tbody tr:hover {
+  background: var(--fondo-secundario);
+  box-shadow: var(--sombra-xs);
+}
+
+.devTabla input,
+.devTabla select {
+  background: var(--fondo-input);
+  border: 1px solid var(--borde-medio);
+  color: var(--texto-principal);
+  padding: 6px 8px;
+  border-radius: var(--radio-full);
+  font-size: 0.9rem;
+  transition: all var(--transicion-media);
+}
+
+.devTabla input:focus,
+.devTabla select:focus {
+  outline: none;
+  border-color: var(--azul-primario);
+  box-shadow: 0 0 0 3px rgba(74, 158, 255, 0.15);
+}
+
+/* =============================== */
+/* MODAL GENERAL */
+/* =============================== */
+.devModalFondo {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  background: var(--overlay-modal, rgba(15, 23, 42, 0.75)) !important;
+  backdrop-filter: blur(4px) !important;
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+  z-index: 500 !important;
+  overflow-y: auto !important;
+  padding: 20px !important;
+  margin: 0 !important;
+  box-sizing: border-box !important;
+}
+
+.devModal {
+  background: var(--fondo-card) !important;
+  width: 95%;
+  max-width: 480px;
+  border-radius: var(--radio-xl) !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  animation: popIn 0.25s ease;
+  border: 1px solid var(--borde-sutil) !important;
+  box-shadow: var(--sombra-xl) !important;
+  max-height: calc(100vh - 40px) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  color: var(--texto-principal) !important;
+}
+
+/* Modal más grande para tablas */
+.devModal[style*="max-width: 600px"],
+.devModal[style*="max-width: 900px"],
+.devModal[style*="max-width: 95vw"] {
+  max-width: 95vw !important;
+  width: min(1200px, 95vw) !important;
+  background: var(--fondo-card) !important;
+  border-radius: var(--radio-xl) !important;
+  border: 1px solid var(--borde-sutil) !important;
+}
+
+/* Todos los modales deben usar el tema oscuro - reglas más específicas */
+.devModal[style*="max-width: 500px"],
+.devModal[style*="max-width: 600px"],
+.devModal[style*="max-width: 900px"],
+.devModal {
+  background: var(--fondo-card) !important;
+  border: 1px solid var(--borde-sutil) !important;
+  color: var(--texto-principal) !important;
+}
+
+/* Asegurar que todo el contenido dentro del modal use colores del tema */
+.devModal * {
+  color: inherit;
+}
+
+.devModalBody * {
+  color: var(--texto-principal) !important;
+}
+
+.devModalBody strong {
+  color: var(--texto-principal) !important;
+}
+
+.devModalBody div {
+  color: var(--texto-principal) !important;
+}
+
+.devModalBody span {
+  color: var(--texto-principal) !important;
+}
+
+.devModalBody hr {
+  border-color: var(--borde-sutil) !important;
+  background: var(--borde-sutil) !important;
+  opacity: 0.3 !important;
+}
+
+/* HEADER */
+.devModalHeader {
+  background: var(--fondo-secundario) !important;
+  color: var(--texto-principal) !important;
+  padding: 12px 16px !important;
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  border-bottom: 1px solid var(--borde-sutil) !important;
+}
+
+.devModalHeader h3 {
+  color: var(--texto-principal) !important;
+  margin: 0 !important;
+}
+
+.devModalHeader button {
+  background: transparent;
+  border: none;
+  color: var(--texto-terciario);
+  font-size: 20px;
+  cursor: pointer;
+  transition: all var(--transicion-media);
+}
+
+.devModalHeader button:hover {
+  color: var(--texto-principal);
+  transform: scale(1.1);
+}
+
+/* BODY */
+.devModalBody {
+  padding: 18px !important;
+  overflow-y: auto !important;
+  flex: 1;
+  max-height: calc(100vh - 200px);
+  background: var(--fondo-card) !important;
+  color: var(--texto-principal) !important;
+}
+
+.devModalBody[style*="overflow"] {
+  overflow-y: auto !important;
+  background: var(--fondo-card) !important;
+}
+
+.devModalBody[style*="padding"] {
+  padding: 18px !important;
+  background: var(--fondo-card) !important;
+}
+
+.devModalBodyScroll {
+  padding: 10px !important;
+  background: var(--fondo-card) !important;
+}
+
+/* Estilos adicionales para asegurar que todo dentro del modal use el tema oscuro */
+.devModalBody strong {
+  color: var(--texto-principal) !important;
+}
+
+.devModalBody hr {
+  border-color: var(--borde-sutil) !important;
+  background: var(--borde-sutil) !important;
+}
+
+.devModalBody div {
+  color: var(--texto-principal) !important;
+}
+
+/* Asegurar que los modales de diferentes tamaños usen el tema oscuro */
+.devModal[style*="max-width: 500px"],
+.devModal[style*="max-width: 600px"],
+.devModal[style*="max-width: 900px"] {
+  background: var(--fondo-card) !important;
+  border: 1px solid var(--borde-sutil) !important;
+  color: var(--texto-principal) !important;
+}
+
+.devModalBody h4 {
+  margin-bottom: 15px;
+  font-size: 18px;
+  border-left: 4px solid var(--azul-primario);
+  padding-left: 8px;
+  color: var(--texto-principal);
+}
+
+.devModalBody label {
+  display: block;
+  margin-top: 10px;
+  font-weight: bold;
+  color: var(--texto-secundario);
+}
+
+.devModalBody input,
+.devModalBody select {
+  width: 100%;
+  padding: 10px 12px !important;
+  border: 1px solid var(--borde-medio) !important;
+  border-radius: var(--radio-md) !important;
+  margin-top: 5px;
+  font-size: 0.9rem !important;
+  transition: all 0.2s ease;
+  background: var(--fondo-input) !important;
+  color: var(--texto-principal) !important;
+  box-sizing: border-box !important;
+  height: 38px !important;
+  line-height: 1.5 !important;
+}
+
+/* Asegurar que todos los inputs tengan el mismo border-radius y altura */
+.devModalBody input[type="text"],
+.devModalBody input[type="number"],
+.devModalBody input[type="date"] {
+  border-radius: var(--radio-md) !important;
+  box-sizing: border-box !important;
+  height: 38px !important;
+  min-height: 38px !important;
+  max-height: 38px !important;
+  line-height: 1.5 !important;
+  display: flex !important;
+  align-items: center !important;
+}
+
+/* En PC, hacer los inputs un poco más grandes */
+@media (min-width: 769px) {
+  .devModalBody input[type="text"],
+  .devModalBody input[type="number"],
+  .devModalBody input[type="date"] {
+    height: 42px !important;
+    min-height: 42px !important;
+    max-height: 42px !important;
+    padding: 12px 14px !important;
+    font-size: 0.95rem !important;
+  }
+  
+  .devModalBody label {
+    font-size: 0.95rem;
+  }
+}
+
+.devModalBody input:focus,
+.devModalBody select:focus {
+  outline: none !important;
+  border-color: var(--azul-primario);
+  box-shadow: 0 0 0 2px var(--azul-primario-transparente) !important;
+  background: var(--fondo-input-focus) !important;
+}
+
+/* FOOTER */
+.devModalFooter {
+  padding: 12px 16px !important;
+  border-top: 1px solid var(--borde-sutil) !important;
+  display: flex !important;
+  justify-content: flex-end !important;
+  gap: 10px !important;
+  background: var(--fondo-secundario) !important;
+}
+
+.devModalFooter button {
+  flex: 1;
+  border: none;
+  padding: 12px;
+  border-radius: var(--radio-full);
+  cursor: pointer;
+  font-weight: bold;
+  transition: 0.2s;
+}
+
+.devModalFooter button:first-child {
+  background: var(--fondo-input);
+  color: var(--texto-principal);
+  border: 1px solid var(--borde-medio);
+}
+
+.devModalFooter button:last-child {
+  background: linear-gradient(135deg, var(--azul-primario), var(--azul-secundario));
+  color: var(--texto-principal);
+}
+
+.devModalFooter button:hover {
+  box-shadow: var(--sombra-md);
+  transform: translateY(-1px);
+}
+
+.devModalFooter button:active {
+  transform: translateY(0) scale(0.98);
+}
+
+.devModalFooter .btn-secundario {
+  background: var(--fondo-input) !important;
+  color: var(--texto-principal) !important;
+  border: 1px solid var(--borde-medio) !important;
+  padding: 10px 20px !important;
+  border-radius: var(--radio-full) !important;
+  cursor: pointer !important;
+  font-weight: 600 !important;
+  transition: all 0.2s ease !important;
+}
+
+.devModalFooter .btn-secundario:hover {
+  background: var(--fondo-secundario) !important;
+  box-shadow: var(--sombra-md) !important;
+  transform: translateY(-1px) !important;
+}
+
+/* =============================== */
+/* BOTÓN AGREGAR PRODUCTO */
+/* =============================== */
+.btnAdd {
+  width: auto;
+  padding: 10px 16px;
+  background: linear-gradient(135deg, var(--azul-primario), var(--azul-secundario));
+  color: white;
+  border: none;
+  border-radius: var(--radio-full);
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transicion-media);
+  box-shadow: var(--sombra-xs);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 12px;
+  position: relative;
+  overflow: hidden;
+}
+
+/* =======================================================
+   📱 RESPONSIVIDAD PARA PDA/MÓVILES
+======================================================= */
+@media (max-width: 768px) {
+  .devProceso {
+    padding: 10px;
+  }
+
+  .devPrincipalBox {
+    margin-bottom: 15px;
+  }
+
+  .devInputPedido {
+    padding: 10px 12px;
+  }
+  
+  /* Inputs responsivos para PDA */
+  input[type="text"],
+  input[type="number"],
+  input[type="date"],
+  select,
+  textarea {
+    font-size: 16px !important; /* Evita zoom en iOS */
+    padding: 10px 12px !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+    min-height: 44px !important; /* Tamaño mínimo táctil */
+  }
+  
+  .devModalBody input,
+  .devModalBody select {
+    font-size: 16px !important;
+    padding: 10px 12px !important;
+    width: 100% !important;
+    min-height: 44px !important;
+  }
+  
+  .gestion-form input,
+  .gestion-form select {
+    font-size: 16px !important;
+    padding: 10px 12px !important;
+    width: 100% !important;
+    min-height: 44px !important;
+    box-sizing: border-box !important;
+  }
+
+  .devSubTabs {
+    gap: 6px;
+    margin-bottom: 12px;
+  }
+
+  .devSubTabs button {
+    padding: 10px;
+    font-size: 0.85rem;
+  }
+
+  .devModal {
+    width: 95vw !important;
+    max-height: 95vh !important;
+  }
+
+  .devModalBody {
+    padding: 12px !important;
+  }
+
+  .devModalBody input,
+  .devModalBody select {
+    padding: 10px 12px !important;
+    font-size: 16px !important; /* Evita zoom en iOS */
+    min-height: 44px !important; /* Tamaño mínimo táctil */
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  .devTabla {
+    font-size: 0.8rem;
+  }
+
+  .devTabla th,
+  .devTabla td {
+    padding: 8px 6px;
+  }
+
+  .devProductosList {
+    max-height: 250px;
+  }
+
+  .btnAdd {
+    padding: 8px 12px;
+    font-size: 0.85rem;
+    border-radius: 8px;
+    gap: 4px;
+    margin-top: 10px;
+  }
+  
+  .btnAdd span:first-child {
+    font-size: 1rem !important;
+  }
+
+  .gestion-form-row {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .gestion-form-row label {
+    width: 100% !important;
+    min-width: 100% !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .devProceso {
+    padding: 8px;
+  }
+
+  .devInputPedido {
+    padding: 10px 12px;
+    font-size: 16px; /* Evita zoom en iOS */
+    min-height: 44px;
+  }
+
+  .devSubTabs button {
+    padding: 8px;
+    font-size: 0.75rem;
+  }
+
+  .devTabla {
+    font-size: 0.7rem;
+  }
+
+  .devTabla th,
+  .devTabla td {
+    padding: 6px 4px;
+  }
+
+  .btnAdd {
+    padding: 6px 10px;
+    font-size: 0.8rem;
+  }
+}
+
+.btnAdd::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: left 0.5s ease;
+}
+
+.btnAdd:hover::before {
+  left: 100%;
+}
+
+.btnAdd:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--sombra-md);
+}
+
+.btnAdd:active {
+  transform: translateY(0) scale(0.98);
+  box-shadow: var(--sombra-xs);
+}
+
+.btnAdd:focus {
+  outline: none;
+  box-shadow: 0 4px 12px rgba(10, 163, 108, 0.3), 0 0 0 3px rgba(10, 163, 108, 0.2);
+}
+
+/* =============================== */
+/* FASE 2 – LISTA DE PRODUCTOS */
+/* =============================== */
+.devProductosList {
+  margin-top: 15px;
+  max-height: 300px;
+  overflow-y: auto;
+  overflow-x: auto;
+  border: 1px solid var(--borde-sutil);
+  border-radius: var(--radio-xl);
+  box-shadow: var(--sombra-xs);
+  background: var(--fondo-card);
+}
+
+.devProductosList table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--fondo-card);
+}
+
+.devProductosList table td {
+  padding: 10px 8px;
+  border-bottom: 1px solid var(--borde-sutil);
+  vertical-align: middle;
+}
+
+.devProductosList table td:first-child {
+  font-weight: 500;
+}
+
+.devProductosList table td:nth-child(2) {
+  max-width: 250px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.devProductosList table td:nth-child(3) {
+  font-size: 0.9em;
+  color: var(--texto-secundario);
+}
+
+.devProductosList table td:nth-child(5) {
+  text-align: center;
+  font-weight: 500;
+}
+
+.devProductosList th {
+  padding: 12px 10px;
+  border-bottom: 2px solid var(--borde-visible);
+  background: var(--fondo-secundario);
+  color: var(--texto-principal);
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.devProductosList td {
+  padding: 10px;
+  border-bottom: 1px solid var(--borde-sutil);
+  background: var(--fondo-card);
+  color: var(--texto-secundario);
+  font-size: 0.9rem;
+}
+
+.devProductosList tbody tr:hover {
+  background: var(--fondo-card-hover);
+  transition: background 0.2s ease;
+}
+
+.devProductosList input,
+.devProductosList select {
+  background: var(--fondo-input);
+  border: 1px solid var(--borde-medio);
+  color: var(--texto-principal);
+  padding: 6px 8px;
+  border-radius: var(--radio-md);
+  font-size: 0.9rem;
+  transition: all 0.2s ease;
+}
+
+.devProductosList input:focus,
+.devProductosList select:focus {
+  outline: none;
+  border-color: var(--azul-primario);
+  box-shadow: 0 0 0 2px var(--azul-primario-transparente);
+}
+
+/* =============================== */
+/* SWITCH (APTO/NO APTO) */
+/* =============================== */
+/* Switch styles ahora están en global.css con colores verde/rojo y tamaño pequeño */
+
+/* Scrollbar personalizado para tablas en modales */
+.devModalBody div[style*="overflow"]::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.devModalBody div[style*="overflow"]::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: var(--radio-full);
+}
+
+.devModalBody div[style*="overflow"]::-webkit-scrollbar-thumb {
+  background: #0aa36c;
+  border-radius: var(--radio-full);
+}
+
+.devModalBody div[style*="overflow"]::-webkit-scrollbar-thumb:hover {
+  background: #08a069;
+}
+
+/* =============================== */
+/* MINIATURAS DE EVIDENCIAS */
+/* =============================== */
+.devMiniaturas {
+  margin-top: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.devFotoMini {
+  width: 80px;
+  height: 80px;
+  border-radius: 8px;
+  object-fit: cover;
+  cursor: pointer;
+  box-shadow: 0 0 4px rgba(0,0,0,0.3);
+  transition: 0.2s;
+}
+
+.devFotoMini:hover {
+  transform: scale(1.05);
+}
+
+/* FOTO GRANDE */
+.devFotoGrandeFondo {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  background: rgba(15, 23, 42, 0.85) !important;
+  backdrop-filter: blur(4px) !important;
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+  z-index: 6000 !important;
+  padding: 20px !important;
+  overflow: auto !important;
+  box-sizing: border-box !important;
+  margin: 0 !important;
+}
+
+.devFotoGrande {
+  /* Tamaño máximo respetando el padding del contenedor */
+  max-width: calc(100vw - 40px) !important;
+  max-height: calc(100vh - 40px) !important;
+  /* Mantener proporción automática */
+  width: auto !important;
+  height: auto !important;
+  /* Contener la imagen completa sin recortar */
+  object-fit: contain !important;
+  object-position: center center !important;
+  /* Estilos visuales */
+  border-radius: var(--radio-xl);
+  box-shadow: var(--sombra-xl);
+  border: 1px solid var(--borde-sutil);
+  background: transparent;
+  /* Layout */
+  display: block !important;
+  margin: auto !important;
+  flex-shrink: 0 !important;
+  flex-grow: 0 !important;
+  /* Asegurar que no se corte */
+  min-width: 0 !important;
+  min-height: 0 !important;
+}
+
+/* Regla adicional para asegurar que cualquier imagen dentro del contenedor se muestre completa */
+.devFotoGrandeFondo img.devFotoGrande,
+.devFotoGrandeFondo > img {
+  max-width: calc(100vw - 40px) !important;
+  max-height: calc(100vh - 40px) !important;
+  width: auto !important;
+  height: auto !important;
+  object-fit: contain !important;
+  object-position: center center !important;
+}
+
+/* =============================== */
+/* MODAL NUEVO CÓDIGO */
+/* =============================== */
+.devResultadosInv {
+  margin-top: 10px;
+  max-height: 150px;
+  overflow-y: auto;
+  border: 1px solid var(--borde-sutil);
+  border-radius: var(--radio-lg);
+  background: var(--fondo-secundario);
+}
+
+.devResultadoItem {
+  padding: 10px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--borde-sutil);
+  color: var(--texto-principal);
+  border-radius: var(--radio-sm);
+}
+
+.devResultadoItem:hover {
+  background: var(--fondo-card-hover);
+}
+
+.devResultadoItem.activo {
+  background: var(--azul-primario);
+  color: var(--texto-principal);
+}
+
+/* =============================== */
+/* ANIMACIONES */
+/* =============================== */
+@keyframes popIn {
+  from {
+    transform: scale(0.7);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    translate: 0 -8px;
+  }
+  to {
+    opacity: 1;
+    translate: 0 0;
+  }
+}
+
+/* =============================== */
+/* INPUTS RESPONSIVOS PARA PDA - GLOBAL */
+/* =============================== */
+@media (max-width: 768px) {
+  /* Asegurar que todos los inputs sean visibles y táctiles en PDA */
+  input[type="text"],
+  input[type="number"],
+  input[type="date"],
+  select,
+  textarea {
+    font-size: 16px !important; /* Evita zoom en iOS */
+    padding: 10px 12px !important;
+    min-height: 44px !important; /* Tamaño mínimo táctil */
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+}
+
+@media (max-width: 480px) {
+  /* Asegurar que todos los inputs sean visibles y táctiles en PDA pequeño */
+  input[type="text"],
+  input[type="number"],
+  input[type="date"],
+  select,
+  textarea {
+    font-size: 16px !important; /* Evita zoom en iOS */
+    padding: 10px 12px !important;
+    min-height: 44px !important; /* Tamaño mínimo táctil */
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+}
+
+/* =============================== */
+/* MODAL TABLAS Y MENSAJES */
+/* =============================== */
+.devModalTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.75rem;
+  min-width: 800px;
+}
+
+.devModalTable thead {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.devModalTable thead tr {
+  background: var(--fondo-secundario) !important;
+  border-bottom: 2px solid var(--borde-medio);
+}
+
+.devModalTable th {
+  padding: 10px 8px;
+  text-align: left;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--texto-principal);
+  background: var(--fondo-secundario) !important;
+}
+
+.devModalTable tbody tr {
+  border-bottom: 1px solid var(--borde-sutil);
+  background: var(--fondo-card);
+}
+
+.devModalTable tbody tr:hover {
+  background: var(--fondo-card-hover);
+}
+
+.devModalTable td {
+  padding: 8px;
+  font-size: 0.75rem;
+  color: var(--texto-principal);
+}
+
+.devModalTableInput {
+  width: 100%;
+  padding: 6px 8px !important;
+  border: 1px solid var(--borde-medio) !important;
+  border-radius: var(--radio-sm) !important;
+  font-size: 0.75rem !important;
+  background: var(--fondo-input) !important;
+  color: var(--texto-principal) !important;
+  box-sizing: border-box !important;
+}
+
+.devModalMensaje {
+  text-align: center !important;
+  padding: 30px 20px !important;
+  color: var(--texto-secundario) !important;
+  font-size: 0.9rem !important;
+  background: var(--fondo-card) !important;
+}
+
+/* En PC, hacer los mensajes más grandes */
+@media (min-width: 769px) {
+  .devModalMensaje {
+    padding: 60px 50px !important;
+    font-size: 1.3rem !important;
+    font-weight: 500 !important;
+  }
+}
+
+/* Botones de acciones en tabla */
+.devModalTable button {
+  padding: 6px 10px;
+  border: none;
+  border-radius: var(--radio-sm);
+  cursor: pointer;
+  font-size: 0.8rem;
+  transition: all 0.2s ease;
+}
+
+.devModalTable button[style*="background: #10b981"],
+.devModalTable button[style*="background:#10b981"] {
+  background: var(--exito) !important;
+  color: white !important;
+}
+
+.devModalTable button[style*="background: #ef4444"],
+.devModalTable button[style*="background:#ef4444"] {
+  background: var(--error) !important;
+  color: white !important;
+}
+
+.devModalTable button[style*="background: #3b82f6"],
+.devModalTable button[style*="background:#3b82f6"] {
+  background: var(--azul-primario) !important;
+  color: white !important;
+}
+
+.devModalTable button:hover {
+  opacity: 0.9;
+  transform: scale(1.05);
+}
+
+/* Estilos para "Apto" y "No apto" */
+.devModalTable span[style*="color: #10b981"],
+.devModalTable span[style*="color:#10b981"] {
+  color: var(--exito) !important;
+  font-weight: 600;
+  font-size: 0.75rem;
+}
+
+.devModalTable span[style*="color: #ef4444"],
+.devModalTable span[style*="color:#ef4444"] {
+  color: var(--error) !important;
+  font-weight: 600;
+  font-size: 0.75rem;
+}
+
+/* Botones de acción en tabla */
+.devModalBtnAceptar {
+  padding: 6px 10px !important;
+  background: var(--exito) !important;
+  color: white !important;
+  border: none !important;
+  border-radius: var(--radio-sm) !important;
+  cursor: pointer !important;
+  font-size: 0.8rem !important;
+  transition: all 0.2s ease !important;
+}
+
+.devModalBtnAceptar:hover {
+  opacity: 0.9;
+  transform: scale(1.05);
+}
+
+.devModalBtnCancelar {
+  padding: 6px 10px !important;
+  background: var(--error) !important;
+  color: white !important;
+  border: none !important;
+  border-radius: var(--radio-sm) !important;
+  cursor: pointer !important;
+  font-size: 0.8rem !important;
+  transition: all 0.2s ease !important;
+}
+
+.devModalBtnCancelar:hover {
+  opacity: 0.9;
+  transform: scale(1.05);
+}
+
+.devModalBtnEditar {
+  padding: 6px 10px !important;
+  background: var(--azul-primario) !important;
+  color: white !important;
+  border: none !important;
+  border-radius: var(--radio-sm) !important;
+  cursor: pointer !important;
+  font-size: 0.8rem !important;
+  transition: all 0.2s ease !important;
+}
+
+.devModalBtnEditar:hover {
+  opacity: 0.9;
+  transform: scale(1.05);
+}
+
+/* =============================== */
+/* BADGE PEDIDO - FORZAR COLOR BLANCO Y FONDO OSCURO */
+/* =============================== */
+.devolucion-card .devolucion-badge-pedido {
+  color: #ffffff !important;
+  background: #2563eb !important;
+}
+
+/* =============================== */
+/* MODAL VIEWER DE FOTOS - ESTILOS ESPECÍFICOS */
+/* =============================== */
+.devModalBody img[alt^="Foto"] {
+  max-width: 100% !important;
+  max-height: calc(100vh - 270px) !important;
+  width: auto !important;
+  height: auto !important;
+  object-fit: contain !important;
+  object-position: center center !important;
+  display: block !important;
+  margin: 0 auto !important;
+}
+
+.devolucion-badge-pedido {
+  color: #ffffff !important;
+  background: #2563eb !important;
+}
+
+/* =============================== */
+/* MODAL VIEWER DE FOTOS - ESTILOS ESPECÍFICOS */
+/* =============================== */
+.devModalBody img[alt^="Foto"] {
+  max-width: 100% !important;
+  max-height: calc(100vh - 270px) !important;
+  width: auto !important;
+  height: auto !important;
+  object-fit: contain !important;
+  object-position: center center !important;
+  display: block !important;
+  margin: 0 auto !important;
+}
