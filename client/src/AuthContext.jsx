@@ -143,13 +143,33 @@ export const authFetch = async (url, options = {}) => {
           errorMsg.includes("Sesión cerrada"))) {
         // Limpiar todo
         currentToken = null;
-        localStorage.removeItem("token");
-        localStorage.removeItem("user");
-        localStorage.removeItem("perms");
-        removeEncryptedItem("token");
-        removeEncryptedItem("user");
-        removeEncryptedItem("perms");
-        window.location.href = "/";
+        try {
+          localStorage.removeItem("token");
+          localStorage.removeItem("user");
+          localStorage.removeItem("perms");
+        } catch (e) {
+          console.debug("Error limpiando localStorage:", e);
+        }
+        try {
+          removeEncryptedItem("token");
+          removeEncryptedItem("user");
+          removeEncryptedItem("perms");
+        } catch (e) {
+          console.debug("Error limpiando storage cifrado:", e);
+        }
+        
+        // PROTECCIÓN: En Android, NO usar window.location.href (causa cierre de app)
+        // En su lugar, solo limpiar el estado y dejar que React maneje la navegación
+        const isAndroid = typeof window !== 'undefined' && 
+          window.Capacitor && 
+          window.Capacitor.isNativePlatform() &&
+          window.Capacitor.getPlatform() === 'android';
+        
+        if (!isAndroid) {
+          // Solo en web, usar window.location
+          window.location.href = "/";
+        }
+        // En Android, el componente AppProtegida detectará que no hay user y mostrará Login
         return;
       }
       // Si es 401 pero no es de token, lanzar error normal
@@ -194,7 +214,16 @@ const SERVER_URL = getServerUrlSync();
    🔵 PROVIDER
 ====================================================== */
 export function AuthProvider({ children }) {
-  const { showAlert } = useAlert();
+  // PROTECCIÓN: Manejar caso donde useAlert puede no estar disponible
+  let showAlert;
+  try {
+    const alertHook = useAlert();
+    showAlert = alertHook?.showAlert || (() => Promise.resolve());
+  } catch (error) {
+    console.warn("useAlert no disponible, usando fallback:", error);
+    showAlert = () => Promise.resolve();
+  }
+  
   const [token, setToken] = useState(null);
   const [user, setUser] = useState(null);
   const [perms, setPerms] = useState([]);
@@ -204,10 +233,22 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     const loadEncryptedData = async () => {
       try {
+        // PROTECCIÓN: Verificar que localStorage esté disponible
+        if (typeof localStorage === 'undefined') {
+          console.warn("localStorage no disponible");
+          setIsLoading(false);
+          return;
+        }
+        
         // Cargar token - usar localStorage PRIMERO (más rápido y confiable)
         try {
           // Siempre intentar localStorage primero (funciona en móvil y desktop)
-          let token = localStorage.getItem("token");
+          let token = null;
+          try {
+            token = localStorage.getItem("token");
+          } catch (e) {
+            console.debug("Error leyendo token de localStorage:", e);
+          }
           
           if (token) {
             currentToken = token; // Actualizar variable global
@@ -220,7 +261,11 @@ export function AuthProvider({ children }) {
                 currentToken = token; // Actualizar variable global
                 setToken(token);
                 // Migrar a localStorage para próxima vez
-                localStorage.setItem("token", token);
+                try {
+                  localStorage.setItem("token", token);
+                } catch (e) {
+                  console.debug("Error guardando token en localStorage:", e);
+                }
               }
             } catch (e) {
               console.debug("Token no disponible en cifrado");
@@ -228,59 +273,75 @@ export function AuthProvider({ children }) {
           }
           
           // Cargar usuario de localStorage primero
-          const localUser = localStorage.getItem("user");
-          if (localUser) {
-            try {
-              setUser(JSON.parse(localUser));
-            } catch (e) {
-              // Si falla, intentar cifrado
+          try {
+            const localUser = localStorage.getItem("user");
+            if (localUser) {
+              try {
+                setUser(JSON.parse(localUser));
+              } catch (e) {
+                // Si falla, intentar cifrado
+                try {
+                  const encryptedUser = await getEncryptedItem("user");
+                  if (encryptedUser) {
+                    setUser(JSON.parse(encryptedUser));
+                    try {
+                      localStorage.setItem("user", encryptedUser);
+                    } catch (e2) {}
+                  }
+                } catch (e2) {}
+              }
+            } else {
+              // Intentar cifrado
               try {
                 const encryptedUser = await getEncryptedItem("user");
                 if (encryptedUser) {
                   setUser(JSON.parse(encryptedUser));
-                  localStorage.setItem("user", encryptedUser);
+                  try {
+                    localStorage.setItem("user", encryptedUser);
+                  } catch (e) {}
                 }
-              } catch (e2) {}
+              } catch (e) {}
             }
-          } else {
-            // Intentar cifrado
-            try {
-              const encryptedUser = await getEncryptedItem("user");
-              if (encryptedUser) {
-                setUser(JSON.parse(encryptedUser));
-                localStorage.setItem("user", encryptedUser);
-              }
-            } catch (e) {}
+          } catch (e) {
+            console.debug("Error cargando usuario:", e);
           }
           
           // Cargar permisos de localStorage primero
-          const localPerms = localStorage.getItem("perms");
-          if (localPerms) {
-            try {
-              setPerms(JSON.parse(localPerms));
-            } catch (e) {
-              // Si falla, intentar cifrado
+          try {
+            const localPerms = localStorage.getItem("perms");
+            if (localPerms) {
+              try {
+                setPerms(JSON.parse(localPerms));
+              } catch (e) {
+                // Si falla, intentar cifrado
+                try {
+                  const encryptedPerms = await getEncryptedItem("perms");
+                  if (encryptedPerms) {
+                    setPerms(JSON.parse(encryptedPerms));
+                    try {
+                      localStorage.setItem("perms", encryptedPerms);
+                    } catch (e2) {}
+                  }
+                } catch (e2) {}
+              }
+            } else {
+              // Intentar cifrado
               try {
                 const encryptedPerms = await getEncryptedItem("perms");
                 if (encryptedPerms) {
                   setPerms(JSON.parse(encryptedPerms));
-                  localStorage.setItem("perms", encryptedPerms);
+                  try {
+                    localStorage.setItem("perms", encryptedPerms);
+                  } catch (e) {}
                 }
-              } catch (e2) {}
+              } catch (e) {}
             }
-          } else {
-            // Intentar cifrado
-            try {
-              const encryptedPerms = await getEncryptedItem("perms");
-              if (encryptedPerms) {
-                setPerms(JSON.parse(encryptedPerms));
-                localStorage.setItem("perms", encryptedPerms);
-              }
-            } catch (e) {}
+          } catch (e) {
+            console.debug("Error cargando permisos:", e);
           }
         } catch (error) {
           // Error ya manejado, solo continuar
-          console.debug("Token no disponible o corrupto, continuando sin sesión");
+          console.debug("Error cargando datos de sesión:", error);
         }
       } catch (error) {
         console.error("❌ Error inesperado cargando datos cifrados:", error);
@@ -484,17 +545,22 @@ export function AuthProvider({ children }) {
   ====================================================== */
   const login = async (userObj, jwtToken, permisos) => {
     try {
+      console.log('🔐 [LOGIN] Iniciando proceso de login...');
+      
       // Detectar si estamos en móvil
       const isMobile = window.Capacitor && window.Capacitor.isNativePlatform();
+      console.log(`🔐 [LOGIN] Es móvil: ${isMobile}`);
       
       // 🔥 CRÍTICO: Actualizar variable global PRIMERO (antes que todo)
       // Esto asegura que authFetch use el token nuevo inmediatamente
       currentToken = jwtToken;
+      console.log('🔐 [LOGIN] Token global actualizado');
       
       // 🔥 CRÍTICO: Actualizar estado SEGUNDO
       setToken(jwtToken);
       setUser(userObj);
       setPerms(permisos || []);
+      console.log('🔐 [LOGIN] Estados actualizados');
       
       // 🔥 CRÍTICO: Guardar en localStorage SIN CIFRAR (más confiable y rápido)
       // Esto funciona tanto en móvil como en desktop
@@ -542,8 +608,11 @@ export function AuthProvider({ children }) {
       
       // DESACTIVADO: Cargar tema personal causa problemas de rendimiento y cierre de sesión
       // cargarTemaPersonalUsuario(userObj.id);
+      
+      console.log('✅ [LOGIN] Login completado exitosamente');
     } catch (error) {
       console.error("❌ Error crítico en login:", error);
+      console.error("❌ Error stack:", error.stack);
       // Solo mostrar alerta si es un error realmente crítico
       if (error.message && error.message.includes("Error al guardar token")) {
         await showAlert("Error al guardar sesión. El token puede no persistir después de recargar la página.", "warning", { title: "Advertencia" });
@@ -557,7 +626,10 @@ export function AuthProvider({ children }) {
 
   /* ======================================================
      🔵 CARGAR TEMA PERSONAL DEL USUARIO
+     DESACTIVADO: Causa problemas de rendimiento y cierre de sesión
+     Función mantenida por si se necesita en el futuro
   ====================================================== */
+  // eslint-disable-next-line no-unused-vars
   const cargarTemaPersonalUsuario = async (userId) => {
     if (!userId) return;
     

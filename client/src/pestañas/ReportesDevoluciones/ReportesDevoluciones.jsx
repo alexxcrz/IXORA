@@ -18,6 +18,29 @@ export default function ReportesDevoluciones({ serverUrl, pushToast }) {
   ];
 
   const [tabActiva, setTabActiva] = useState("clientes");
+  
+  // ──────────────── Cambiar pestaña y limpiar estado ────────────────
+  const cambiarTab = (nuevaTab) => {
+    // Limpiar todo el estado al cambiar de pestaña para evitar datos mezclados
+    setTabActiva(nuevaTab);
+    setDias([]);
+    setDetalle([]);
+    setPedidos([]);
+    setViendoDetalle(false);
+    setMesAbierto(null);
+    setPaginaMes({});
+    setFechaOrigen("");
+    setFechaDestino("");
+    setFechaActualDetalle("");
+    setPedidosAbiertos(new Set());
+    setBuscadorPedido("");
+    setDetallePedido(null);
+    setDetallePedidoOpen(false);
+    setProductosPedidoModal({ open: false, pedido: null, productos: [], loading: false });
+    setViewerFotos([]);
+    setViewerIndex(0);
+    setViewerOpen(false);
+  };
 
   // ENDPOINT dinámico según pestaña
   const endpointBase = `${serverUrl}/reportes-devoluciones/${tabActiva}`;
@@ -48,130 +71,52 @@ export default function ReportesDevoluciones({ serverUrl, pushToast }) {
   const [fechaOrigen, setFechaOrigen] = useState("");
   const [fechaDestino, setFechaDestino] = useState("");
   const [fechaActualDetalle, setFechaActualDetalle] = useState("");
+  const [cargandoDias, setCargandoDias] = useState(false);
   const cargandoDiasRef = useRef(false);
-  const timeoutRef = useRef(null);
-  const ultimaSolicitudRef = useRef("");
-  const solicitudesEnProcesoRef = useRef(new Set());
 
   // ──────────────── Cargar días ────────────────
   const cargarDias = useCallback(async () => {
+    // Evitar cargas múltiples simultáneas
+    if (cargandoDiasRef.current) return;
+    
     try {
+      cargandoDiasRef.current = true;
+      setCargandoDias(true);
+      
       const endpoint = `${serverUrl}/reportes-devoluciones/${tabActiva}/dias`;
       const data = await authFetch(endpoint);
+      
+      // Limpiar estados al cambiar de pestaña para evitar mostrar datos mezclados
       setDias(data || []);
+      setDetalle([]);
+      setPedidos([]);
+      setViendoDetalle(false);
+      setMesAbierto(null);
+      setPaginaMes({});
+      
       if (!data || (Array.isArray(data) && data.length === 0)) {
-        // Sin datos
+        // Sin datos - esto es normal, no es un error
       }
     } catch (e) {
       console.error("❌ Frontend: Error cargando días:", e);
       console.error("❌ Frontend: Error details:", e.message, e.stack);
       pushToast?.("❌ No se pudieron cargar los días", "err");
+      // En caso de error, limpiar datos para evitar mostrar datos antiguos
+      setDias([]);
+      setDetalle([]);
+      setPedidos([]);
+      setViendoDetalle(false);
+    } finally {
+      cargandoDiasRef.current = false;
+      setCargandoDias(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tabActiva, serverUrl]);
+  }, [tabActiva, serverUrl, authFetch]);
 
+  // ──────────────── Cargar días al montar y al cambiar pestaña ────────────────
   useEffect(() => {
-    let isMounted = true;
-    let timeoutId = null;
-    
-    // Limpiar timeout anterior si existe
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-      timeoutRef.current = null;
-    }
-    
-    // Crear una clave única para esta solicitud
-    const solicitudKey = `${serverUrl}-${tabActiva}`;
-    
-    // Si ya hay una solicitud en proceso para esta clave, ignorar
-    if (solicitudesEnProcesoRef.current.has(solicitudKey)) {
-      return () => {
-        isMounted = false;
-        if (timeoutId) {
-          clearTimeout(timeoutId);
-        }
-        if (timeoutRef.current === timeoutId) {
-          timeoutRef.current = null;
-        }
-      };
-    }
-    
-    // Si ya se hizo una solicitud reciente para esta combinación, ignorar
-    if (ultimaSolicitudRef.current === solicitudKey) {
-      return () => {
-        isMounted = false;
-        if (timeoutId) {
-          clearTimeout(timeoutId);
-        }
-        if (timeoutRef.current === timeoutId) {
-          timeoutRef.current = null;
-        }
-      };
-    }
-    
-    // Usar debounce de 2 segundos para evitar solicitudes rápidas
-    timeoutId = setTimeout(() => {
-      if (!isMounted || cargandoDiasRef.current) return;
-      
-      // Verificar nuevamente si ya se hizo esta solicitud o está en proceso
-      if (ultimaSolicitudRef.current === solicitudKey || solicitudesEnProcesoRef.current.has(solicitudKey)) {
-        return;
-      }
-      
-      const cargar = async () => {
-        if (cargandoDiasRef.current || !isMounted) return;
-        if (ultimaSolicitudRef.current === solicitudKey || solicitudesEnProcesoRef.current.has(solicitudKey)) return;
-        
-        // Marcar como en proceso
-        solicitudesEnProcesoRef.current.add(solicitudKey);
-        cargandoDiasRef.current = true;
-        ultimaSolicitudRef.current = solicitudKey;
-        
-        try {
-          const endpoint = `${serverUrl}/reportes-devoluciones/${tabActiva}/dias`;
-          const data = await authFetch(endpoint);
-          if (isMounted) {
-            setDias(data || []);
-          }
-        } catch (e) {
-          if (isMounted) {
-            // Solo mostrar error si no es 429 (demasiadas solicitudes)
-            if (e.message && !e.message.includes("Demasiadas solicitudes")) {
-              console.error("❌ Frontend: Error cargando días:", e);
-              pushToast?.("❌ No se pudieron cargar los días", "err");
-            }
-          }
-          // Resetear la clave si hay error para permitir reintento
-          if (e.message && e.message.includes("Demasiadas solicitudes")) {
-            setTimeout(() => {
-              ultimaSolicitudRef.current = "";
-              solicitudesEnProcesoRef.current.delete(solicitudKey);
-            }, 30000); // Resetear después de 30 segundos
-          }
-        } finally {
-          if (isMounted) {
-            cargandoDiasRef.current = false;
-            solicitudesEnProcesoRef.current.delete(solicitudKey);
-          }
-        }
-      };
-      
-      cargar();
-    }, 2000);
-    
-    timeoutRef.current = timeoutId;
-    
-    return () => {
-      isMounted = false;
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-      }
-      if (timeoutRef.current === timeoutId) {
-        timeoutRef.current = null;
-      }
-      // Limpiar la solicitud en proceso si el componente se desmonta
-      solicitudesEnProcesoRef.current.delete(solicitudKey);
-    };
+    // Cargar inmediatamente cuando se monta o cambia la pestaña
+    cargarDias();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tabActiva, serverUrl]);
 
@@ -183,24 +128,28 @@ export default function ReportesDevoluciones({ serverUrl, pushToast }) {
     const socket = window.socket;
 
     const handleReportesActualizados = () => {
-      // Recargar días cuando se actualicen los reportes (con debounce)
+      console.log("📡 Evento reportes_actualizados recibido, recargando días...");
+      // Recargar inmediatamente cuando se actualicen los reportes
       if (!cargandoDiasRef.current) {
+        // Pequeño delay para asegurar que el servidor haya completado la transacción
         setTimeout(() => {
           if (!cargandoDiasRef.current) {
             cargarDias();
           }
-        }, 500);
+        }, 200);
       }
     };
 
     const handleDevolucionesActualizadas = () => {
-      // Si se cierra el día de devoluciones, recargar días (con debounce)
+      console.log("📡 Evento devoluciones_actualizadas recibido, recargando días...");
+      // Si se cierra el día de devoluciones, recargar inmediatamente
       if (!cargandoDiasRef.current) {
+        // Pequeño delay para asegurar que el servidor haya completado la transacción
         setTimeout(() => {
           if (!cargandoDiasRef.current) {
             cargarDias();
           }
-        }, 500);
+        }, 200);
       }
     };
 
@@ -212,7 +161,7 @@ export default function ReportesDevoluciones({ serverUrl, pushToast }) {
       socket.off("devoluciones_actualizadas", handleDevolucionesActualizadas);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [serverUrl]);
+  }, [serverUrl, cargarDias]);
 
   // ──────────────── Agrupar por mes ────────────────
   const diasPorMes = useMemo(() => {
@@ -474,7 +423,7 @@ export default function ReportesDevoluciones({ serverUrl, pushToast }) {
               <button
                 key={p.key}
                 className={`tab-btn ${tabActiva === p.key ? "active" : ""}`}
-                onClick={() => setTabActiva(p.key)}
+                onClick={() => cambiarTab(p.key)}
               >
                 {p.label}
               </button>
@@ -506,7 +455,9 @@ export default function ReportesDevoluciones({ serverUrl, pushToast }) {
 
         {/* Acordeón */}
         {!viendoDetalle ? (
-          mesesOrdenados.length === 0 ? (
+          cargandoDias ? (
+            <p className="sin-registros">Cargando reportes...</p>
+          ) : mesesOrdenados.length === 0 ? (
             <p className="sin-registros">No hay reportes registrados.</p>
           ) : (
             mesesOrdenados.map((mes) => {

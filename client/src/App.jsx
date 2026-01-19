@@ -29,14 +29,42 @@ import { SERVER_URL, getServerUrl, getServerUrlSync } from "./config/server";
 
 // Socket.io siempre usa la IP del servidor IXORA
 // Inicializar con URL síncrona, se actualizará después
-const socket = io(getServerUrlSync(), { 
-  transports: ["websocket", "polling"], // Permitir fallback a polling si websocket falla
-  reconnection: true,
-  reconnectionDelay: 1000,
-  reconnectionDelayMax: 5000,
-  reconnectionAttempts: 5,
-  timeout: 10000, // Timeout de 10 segundos
-});
+// PROTECCIÓN: Envolver en try-catch para evitar crashes en Android
+let socket = null;
+try {
+  const serverUrl = getServerUrlSync();
+  if (serverUrl) {
+    socket = io(serverUrl, { 
+      transports: ["websocket", "polling"], // Permitir fallback a polling si websocket falla
+      reconnection: true,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      reconnectionAttempts: 5,
+      timeout: 10000, // Timeout de 10 segundos
+      autoConnect: false, // No conectar automáticamente, esperar a que la app esté lista
+    });
+    
+    // Manejar errores del socket para evitar crashes
+    socket.on('connect_error', (error) => {
+      console.warn('⚠️ Error de conexión socket:', error);
+    });
+    
+    socket.on('error', (error) => {
+      console.warn('⚠️ Error socket:', error);
+    });
+  }
+} catch (error) {
+  console.error("Error inicializando socket:", error);
+  // Crear socket dummy para evitar crashes
+  socket = {
+    connected: false,
+    disconnect: () => {},
+    connect: () => {},
+    on: () => {},
+    emit: () => {},
+    io: { uri: "" }
+  };
+}
 
 // Exponer socket globalmente para que otros componentes puedan usarlo
 window.socket = socket;
@@ -59,12 +87,44 @@ const CATEGORIAS = {
 };
 
 function AppProtegida() {
-  const { user } = useAuth();
+  const { user, isLoading } = useAuth();
   
-  // Verificar si estamos en la pestaña de tienda (acceso público)
-  const urlParams = new URLSearchParams(window.location.search);
+  // PROTECCIÓN: Usar useMemo para evitar re-renders innecesarios
+  // IMPORTANTE: Los hooks deben estar al inicio, no condicionalmente
+  const tokenEnStorage = useMemo(() => {
+    try {
+      return localStorage.getItem("token");
+    } catch (e) {
+      return null;
+    }
+  }, []);
+  
+  const urlParams = useMemo(() => {
+    try {
+      return new URLSearchParams(window.location.search);
+    } catch (e) {
+      return new URLSearchParams();
+    }
+  }, []);
+  
   const tabFromURL = urlParams.get('tab');
   const esTienda = tabFromURL === 'tienda';
+  
+  // Mostrar loading mientras se carga la sesión
+  if (isLoading) {
+    return (
+      <div style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        height: '100vh',
+        background: '#1a1a1a',
+        color: '#fff'
+      }}>
+        <div>Cargando...</div>
+      </div>
+    );
+  }
   
   // Si es tienda, permitir acceso sin login
   if (esTienda) {
@@ -72,8 +132,36 @@ function AppProtegida() {
   }
   
   // Para otras pestañas, requerir login
-  if (!user) return <Login />;
-  return <App />;
+  // PROTECCIÓN: Verificar token en localStorage también para evitar re-renders innecesarios
+  // IMPORTANTE: En Android, dar más tiempo para que la sesión se cargue
+  if (!user && !tokenEnStorage) {
+    return <Login />;
+  }
+  
+  if (!user && tokenEnStorage) {
+    // Si hay token pero no user, esperar un momento (puede estar cargando)
+    // PROTECCIÓN: En Android, dar más tiempo antes de mostrar error
+    return (
+      <div style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        height: '100vh',
+        background: '#1a1a1a',
+        color: '#fff'
+      }}>
+        <div>Cargando sesión...</div>
+      </div>
+    );
+  }
+  
+  // Si hay user, renderizar la app
+  if (user) {
+    return <App />;
+  }
+  
+  // Fallback: mostrar login
+  return <Login />;
 }
 
 const TITULO_TABS = {
@@ -155,14 +243,32 @@ function App() {
         localStorage.setItem('server_url', nuevaUrl);
         
         // Si la URL cambió, reconectar el socket
-        if (socket.io && socket.io.uri !== nuevaUrl) {
-          socket.disconnect();
-          socket.io.uri = nuevaUrl;
-          socket.connect();
-        } else if (!socket.connected) {
-          // Si no está conectado, conectar
-          socket.io.uri = nuevaUrl;
-          socket.connect();
+        // PROTECCIÓN: Verificar que socket existe y es válido
+        if (socket && socket.io) {
+          if (socket.io.uri !== nuevaUrl) {
+            try {
+              socket.disconnect();
+              socket.io.uri = nuevaUrl;
+              setTimeout(() => {
+                if (socket && socket.connect && !socket.connected) {
+                  socket.connect();
+                }
+              }, 500);
+            } catch (error) {
+              console.warn("Error reconectando socket:", error);
+            }
+          } else if (!socket.connected && socket.connect) {
+            // Si no está conectado, conectar después de un delay
+            setTimeout(() => {
+              try {
+                if (socket && socket.connect && !socket.connected) {
+                  socket.connect();
+                }
+              } catch (error) {
+                console.warn("Error conectando socket:", error);
+              }
+            }, 1000);
+          }
         }
       } catch (err) {
         console.warn('⚠️ [App] Error actualizando IP del servidor:', err);
