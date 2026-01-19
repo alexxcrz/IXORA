@@ -1289,7 +1289,7 @@ function App() {
     }
   };
 
-  const handleFechaChange = async (e) => {
+  const handleFechaChange = useCallback(async (e) => {
     const nueva = e.target.value;
     
     if (!fecha || fecha === "") {
@@ -1362,8 +1362,8 @@ function App() {
   const diasPorMes = useMemo(() => {
     const map = {};
     for (const d of diasCerrados || []) {
-      const fecha = d.fecha || d;
-      const mes = fecha.slice(0, 7);
+      const fechaItem = d.fecha || d;
+      const mes = fechaItem.slice(0, 7);
       if (!map[mes]) map[mes] = [];
       map[mes].push(d);
     }

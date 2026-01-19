@@ -7,6 +7,7 @@ import {
   removeEncryptedItem 
 } from "./utils/encryptedStorage";
 import { getServerUrl, getServerUrlSync } from "./config/server";
+import logger from "./utils/logger";
 
 const AuthContext = createContext();
 export const useAuth = () => useContext(AuthContext);
