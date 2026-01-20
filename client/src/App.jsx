@@ -6,7 +6,6 @@ import "./estilos/global.css";
 import { NotificationProvider } from "./components/Notifications";
 import WidgetsMenu from "./components/WidgetsMenu";
 import { AlertModalProvider, useAlert } from "./components/AlertModal";
-import logger from "./utils/logger";
 
 import Picking from "./pestañas/Picking/Picking";
 import RegistrosPicking from "./pestañas/RegistrosPicking/RegistrosPicking";
