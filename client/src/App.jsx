@@ -704,7 +704,7 @@ function App() {
   }, [activeTab, perms, can, cambiarModulo, getFirstAllowedTab]);
 
   // Declarar funciones de formateo antes de usarlas en useMemo
-  const formatearFechaCompleta = (fechaString) => {
+  const formatearFechaCompleta = useCallback((fechaString) => {
     if (!fechaString) {
       return ""; // No mostrar fecha si no está seleccionada
     }
@@ -713,14 +713,14 @@ function App() {
     const meses = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 
                    'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
     return `${diasSemana[fecha.getDay()]} ${fecha.getDate()} de ${meses[fecha.getMonth()]} del ${fecha.getFullYear()}`;
-  };
+  }, []);
 
-  const formatearHora = (fecha) => {
+  const formatearHora = useCallback((fecha) => {
     const horas = fecha.getHours().toString().padStart(2, '0');
     const minutos = fecha.getMinutes().toString().padStart(2, '0');
     const segundos = fecha.getSeconds().toString().padStart(2, '0');
     return `${horas}:${minutos}:${segundos}`;
-  };
+  }, []);
 
   useEffect(() => {
     // Optimización: actualizar hora cada segundo pero sin causar re-renders innecesarios
@@ -739,10 +739,10 @@ function App() {
   }, []);
   
   // Memoizar formatearHora para evitar recalcular en cada render
-  const horaFormateada = useMemo(() => formatearHora(horaActual), [horaActual]);
+  const horaFormateada = useMemo(() => formatearHora(horaActual), [horaActual, formatearHora]);
   
   // Memoizar fecha formateada
-  const fechaCompletaFormateada = useMemo(() => fecha ? formatearFechaCompleta(fecha) : "", [fecha]);
+  const fechaCompletaFormateada = useMemo(() => fecha ? formatearFechaCompleta(fecha) : "", [fecha, formatearFechaCompleta]);
 
   // Detectar y aplicar modo oscuro del sistema
   useEffect(() => {

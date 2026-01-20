@@ -74,7 +74,8 @@
         }
       ],
       "icon": "client/public/favicon.ico",
-      "requestedExecutionLevel": "asInvoker"
+      "requestedExecutionLevel": "asInvoker",
+      "sign": null
     },
     "nsis": {
       "oneClick": false,
