@@ -10,7 +10,7 @@ import "./ActivosInformaticos.css";
 
 applyPlugin(jsPDF);
 
-export default function ActivosInformaticos({ serverUrl }) {
+export default function ActivosInformaticos({ serverUrl, socket }) {
   const [tabActiva, setTabActiva] = useState("activos"); // 'activos', 'pdas' o 'tablets'
   const { authFetch } = useAuth();
   const { showConfirm, showAlert } = useAlert();
@@ -49,6 +49,7 @@ export default function ActivosInformaticos({ serverUrl }) {
   const fileInputRef = useRef(null);
   const importandoRef = useRef(false);
   const [menuAbierto, setMenuAbierto] = useState(false);
+  const [busqueda, setBusqueda] = useState("");
 
   // Cargar datos
   const cargar = async () => {
@@ -70,22 +71,26 @@ export default function ActivosInformaticos({ serverUrl }) {
 
   useEffect(() => {
     cargar();
-    
-    // DESACTIVADO: Las actualizaciones de socket causaban recargas y saltos de scroll
-    // Los datos se actualizan localmente cuando el usuario hace cambios
-    // Si se necesita sincronizar con otros usuarios, recargar manualmente
-    
-    // const socket = window.socket;
-    // const handleUpdate = () => {
-    //   if (importandoRef && !importandoRef.current) {
-    //     cargar();
-    //   }
-    // };
-    // socket.on("activos_actualizados", handleUpdate);
-    // return () => {
-    //   socket.off("activos_actualizados", handleUpdate);
-    // };
   }, [serverUrl]);
+
+  // ───────────────────────────
+  // SOCKET.IO - ACTUALIZACIONES EN TIEMPO REAL
+  // ───────────────────────────
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleUpdate = () => {
+      if (importandoRef && !importandoRef.current) {
+        cargar();
+      }
+    };
+
+    socket.on("activos_actualizados", handleUpdate);
+
+    return () => {
+      socket.off("activos_actualizados", handleUpdate);
+    };
+  }, [socket, serverUrl]);
 
   // Cerrar menú al hacer clic fuera
   useEffect(() => {
@@ -875,21 +880,59 @@ export default function ActivosInformaticos({ serverUrl }) {
     const grupos = {};
     const ordenUnidades = []; // Mantener orden de primera aparición
     
-    // Los responsables ya vienen ordenados por ID del servidor
+    const busquedaLower = busqueda.trim() ? busqueda.toLowerCase() : "";
+    
+    // Filtrar y procesar responsables
     responsables.forEach((resp) => {
-      if (!grupos[resp.unidad]) {
-        grupos[resp.unidad] = [];
-        ordenUnidades.push(resp.unidad); // Guardar orden de primera aparición
+      let respConActivos = resp;
+      let debeIncluir = true;
+      
+      // Si hay búsqueda, filtrar
+      if (busquedaLower) {
+        const unidad = (resp.unidad || "").toLowerCase();
+        const responsable = (resp.responsable || "").toLowerCase();
+        const cargo = (resp.cargo_area || "").toLowerCase();
+        
+        // Verificar si el responsable mismo coincide
+        const responsableCoincide = 
+          unidad.includes(busquedaLower) ||
+          responsable.includes(busquedaLower) ||
+          cargo.includes(busquedaLower);
+        
+        // Si el responsable coincide, mostrar TODOS sus activos
+        // Si no coincide, filtrar solo los activos que coinciden
+        if (responsableCoincide) {
+          // Mostrar todos los activos del responsable
+          respConActivos = resp;
+        } else {
+          // Filtrar solo los activos que coinciden
+          const activosFiltrados = (resp.activos || []).filter((activo) => {
+            const equipo = ((activo.tipo_equipo || activo.equipo) || "").toLowerCase();
+            return equipo.includes(busquedaLower);
+          });
+          
+          // Solo incluir si tiene activos que coinciden
+          if (activosFiltrados.length > 0) {
+            respConActivos = { ...resp, activos: activosFiltrados };
+          } else {
+            debeIncluir = false;
+          }
+        }
       }
-      // Agregar manteniendo el orden de creación (por ID)
-      grupos[resp.unidad].push(resp);
+      
+      // Agregar a grupos si debe incluirse
+      if (debeIncluir) {
+        if (!grupos[respConActivos.unidad]) {
+          grupos[respConActivos.unidad] = [];
+          ordenUnidades.push(respConActivos.unidad);
+        }
+        grupos[respConActivos.unidad].push(respConActivos);
+      }
     });
     
     // Retornar grupos ordenados por primera aparición
-    // Dentro de cada grupo, los responsables ya están en orden por ID
     const gruposOrdenados = {};
     ordenUnidades.forEach(unidad => {
-      // Asegurar que dentro de cada unidad, los responsables estén ordenados por ID
       gruposOrdenados[unidad] = grupos[unidad].sort((a, b) => (a.id || 0) - (b.id || 0));
     });
     
@@ -904,6 +947,25 @@ export default function ActivosInformaticos({ serverUrl }) {
       conteo[tipo] = (conteo[tipo] || 0) + 1;
     });
     return conteo;
+  };
+
+  // Función para dividir texto en 3 líneas
+  const dividirEnTresLineas = (texto) => {
+    if (!texto) return ["", "", ""];
+    const palabras = texto.trim().split(/\s+/);
+    const totalPalabras = palabras.length;
+    
+    if (totalPalabras === 0) return ["", "", ""];
+    if (totalPalabras === 1) return [palabras[0], "", ""];
+    if (totalPalabras === 2) return [palabras[0], palabras[1], ""];
+    
+    // Dividir en 3 líneas aproximadamente iguales
+    const palabrasPorLinea = Math.ceil(totalPalabras / 3);
+    const linea1 = palabras.slice(0, palabrasPorLinea).join(" ");
+    const linea2 = palabras.slice(palabrasPorLinea, palabrasPorLinea * 2).join(" ");
+    const linea3 = palabras.slice(palabrasPorLinea * 2).join(" ");
+    
+    return [linea1, linea2, linea3];
   };
 
   const grupos = agruparPorUnidad();
@@ -1053,6 +1115,16 @@ export default function ActivosInformaticos({ serverUrl }) {
             </div>
       </div>
 
+      {/* Buscador */}
+      <div className="activos-buscador">
+        <input
+          type="text"
+          placeholder="🔍 Buscar por responsable, equipo, cargo o área..."
+          value={busqueda}
+          onChange={(e) => setBusqueda(e.target.value)}
+        />
+      </div>
+
       <div className="activos-tabla-container">
         <table className="activos-tabla">
           <thead>
@@ -1067,11 +1139,18 @@ export default function ActivosInformaticos({ serverUrl }) {
             </tr>
           </thead>
           <tbody>
-            {Object.keys(grupos).map((unidad) => {
-              const responsablesUnidad = grupos[unidad];
-              return responsablesUnidad.map((resp, idx) => {
-                const activos = resp.activos || [];
-                const filas = activos.length || 1; // Al menos una fila
+            {Object.keys(grupos).length === 0 ? (
+              <tr>
+                <td colSpan="7" style={{ padding: "40px", textAlign: "center", color: "#9ca3af", fontStyle: "italic" }}>
+                  {busqueda.trim() ? "No se encontraron resultados para la búsqueda" : "No hay responsables registrados"}
+                </td>
+              </tr>
+            ) : (
+              Object.keys(grupos).map((unidad) => {
+                const responsablesUnidad = grupos[unidad];
+                return responsablesUnidad.map((resp, idx) => {
+                  const activos = resp.activos || [];
+                  const filas = activos.length || 1; // Al menos una fila
 
                 return (
                   <React.Fragment key={resp.id}>
@@ -1087,13 +1166,40 @@ export default function ActivosInformaticos({ serverUrl }) {
                             {actIdx === 0 && (
                               <>
                                 <td rowSpan={filas} className="celda-unidad">
-                                  {resp.unidad}
+                                  {(() => {
+                                    const lineas = dividirEnTresLineas(resp.unidad || "");
+                                    return (
+                                      <>
+                                        <span className="texto-linea">{lineas[0]}</span>
+                                        <span className="texto-linea">{lineas[1]}</span>
+                                        <span className="texto-linea">{lineas[2]}</span>
+                                      </>
+                                    );
+                                  })()}
                                 </td>
                                 <td rowSpan={filas} className="celda-responsable">
-                                  {resp.responsable}
+                                  {(() => {
+                                    const lineas = dividirEnTresLineas(resp.responsable || "");
+                                    return (
+                                      <>
+                                        <span className="texto-linea">{lineas[0]}</span>
+                                        <span className="texto-linea">{lineas[1]}</span>
+                                        <span className="texto-linea">{lineas[2]}</span>
+                                      </>
+                                    );
+                                  })()}
                                 </td>
                                 <td rowSpan={filas} className="celda-cargo">
-                                  {resp.cargo_area}
+                                  {(() => {
+                                    const lineas = dividirEnTresLineas(resp.cargo_area || "");
+                                    return (
+                                      <>
+                                        <span className="texto-linea">{lineas[0]}</span>
+                                        <span className="texto-linea">{lineas[1]}</span>
+                                        <span className="texto-linea">{lineas[2]}</span>
+                                      </>
+                                    );
+                                  })()}
                                 </td>
                               </>
                             )}
@@ -1157,9 +1263,42 @@ export default function ActivosInformaticos({ serverUrl }) {
                       })
                     ) : (
                       <tr>
-                        <td className="celda-unidad">{resp.unidad}</td>
-                        <td className="celda-responsable">{resp.responsable}</td>
-                        <td className="celda-cargo">{resp.cargo_area}</td>
+                        <td className="celda-unidad">
+                          {(() => {
+                            const lineas = dividirEnTresLineas(resp.unidad || "");
+                            return (
+                              <>
+                                <span className="texto-linea">{lineas[0]}</span>
+                                <span className="texto-linea">{lineas[1]}</span>
+                                <span className="texto-linea">{lineas[2]}</span>
+                              </>
+                            );
+                          })()}
+                        </td>
+                        <td className="celda-responsable">
+                          {(() => {
+                            const lineas = dividirEnTresLineas(resp.responsable || "");
+                            return (
+                              <>
+                                <span className="texto-linea">{lineas[0]}</span>
+                                <span className="texto-linea">{lineas[1]}</span>
+                                <span className="texto-linea">{lineas[2]}</span>
+                              </>
+                            );
+                          })()}
+                        </td>
+                        <td className="celda-cargo">
+                          {(() => {
+                            const lineas = dividirEnTresLineas(resp.cargo_area || "");
+                            return (
+                              <>
+                                <span className="texto-linea">{lineas[0]}</span>
+                                <span className="texto-linea">{lineas[1]}</span>
+                                <span className="texto-linea">{lineas[2]}</span>
+                              </>
+                            );
+                          })()}
+                        </td>
                         <td colSpan="3" className="sin-activos">
                           Sin activos asignados
                         </td>
@@ -1203,7 +1342,8 @@ export default function ActivosInformaticos({ serverUrl }) {
                   </React.Fragment>
                 );
               });
-            })}
+            })
+            )}
           </tbody>
         </table>
       </div>
@@ -1211,7 +1351,14 @@ export default function ActivosInformaticos({ serverUrl }) {
       {/* Modal para Responsable o Activo */}
       {modalAbierto && (
         <div className="modal-overlay" onClick={() => setModalAbierto(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
+          <div 
+            className="modal modal-sm" 
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              maxWidth: window.innerWidth <= 768 ? 'calc(100vw - 20px)' : undefined,
+              width: window.innerWidth <= 768 ? 'calc(100vw - 20px)' : undefined
+            }}
+          >
             <div className="modal-header">
               <h3>
                 {modalTipo === "responsable"
@@ -1417,7 +1564,7 @@ export default function ActivosInformaticos({ serverUrl }) {
       {/* Modal de Importación */}
       {showModalImportar && (
         <div className="modal-overlay" onClick={() => setShowModalImportar(false)}>
-          <div className="modal modal-importar" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "800px", width: "90vw" }}>
+          <div className="modal modal-importar" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3>Importar Activos Informáticos</h3>
               <button className="modal-close" onClick={() => setShowModalImportar(false)}>

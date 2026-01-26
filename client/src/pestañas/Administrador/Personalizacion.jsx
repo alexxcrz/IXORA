@@ -3,6 +3,24 @@ import { useAuth } from "../../AuthContext";
 import { temas, aplicarTema, obtenerTemaActual } from "../../utils/temas";
 import "./Personalizacion.css";
 
+// Función helper para recargar de forma segura (no recarga en Android)
+const recargarSeguro = () => {
+  const isAndroid = typeof window !== 'undefined' && 
+    window.Capacitor && 
+    window.Capacitor.isNativePlatform() &&
+    window.Capacitor.getPlatform() === 'android';
+  
+  if (!isAndroid) {
+    // Solo en web, recargar
+    window.location.reload();
+  } else {
+    // En Android, disparar evento para que otros componentes se actualicen
+    // sin recargar la página completa
+    window.dispatchEvent(new CustomEvent('personalizacion-actualizada'));
+    console.log('[IXORA] Configuración actualizada sin recargar (Android)');
+  }
+};
+
 export default function Personalizacion({ serverUrl, pushToast }) {
   const { token } = useAuth();
   const [loading, setLoading] = useState(false);
@@ -730,7 +748,7 @@ export default function Personalizacion({ serverUrl, pushToast }) {
       
       // Recargar página para aplicar cambios
       setTimeout(() => {
-        window.location.reload();
+        recargarSeguro();
       }, 1000);
     } catch (err) {
       console.error("Error eliminando fondo:", err);
@@ -754,7 +772,7 @@ export default function Personalizacion({ serverUrl, pushToast }) {
       }));
       pushToast("✅ Fondo de login eliminado correctamente", "ok");
       setTimeout(() => {
-        window.location.reload();
+        recargarSeguro();
       }, 1000);
     } catch (err) {
       console.error("Error eliminando fondo login:", err);
@@ -778,7 +796,7 @@ export default function Personalizacion({ serverUrl, pushToast }) {
       }));
       pushToast("✅ Fondo de branding eliminado correctamente", "ok");
       setTimeout(() => {
-        window.location.reload();
+        recargarSeguro();
       }, 1000);
     } catch (err) {
       console.error("Error eliminando fondo login branding:", err);
@@ -885,7 +903,7 @@ export default function Personalizacion({ serverUrl, pushToast }) {
       
       // Recargar página para aplicar cambios (logo y favicon en toda la app)
       setTimeout(() => {
-        window.location.reload();
+        recargarSeguro();
       }, 1500);
     } catch (err) {
       console.error("Error guardando configuración:", err);
@@ -1017,7 +1035,7 @@ export default function Personalizacion({ serverUrl, pushToast }) {
       
       // Recargar página para aplicar cambios
       setTimeout(() => {
-        window.location.reload();
+        recargarSeguro();
       }, 1000);
     } catch (err) {
       console.error("Error seleccionando imagen:", err);

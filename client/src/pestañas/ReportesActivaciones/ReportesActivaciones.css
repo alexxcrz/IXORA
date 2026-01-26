@@ -4,8 +4,11 @@
 
 .reportes-activaciones-container {
   padding: 20px;
-  max-width: 1200px;
-  margin: 0 auto;
+  width: 98% !important;
+  max-width: 98% !important;
+  margin: 0 auto var(--espacio-lg);
+  box-sizing: border-box !important;
+  overflow-x: auto !important;
 }
 
 .reportes-activaciones-container h2 {

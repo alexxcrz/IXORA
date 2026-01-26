@@ -2,6 +2,37 @@
    🎨 INVENTARIO - DISEÑO PROFESIONAL EMPRESARIAL
    ====================================================== */
 
+/* Ajustes responsivos generales */
+.card {
+  overflow-x: auto;
+}
+
+/* Card de Inventario similar a Admin, centrada y con esquinas redondeadas */
+/* Usar !important para sobrescribir estilos globales de .card */
+.card.inventario-card,
+.inventario-card {
+  width: 98% !important;
+  max-width: 98% !important;
+  margin: 0 auto var(--espacio-lg) !important;
+  border-radius: var(--radio-xl) !important;
+  border: 1px solid var(--borde-sutil) !important;
+  box-shadow: var(--sombra-sm) !important;
+  background: var(--fondo-card) !important;
+  box-sizing: border-box !important;
+  overflow-x: auto !important;
+  overflow-y: visible !important;
+}
+
+/* Inventario: hacer datos más grandes y legibles */
+.card .tabla-container table {
+  font-size: 1rem;
+}
+
+.card .tabla-container th,
+.card .tabla-container td {
+  padding: 10px 8px;
+}
+
 /* =======================================================
    SWITCH PARA LOTES ACTIVOS Y MOSTRAR EN PÁGINA
    ====================================================== */
@@ -507,12 +538,13 @@ select:focus {
 
 .modal-qr-codigo {
   font-weight: 700;
-  font-size: 1rem;
+  font-size: 1.3rem;
+  color: var(--texto-principal);
 }
 
 .modal-qr-nombre {
   color: var(--texto-secundario);
-  font-size: 0.9rem;
+  font-size: 1.1rem;
 }
 
 .modal-qr-box {
@@ -590,14 +622,16 @@ select:focus {
    ====================================================== */
 
 table {
-  width: 100%;
-  border-collapse: collapse;
+  width: max-content !important;
+  min-width: 100% !important;
+  border-collapse: collapse !important;
   margin-top: 12px;
   background: var(--fondo-card);
   border-radius: var(--radio-xl);
-  overflow: hidden;
+  overflow: visible !important;
   box-shadow: var(--sombra-sm);
   border: 1px solid var(--borde-sutil);
+  table-layout: fixed !important;
 }
 
 thead {
@@ -609,6 +643,7 @@ th, td {
   font-size: 0.875rem;
   color: var(--texto-principal);
   border-bottom: 1px solid var(--borde-sutil);
+  white-space: nowrap;
 }
 
 th {
@@ -755,6 +790,78 @@ table select:focus {
   max-height: calc(100vh - 40px);
 }
 
+/* Ajustar modales de inventario para que sean proporcionales */
+.modal-content.modal-sm {
+  max-width: 400px;
+  width: calc(100% - 40px);
+}
+
+.modal-content.modal-md {
+  max-width: 500px;
+  width: calc(100% - 40px);
+}
+
+.modal-content.modal-lg {
+  max-width: 700px;
+  width: calc(100% - 40px);
+}
+
+/* Responsive para móviles */
+@media (max-width: 768px) {
+  .modal-overlay {
+    padding: 10px !important;
+  }
+
+  .modal-content {
+    max-width: calc(100% - 20px) !important;
+    width: calc(100% - 20px) !important;
+    padding: 16px !important;
+    max-height: calc(100vh - 20px) !important;
+  }
+
+  .modal-content.modal-sm,
+  .modal-content.modal-md,
+  .modal-content.modal-lg {
+    max-width: calc(100% - 20px) !important;
+    width: calc(100% - 20px) !important;
+  }
+
+  .modal-header {
+    padding: 12px 16px !important;
+  }
+
+  .modal-header h3 {
+    font-size: 1.1rem !important;
+  }
+
+  .modal-content input,
+  .modal-content select,
+  .modal-content textarea {
+    padding: 8px 12px !important;
+    font-size: 0.9rem !important;
+    margin-bottom: 12px !important;
+  }
+
+  .modal-actions {
+    gap: 8px !important;
+    flex-wrap: wrap;
+    margin-top: 8px !important;
+  }
+
+  .modal-actions button {
+    padding: 10px 16px !important;
+    font-size: 0.9rem !important;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .modal-close {
+    width: 28px !important;
+    height: 28px !important;
+    font-size: 1.5rem !important;
+  }
+}
+
 @keyframes popup {
   0% { transform: scale(.85); opacity: 0; }
   100% { transform: scale(1); opacity: 1; }
@@ -821,10 +928,33 @@ table select:focus {
    RESPONSIVE
    ====================================================== */
 
+@media (max-width: 768px) {
+  .card.inventario-card,
+  .inventario-card {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 auto var(--espacio-lg) !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .card .tabla-container {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    width: 100%;
+  }
+
+  .card .tabla-container table {
+    min-width: 800px;
+  }
+}
+
 @media (max-width: 520px) {
   .inventario-card {
-    width: 95%;
+    width: 100% !important;
     padding: 18px;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
   }
 
   .inventario-header input {
@@ -843,9 +973,19 @@ table select:focus {
     font-size: 14px;
   }
 
+  .card .tabla-container {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .card .tabla-container table {
+    min-width: 700px;
+  }
+
   th, td {
     padding: 8px 4px;
     font-size: 0.75rem;
+    white-space: nowrap;
   }
 
   .modal-content {
@@ -1261,5 +1401,48 @@ table select:focus {
 
 .importacion-detalle-inv .errores-inv {
   color: #dc2626;
+  font-weight: 600;
+}
+
+/* =======================================================
+   MENÚ DESPLEGABLE Y PESTAÑAS DE INVENTARIOS
+   ======================================================= */
+
+/* Estilos para el menú desplegable de botones */
+.inventario-header {
+  position: relative;
+}
+
+/* Pestañas de inventarios */
+.inventario-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 15px;
+  flex-wrap: wrap;
+  border-bottom: 2px solid var(--borde-sutil);
+  padding-bottom: 8px;
+}
+
+.inventario-tab {
+  padding: 8px 16px;
+  background: var(--fondo-input);
+  color: var(--texto-principal);
+  border: 1px solid var(--borde-sutil);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.inventario-tab:hover {
+  background: var(--fondo-secundario);
+  border-color: var(--azul-primario);
+}
+
+.inventario-tab.active {
+  background: var(--azul-primario);
+  color: white;
+  border-color: var(--azul-primario);
   font-weight: 600;
 }

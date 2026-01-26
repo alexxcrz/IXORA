@@ -9,6 +9,76 @@ let serverProcess;
 
 // Función para crear la ventana principal
 function createWindow() {
+  // Obtener el icono correcto según el entorno
+  let iconPath;
+  if (app.isPackaged) {
+    // En producción empaquetada
+    iconPath = path.join(process.resourcesPath, 'app', 'client', 'public', 'favicon.ico');
+    if (!fs.existsSync(iconPath)) {
+      iconPath = path.join(__dirname, '..', 'client', 'public', 'favicon.ico');
+    }
+  } else {
+    // En desarrollo
+    iconPath = path.join(__dirname, '../client/public/favicon.ico');
+  }
+
+  // Obtener la ruta del splash screen
+  let splashImagePath;
+  if (app.isPackaged) {
+    splashImagePath = path.join(process.resourcesPath, 'app', 'client', 'public', 'splash.png');
+    if (!fs.existsSync(splashImagePath)) {
+      splashImagePath = path.join(__dirname, '..', 'client', 'public', 'splash.png');
+    }
+  } else {
+    splashImagePath = path.join(__dirname, '../client/public/splash.png');
+  }
+
+  // Crear ventana de splash screen
+  const splashWindow = new BrowserWindow({
+    width: 800,
+    height: 600,
+    frame: false,
+    transparent: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    backgroundColor: '#15192e',
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true
+    }
+  });
+
+  // Cargar splash screen HTML con la ruta de la imagen
+  const splashHtml = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #15192e;
+    }
+    #splash-image {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+  </style>
+</head>
+<body>
+  <img id="splash-image" src="file://${splashImagePath.replace(/\\/g, '/')}" alt="IXORA" />
+</body>
+</html>`;
+  
+  splashWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(splashHtml)}`);
+
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
@@ -20,13 +90,19 @@ function createWindow() {
       contextIsolation: true,
       webSecurity: true
     },
-    icon: path.join(__dirname, '../client/public/favicon.ico'),
+    icon: iconPath,
     show: false, // No mostrar hasta que esté listo
-    titleBarStyle: 'default'
+    titleBarStyle: 'default',
+    title: 'IXORA - Sistema de Gestión' // Título personalizado
   });
 
-  // Mostrar ventana cuando esté lista
+  // Mostrar ventana cuando esté lista y cerrar splash
   mainWindow.once('ready-to-show', () => {
+    // Cerrar splash screen
+    if (splashWindow && !splashWindow.isDestroyed()) {
+      splashWindow.close();
+    }
+    
     mainWindow.show();
     
     // Abrir DevTools en desarrollo (opcional)
@@ -79,9 +155,25 @@ function startServer() {
   }
 
   console.log('🚀 Iniciando servidor...');
+  console.log('📁 Ruta de la app:', app.getAppPath());
+  console.log('📁 Directorio del servidor:', serverDir);
+  console.log('📁 process.resourcesPath:', process.resourcesPath);
+  console.log('📁 app.isPackaged:', app.isPackaged);
   
   // Determinar la ruta de Node.js
   const nodePath = process.execPath; // Usar el Node.js incluido con Electron
+  
+  // Obtener la ruta base de la aplicación (funciona en desarrollo y producción)
+  let appPath = app.getAppPath();
+  
+  // En producción empaquetada, verificar si existe resources/app
+  if (app.isPackaged && process.resourcesPath) {
+    const resourcesAppPath = path.join(process.resourcesPath, 'app');
+    if (fs.existsSync(resourcesAppPath)) {
+      appPath = resourcesAppPath;
+      console.log('📁 Usando resources/app:', appPath);
+    }
+  }
   
   // Iniciar el servidor
   serverProcess = spawn(nodePath, [serverPath], {
@@ -92,7 +184,8 @@ function startServer() {
       ...process.env,
       PORT: '3001',
       NODE_ENV: process.env.NODE_ENV || 'production',
-      ELECTRON_RUN_AS_NODE: '1' // Permitir que Node.js se ejecute correctamente
+      ELECTRON_RUN_AS_NODE: '1', // Permitir que Node.js se ejecute correctamente
+      APP_PATH: appPath // Pasar la ruta de la app al servidor
     }
   });
 
@@ -116,11 +209,11 @@ function startServer() {
     }
   });
 
-  // Esperar un momento para que el servidor inicie
+  // Esperar un momento para que el servidor inicie y encuentre los archivos
   setTimeout(() => {
     console.log('✅ Servidor iniciado, abriendo ventana...');
     createWindow();
-  }, 3000);
+  }, 5000); // Aumentado a 5 segundos para dar más tiempo al servidor
 }
 
 // Cuando Electron esté listo

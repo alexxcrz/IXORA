@@ -53,6 +53,11 @@
   border: none !important;
 }
 
+/* Ocultar contenedor cuando el botón está en la barra superior */
+.top-bar ~ .widgets-notifications-container.top-right {
+  display: none !important;
+}
+
 .widgets-notifications-button {
   width: 56px;
   height: 56px;
@@ -77,6 +82,30 @@
   -webkit-appearance: none !important;
   -moz-appearance: none !important;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Botón de notificaciones en la barra superior */
+.widgets-notifications-button.top-bar-button {
+  width: 44px !important;
+  height: 44px !important;
+  font-size: 1.2rem !important;
+  border-radius: var(--radio-md) !important;
+  background: var(--fondo-card) !important;
+  background-color: var(--fondo-card) !important;
+  color: var(--texto-principal) !important;
+  border: 1px solid var(--borde-sutil) !important;
+  box-shadow: var(--sombra-md) !important;
+}
+
+/* Badge de notificaciones en barra superior: mismo estilo discreto */
+.widgets-notifications-button.top-bar-button .widgets-menu-badge {
+  top: -2px !important;
+  right: -2px !important;
+  min-width: 16px !important;
+  height: 16px !important;
+  font-size: 0.65rem !important;
+  border: 1px solid var(--fondo-card) !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2) !important;
 }
 
 .widgets-notifications-button:hover {
@@ -144,16 +173,37 @@
   text-shadow: none !important;
 }
 
-.widgets-menu-dot {
+/* Anillo parpadeante alrededor del widget de chat cuando hay mensajes nuevos */
+.widgets-menu-container.has-chat-pending::before {
+  content: "";
   position: absolute;
-  top: 6px;
-  right: 6px;
-  width: 10px;
-  height: 10px;
+  left: 50%;
+  top: 50%;
+  width: 72px;
+  height: 72px;
+  margin-left: -36px;
+  margin-top: -36px;
   border-radius: 50%;
-  background: #ef4444;
-  border: 2px solid rgba(255, 255, 255, 0.9);
-  box-shadow: 0 0 6px rgba(239, 68, 68, 0.7);
+  border: 3px solid rgba(239, 68, 68, 0.85);
+  background: transparent;
+  pointer-events: none;
+  z-index: 99998;
+  animation: chat-ring-pulse 2.2s ease-in-out infinite;
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.35);
+  transform-origin: 50% 50%;
+}
+
+@keyframes chat-ring-pulse {
+  0%, 100% {
+    opacity: 0.5;
+    transform: scale(1);
+    border-color: rgba(239, 68, 68, 0.65);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.08);
+    border-color: rgba(239, 68, 68, 0.95);
+  }
 }
 
 .widgets-menu-button:hover {
@@ -224,24 +274,32 @@
   line-height: 1;
 }
 
+/* Badge de NOTIFICACIONES (campanita): discreto, se distingue pero no llama demasiado */
 .widgets-menu-badge {
   position: absolute;
-  top: -4px;
-  right: -4px;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 5px;
+  top: -2px;
+  right: -2px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
   border-radius: 999px;
-  background: #ef4444;
-  color: #ffffff;
+  background: rgba(239, 68, 68, 0.9) !important;
+  color: #ffffff !important;
   font-size: 0.65rem;
   font-weight: 700;
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 2px solid var(--fondo-card);
-  box-shadow: 0 0 6px rgba(239, 68, 68, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
   pointer-events: none;
+  z-index: 100001;
+  text-shadow: 0 0 1px rgba(0, 0, 0, 0.3);
+}
+
+@keyframes pulse-badge {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.05); opacity: 0.95; }
 }
 
 .widget-menu-item:hover {

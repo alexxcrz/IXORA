@@ -40,6 +40,7 @@ const construirConsultaActivos = (columnasDisponibles) => {
   
   const campos = [];
   if (columnasDisponibles.includes("id")) campos.push("id");
+  if (columnasDisponibles.includes("responsable_id")) campos.push("responsable_id");
   
   // Manejar tipo_equipo/equipo
   if (tieneTipoEquipo && tieneEquipo) {
@@ -170,13 +171,11 @@ router.get("/", authRequired, verificarPermiso("activos.responsables.ver"), (req
         try {
           const queryActivos = `SELECT ${consultaActivos.campos} FROM activos WHERE responsable_id = ?${consultaActivos.orderBy}`;
           activos = dbActivos.prepare(queryActivos).all(resp.id);
-          console.log(`✅ Responsable ${resp.id} (${resp.responsable}): ${activos.length} activo(s) encontrado(s)`);
         } catch (queryErr) {
           console.warn(`⚠️ Error ejecutando query de activos para responsable ${resp.id}:`, queryErr);
           // Intentar query simple
           try {
             activos = dbActivos.prepare("SELECT * FROM activos WHERE responsable_id = ?").all(resp.id);
-            console.log(`✅ Responsable ${resp.id} (${resp.responsable}): ${activos.length} activo(s) encontrado(s) (query simple)`);
           } catch (simpleErr) {
             console.warn(`⚠️ Error con query simple de activos para responsable ${resp.id}:`, simpleErr);
             activos = [];
@@ -388,9 +387,15 @@ router.post("/activo", requierePermiso("tab:activos"), (req, res) => {
       registroId: info.lastInsertRowid,
     });
 
+    // Obtener el activo completo recién creado
+    const consulta = construirConsultaActivos(nombresColumnasAct);
+    const activoCreado = dbActivos
+      .prepare(`SELECT ${consulta.campos} FROM activos WHERE id = ?`)
+      .get(info.lastInsertRowid);
+
     getIO().emit("activos_actualizados");
 
-    res.json({ ok: true, id: info.lastInsertRowid });
+    res.json(activoCreado || { ok: true, id: info.lastInsertRowid });
   } catch (err) {
     console.error("Error creando activo:", err);
     res.status(500).json({ error: "Error creando activo" });
@@ -1674,86 +1679,40 @@ router.get("/todos-qr-doc", requierePermiso("tab:activos"), async (req, res) => 
       });
     }
 
-    // Organizar QRs en filas de 3
-    const qrsPorFila = 3;
-    const filas = [];
-    for (let i = 0; i < qrData.length; i += qrsPorFila) {
-      filas.push(qrData.slice(i, i + qrsPorFila));
-    }
+    // Agregar cada QR con su texto debajo, sin tabla
+    for (const qrItem of qrData) {
+      // Agregar el QR (imagen)
+      children.push(
+        new Paragraph({
+          children: [
+            new ImageRun({
+              data: qrItem.qrBuffer,
+              transformation: {
+                width: 200,
+                height: 200,
+              },
+            }),
+          ],
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 100 },
+        })
+      );
 
-    // Crear tabla con QRs
-    const tableRows = [];
-    for (const fila of filas) {
-      const cells = [];
-      for (const qrItem of fila) {
-        cells.push(
-          new TableCell({
-            children: [
-              new Paragraph({
-                children: [
-                  new ImageRun({
-                    data: qrItem.qrBuffer,
-                    transformation: {
-                      width: 200,
-                      height: 200,
-                    },
-                  }),
-                ],
-                alignment: AlignmentType.CENTER,
-                spacing: { after: 100 },
-              }),
-              new Paragraph({
-                children: [
-                  new TextRun({
-                    text: qrItem.texto,
-                    size: 180, // 18 puntos (180 half-points) - tamaño reducido para que quepa
-                    bold: true,
-                  }),
-                ],
-                alignment: AlignmentType.CENTER,
-                spacing: { after: 0 },
-              }),
-            ],
-            width: {
-              size: 33.33,
-              type: WidthType.PERCENTAGE,
-            },
-            margins: {
-              top: 200,
-              bottom: 200,
-              left: 200,
-              right: 200,
-            },
-          })
-        );
-      }
-      
-      // Completar fila si tiene menos de 3 elementos
-      while (cells.length < qrsPorFila) {
-        cells.push(
-          new TableCell({
-            children: [],
-            width: {
-              size: 33.33,
-              type: WidthType.PERCENTAGE,
-            },
-          })
-        );
-      }
-      
-      tableRows.push(new TableRow({ children: cells }));
+      // Agregar el texto debajo del QR
+      children.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: qrItem.texto,
+              size: 240, // 24 puntos
+              bold: true,
+            }),
+          ],
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 400 },
+        })
+      );
     }
-
-    // Agregar tabla al documento
-    children.push(
-      new Table({
-        rows: tableRows,
-        width: {
-          size: 100,
-          type: WidthType.PERCENTAGE,
-        },
-      })
-    );
 
     // Crear documento
     const doc = new Document({
@@ -1789,11 +1748,22 @@ router.get("/todos-qr-doc", requierePermiso("tab:activos"), async (req, res) => 
 // ============================================================
 router.get("/pdas/todos-qr-doc", authRequired, verificarPermiso("activos.qr"), async (req, res) => {
   try {
-    // Obtener todos los PDAs
+    // Obtener todos los PDAs - solo las columnas necesarias
     const pdas = dbActivos
       .prepare(`
-        SELECT * FROM pdas
-        ORDER BY area, responsable, COALESCE(pda, equipo_pda)
+        SELECT 
+          pda,
+          imei,
+          modelo_pda,
+          android,
+          impresora,
+          serie_pda,
+          modelo_impresora,
+          encargado,
+          responsable,
+          area
+        FROM pdas
+        ORDER BY area, responsable, pda
       `)
       .all();
 
@@ -1832,13 +1802,13 @@ router.get("/pdas/todos-qr-doc", authRequired, verificarPermiso("activos.qr"), a
     // Preparar datos de QRs
     const qrData = [];
     for (const pda of pdas) {
-      const numeroEquipo = extraerNumero(pda.pda || pda.equipo_pda);
-      const areaPDA = pda.area || pda.unidad || "";
+      const numeroEquipo = extraerNumero(pda.pda);
+      const areaPDA = pda.area || "";
       const textoDebajoQR = `${areaPDA} ${numeroEquipo}`;
 
       // Crear datos para el QR
       const datosQR = {
-        pda: pda.pda || pda.equipo_pda || "N/A",
+        pda: pda.pda || "N/A",
         imei: pda.imei || "N/A",
         modelo_pda: pda.modelo_pda || "N/A",
         android: pda.android || "N/A",
@@ -1848,7 +1818,6 @@ router.get("/pdas/todos-qr-doc", authRequired, verificarPermiso("activos.qr"), a
         encargado: pda.encargado || "N/A",
         responsable: pda.responsable || "N/A",
         area: areaPDA,
-        observaciones: pda.observaciones || "N/A",
         fecha: dayjs().format("YYYY-MM-DD"),
         texto_identificador: textoDebajoQR,
       };
@@ -1864,86 +1833,40 @@ router.get("/pdas/todos-qr-doc", authRequired, verificarPermiso("activos.qr"), a
       });
     }
 
-    // Organizar QRs en filas de 3
-    const qrsPorFila = 3;
-    const filas = [];
-    for (let i = 0; i < qrData.length; i += qrsPorFila) {
-      filas.push(qrData.slice(i, i + qrsPorFila));
-    }
+    // Agregar cada QR con su texto debajo, sin tabla
+    for (const qrItem of qrData) {
+      // Agregar el QR (imagen)
+      children.push(
+        new Paragraph({
+          children: [
+            new ImageRun({
+              data: qrItem.qrBuffer,
+              transformation: {
+                width: 200,
+                height: 200,
+              },
+            }),
+          ],
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 100 },
+        })
+      );
 
-    // Crear tabla con QRs
-    const tableRows = [];
-    for (const fila of filas) {
-      const cells = [];
-      for (const qrItem of fila) {
-        cells.push(
-          new TableCell({
-            children: [
-              new Paragraph({
-                children: [
-                  new ImageRun({
-                    data: qrItem.qrBuffer,
-                    transformation: {
-                      width: 200,
-                      height: 200,
-                    },
-                  }),
-                ],
-                alignment: AlignmentType.CENTER,
-                spacing: { after: 100 },
-              }),
-              new Paragraph({
-                children: [
-                  new TextRun({
-                    text: qrItem.texto,
-                    size: 180, // 18 puntos (180 half-points) - tamaño reducido para que quepa
-                    bold: true,
-                  }),
-                ],
-                alignment: AlignmentType.CENTER,
-                spacing: { after: 0 },
-              }),
-            ],
-            width: {
-              size: 33.33,
-              type: WidthType.PERCENTAGE,
-            },
-            margins: {
-              top: 200,
-              bottom: 200,
-              left: 200,
-              right: 200,
-            },
-          })
-        );
-      }
-      
-      // Completar fila si tiene menos de 3 elementos
-      while (cells.length < qrsPorFila) {
-        cells.push(
-          new TableCell({
-            children: [],
-            width: {
-              size: 33.33,
-              type: WidthType.PERCENTAGE,
-            },
-          })
-        );
-      }
-      
-      tableRows.push(new TableRow({ children: cells }));
+      // Agregar el texto debajo del QR
+      children.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: qrItem.texto,
+              size: 240, // 24 puntos
+              bold: true,
+            }),
+          ],
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 400 },
+        })
+      );
     }
-
-    // Agregar tabla al documento
-    children.push(
-      new Table({
-        rows: tableRows,
-        width: {
-          size: 100,
-          type: WidthType.PERCENTAGE,
-        },
-      })
-    );
 
     // Crear documento
     const doc = new Document({
@@ -2271,86 +2194,40 @@ router.get("/tablets/todos-qr-doc", authRequired, verificarPermiso("activos.qr")
       });
     }
 
-    // Organizar QRs en filas de 3
-    const qrsPorFila = 3;
-    const filas = [];
-    for (let i = 0; i < qrData.length; i += qrsPorFila) {
-      filas.push(qrData.slice(i, i + qrsPorFila));
-    }
+    // Agregar cada QR con su texto debajo, sin tabla
+    for (const qrItem of qrData) {
+      // Agregar el QR (imagen)
+      children.push(
+        new Paragraph({
+          children: [
+            new ImageRun({
+              data: qrItem.qrBuffer,
+              transformation: {
+                width: 200,
+                height: 200,
+              },
+            }),
+          ],
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 100 },
+        })
+      );
 
-    // Crear tabla con QRs
-    const tableRows = [];
-    for (const fila of filas) {
-      const cells = [];
-      for (const qrItem of fila) {
-        cells.push(
-          new TableCell({
-            children: [
-              new Paragraph({
-                children: [
-                  new ImageRun({
-                    data: qrItem.qrBuffer,
-                    transformation: {
-                      width: 200,
-                      height: 200,
-                    },
-                  }),
-                ],
-                alignment: AlignmentType.CENTER,
-                spacing: { after: 100 },
-              }),
-              new Paragraph({
-                children: [
-                  new TextRun({
-                    text: qrItem.texto,
-                    size: 180, // 18 puntos (180 half-points) - tamaño reducido para que quepa
-                    bold: true,
-                  }),
-                ],
-                alignment: AlignmentType.CENTER,
-                spacing: { after: 0 },
-              }),
-            ],
-            width: {
-              size: 33.33,
-              type: WidthType.PERCENTAGE,
-            },
-            margins: {
-              top: 200,
-              bottom: 200,
-              left: 200,
-              right: 200,
-            },
-          })
-        );
-      }
-      
-      // Completar fila si tiene menos de 3 elementos
-      while (cells.length < qrsPorFila) {
-        cells.push(
-          new TableCell({
-            children: [],
-            width: {
-              size: 33.33,
-              type: WidthType.PERCENTAGE,
-            },
-          })
-        );
-      }
-      
-      tableRows.push(new TableRow({ children: cells }));
+      // Agregar el texto debajo del QR
+      children.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: qrItem.texto,
+              size: 240, // 24 puntos
+              bold: true,
+            }),
+          ],
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 400 },
+        })
+      );
     }
-
-    // Agregar tabla al documento
-    children.push(
-      new Table({
-        rows: tableRows,
-        width: {
-          size: 100,
-          type: WidthType.PERCENTAGE,
-        },
-      })
-    );
 
     // Crear documento
     const doc = new Document({

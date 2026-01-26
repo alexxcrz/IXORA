@@ -45,13 +45,48 @@ select:focus {
   padding: 18px;
   border-radius: var(--radio-xl);
   box-shadow: var(--sombra-md);
-  margin: 10px auto;
-  width: 95%;
-  max-width: 1200px;
+  margin: 0 auto var(--espacio-lg);
+  width: 98% !important;
+  max-width: 98% !important;
   display: flex;
   flex-direction: column;
   gap: 12px;
   border: 1px solid var(--borde-sutil);
+  box-sizing: border-box !important;
+  overflow-x: visible !important;
+  overflow-y: visible !important;
+  position: relative;
+}
+
+/* Asegurar que el contenedor de reportes permita scroll horizontal */
+.reportes-wrap .meses-list {
+  overflow-x: visible !important;
+  overflow-y: visible !important;
+}
+
+.reportes-wrap .mes-card {
+  overflow-x: visible !important;
+  overflow-y: visible !important;
+}
+
+/* Forzar que el header y las filas no se dividan en múltiples líneas */
+.dias-head,
+.dia-row {
+  word-wrap: normal !important;
+  word-break: keep-all !important;
+  overflow-wrap: normal !important;
+}
+
+/* Asegurar que el contenedor padre permita scroll horizontal cuando hay reportes */
+body:has(.reportes-wrap) .app,
+.app:has(.reportes-wrap) {
+  overflow-x: auto !important;
+}
+
+/* Fallback para navegadores sin soporte :has() */
+.app .reportes-wrap {
+  position: relative;
+  overflow-x: auto !important;
 }
 
 .header-row{
@@ -156,14 +191,19 @@ select:focus {
 .meses-list{ 
   display: flex; 
   flex-direction: column; 
-  gap: 10px; 
+  gap: 10px;
+  width: 100%;
+  overflow-x: visible;
+  overflow-y: visible;
+  box-sizing: border-box;
 }
 
 .mes-card{
   border: 1px solid var(--borde-medio);
   border-radius: var(--radio-xl);
-  overflow: hidden;
+  overflow: visible;
   background: var(--fondo-card);
+  width: 100%;
 }
 
 /* Máxima especificidad para mes-header - debe sobrescribir reglas globales */
@@ -181,6 +221,7 @@ select:focus {
   align-items: center !important;
   cursor: pointer !important;
   border-bottom: 2px solid var(--borde-sutil) !important;
+  border-radius: var(--radio-xl) !important;
   /* Asegurar que el texto sea visible en cualquier tema */
   color: var(--texto-boton, #ffffff) !important;
 }
@@ -288,48 +329,105 @@ select:focus {
   transform: translateY(0) scale(0.98);
 }
 
-.mes-body{ 
-  padding: 12px; 
-  display: flex; 
-  flex-direction: column; 
-  gap: 10px; 
-  background: var(--fondo-card);
-}
-
-.dias-head{
-  display: grid;
-  grid-template-columns: 1.2fr .8fr .8fr 1.2fr;
-  gap: 16px;
-  padding: 12px 14px;
-  background: var(--fondo-card);
-  border: 1px solid var(--borde-medio);
-  border-radius: var(--radio-full);
-  font-weight: 700;
-  color: var(--texto-principal) !important;
-  font-size: 0.95rem !important;
-}
-
-.dias-block{
+.mes-body{
+  padding: 12px;
   display: flex;
   flex-direction: column;
   gap: 10px;
+  background: var(--fondo-card);
+  overflow-x: auto !important;
+  overflow-y: visible !important;
+  width: 100%;
+  min-width: 0;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Asegurar que el contenedor de días tenga scroll horizontal */
+.mes-body .dias-block {
+  overflow-x: auto !important;
+  overflow-y: visible !important;
+  -webkit-overflow-scrolling: touch;
+}
+
+.dias-head{
+  display: grid !important;
+  grid-template-columns: repeat(10, minmax(0, 1fr)) !important;
+  gap: 20px !important;
+  padding: 16px 24px !important;
+  background: var(--fondo-card) !important;
+  border: 1px solid var(--borde-medio) !important;
+  border-radius: var(--radio-full) !important;
+  font-weight: 700 !important;
+  color: var(--texto-principal) !important;
+  font-size: 0.95rem !important;
+  white-space: nowrap !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  overflow: visible !important;
+  grid-auto-flow: row !important;
+  grid-auto-columns: auto !important;
+}
+
+.dias-block{
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 10px !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  overflow-x: visible !important;
+  overflow-y: visible !important;
+  box-sizing: border-box !important;
 }
 
 .dia-row{
-  display: grid;
-  grid-template-columns: 1.2fr .8fr .8fr 1.2fr;
-  gap: 16px;
-  align-items: center;
-  border: 1px solid var(--borde-medio);
-  border-radius: var(--radio-full);
-  padding: 12px 14px;
+  display: grid !important;
+  grid-template-columns: repeat(10, minmax(0, 1fr)) !important;
+  gap: 20px !important;
+  align-items: center !important;
+  border: 1px solid var(--borde-medio) !important;
+  border-radius: var(--radio-full) !important;
+  padding: 16px 24px !important;
   background: var(--fondo-card) !important;
   font-size: 0.95rem !important;
+  white-space: nowrap !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  overflow: visible !important;
+  grid-auto-flow: row !important;
+  grid-auto-columns: auto !important;
 }
 
 .dia-row > div {
   color: var(--texto-principal) !important;
-  font-weight: 500;
+  font-weight: 500 !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+  white-space: nowrap !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  width: 100% !important;
+  flex: 0 0 auto !important;
+}
+
+.dias-head > div {
+  overflow: visible !important;
+  text-overflow: clip !important;
+  white-space: nowrap !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  width: 100% !important;
+  flex: 0 0 auto !important;
 }
 
 .date-pill{
@@ -343,16 +441,27 @@ select:focus {
 }
 
 .col-fecha{ 
-  display: flex; 
-  align-items: center; 
+  display: flex !important; 
+  align-items: center !important;
+  justify-content: flex-start !important;
+  min-width: 0 !important;
 }
 
-.col-acc{ 
-  display: flex; 
-  gap: 10px; 
-  justify-content: flex-end; 
-  align-items: center;
-  padding-left: 8px;
+.col-tp,
+.col-tz {
+  text-align: center !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  min-width: 0 !important;
+}
+
+.col-acc {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  gap: 8px !important;
+  min-width: 0 !important;
 }
 
 .pager{
@@ -843,4 +952,41 @@ select:focus {
 
 .devoluciones-pedidos-container > div > div::-webkit-scrollbar-thumb:hover {
   background: var(--borde-visible);
+}
+
+/* =======================================================
+   REGLAS CRÍTICAS PARA GRID UNIFORME - MÁXIMA PRIORIDAD
+   ====================================================== */
+
+/* Forzar grid uniforme con máxima especificidad */
+.reportes-wrap .mes-card .mes-body .dias-head,
+.reportes-wrap .dias-head,
+.dias-head {
+  display: grid !important;
+  grid-template-columns: repeat(10, minmax(0, 1fr)) !important;
+  gap: 20px !important;
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+.reportes-wrap .mes-card .mes-body .dia-row,
+.reportes-wrap .dia-row,
+.dia-row {
+  display: grid !important;
+  grid-template-columns: repeat(10, minmax(0, 1fr)) !important;
+  gap: 20px !important;
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+/* Asegurar que cada celda ocupe exactamente 1/10 del espacio */
+.reportes-wrap .dias-head > div,
+.reportes-wrap .dia-row > div,
+.dias-head > div,
+.dia-row > div {
+  grid-column: span 1 !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  box-sizing: border-box !important;
 }

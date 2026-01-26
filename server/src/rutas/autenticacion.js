@@ -317,6 +317,7 @@ router.post("/auth/otp/verify", strictAntiVPNMiddleware, bruteForceProtection, a
       puesto: pack.user.puesto || null,
       correo: pack.user.correo || null,
       mostrar_telefono: pack.user.mostrar_telefono ?? 1,
+      birthday: pack.user.birthday || null,
       password_temporary: pack.user.password_temporary || 0,
     },
     roles: pack.roles,
@@ -425,7 +426,8 @@ router.put("/auth/perfil-info", authRequired, (req, res) => {
       tipo_recibido: typeof mostrar_telefono
     });
 
-    dbUsers
+    // Ejecutar la actualización
+    const updateResult = dbUsers
       .prepare(
         `UPDATE users
          SET puesto = ?, correo = ?, mostrar_telefono = ?, birthday = ?
@@ -433,15 +435,35 @@ router.put("/auth/perfil-info", authRequired, (req, res) => {
       )
       .run(puestoFinal, correoFinal, mostrarTelefonoFinal, birthdayFinal, userId);
 
+    console.log(`📝 Resultado de UPDATE:`, {
+      changes: updateResult.changes,
+      lastInsertRowid: updateResult.lastInsertRowid
+    });
+
+    // Verificar que se actualizó correctamente
+    if (updateResult.changes === 0) {
+      console.warn(`⚠️ No se actualizó ningún registro para el usuario ${userId}`);
+    }
+
+    // Obtener los datos actualizados inmediatamente después
     const actualizado = dbUsers
       .prepare("SELECT id, name, phone, nickname, photo, puesto, correo, mostrar_telefono, birthday, password_temporary FROM users WHERE id = ?")
       .get(userId);
 
-    console.log(`✅ Perfil actualizado:`, {
+    console.log(`✅ Perfil actualizado en BD:`, {
+      id: actualizado?.id,
+      puesto: actualizado?.puesto || 'null',
+      correo: actualizado?.correo || 'null',
       birthday: actualizado?.birthday || 'null',
       mostrar_telefono: actualizado?.mostrar_telefono,
       tipo_mostrar_telefono: typeof actualizado?.mostrar_telefono
     });
+
+    // Verificar que los datos se guardaron correctamente
+    if (!actualizado) {
+      console.error(`❌ Error: No se pudo obtener el usuario actualizado con id ${userId}`);
+      return res.status(500).json({ error: "Error al obtener datos actualizados del usuario" });
+    }
 
     res.json({ ok: true, user: actualizado });
   } catch (err) {

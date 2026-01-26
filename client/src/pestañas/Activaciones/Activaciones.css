@@ -151,18 +151,23 @@
 
 /* Tabla */
 .activaciones-tabla-container {
-  overflow-x: auto;
+  overflow-x: auto !important;
+  overflow-y: visible !important;
+  -webkit-overflow-scrolling: touch !important;
   border-radius: var(--radio-xl);
   border: 1px solid var(--borde-sutil);
   background: var(--fondo-card);
+  width: 100% !important;
+  max-width: 100% !important;
 }
 
 .activaciones-tabla {
-  width: 100%;
-  border-collapse: collapse;
-  min-width: 1700px;
+  width: max-content !important;
+  min-width: 1700px !important;
+  border-collapse: collapse !important;
   font-size: 0.8rem;
-  table-layout: fixed;
+  table-layout: fixed !important;
+  overflow: visible !important;
 }
 
 .activaciones-tabla thead {
@@ -178,7 +183,9 @@
   font-weight: 600;
   color: var(--texto-principal);
   border-bottom: 2px solid var(--borde-medio);
-  white-space: nowrap;
+  white-space: nowrap !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
   font-size: 0.75rem;
 }
 
@@ -266,9 +273,9 @@
   max-width: 80px !important;
   min-width: 80px !important;
   box-sizing: border-box !important;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow: visible !important;
+  text-overflow: clip !important;
+  white-space: nowrap !important;
 }
 
 .activaciones-tabla td.col-usuario {
@@ -276,8 +283,10 @@
   max-width: 150px !important;
   min-width: 150px !important;
   box-sizing: border-box !important;
-  word-break: break-word;
-  white-space: normal;
+  word-break: normal !important;
+  white-space: nowrap !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
 }
 
 .activaciones-tabla td.col-fecha-hora {

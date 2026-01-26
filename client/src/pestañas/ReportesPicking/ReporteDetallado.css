@@ -228,6 +228,9 @@
 }
 
 .reporte-table th {
+  white-space: nowrap !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
   padding: var(--espacio-sm);
   text-align: left;
   font-weight: 600;

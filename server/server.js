@@ -7,6 +7,11 @@ import http from "http";
 import cors from "cors";
 import path from "path";
 import os from "os";
+import { fileURLToPath } from "url";
+
+// Para ES modules: obtener __dirname
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Configuración y rutas
 import "./src/config/baseDeDatos.js";
@@ -22,6 +27,7 @@ import devolucionesRoutes from "./src/rutas/devoluciones.js";
 import chatRoutes from "./src/rutas/chat.js";
 import notificacionesRoutes from "./src/rutas/notificaciones.js";
 import activosRoutes from "./src/rutas/activos.js";
+import reunionesRoutes from "./src/rutas/reuniones.js";
 // IXORA IA está completamente integrado en Node.js
 
 const app = express();
@@ -148,6 +154,7 @@ app.use(adminRoutes);
 app.use("/chat", chatRoutes);
 app.use("/notificaciones", notificacionesRoutes);
 app.use("/activos", activosRoutes);
+app.use("/reuniones", reunionesRoutes);
 
 // Rutas integradas para IXORA IA (completamente integrado en Node.js)
 import ixoraIARoutes from "./src/rutas/pinaIA.js";
@@ -168,7 +175,7 @@ app.use("/api/auditoria", auditoriaRoutes);
 import activacionesRoutes from "./src/rutas/activaciones.js";
 app.use("/activaciones", activacionesRoutes);
 
-// Health check
+// Health check y endpoints especiales (ANTES del catch-all)
 app.get("/health", (_req, res) =>
   res.json({ ok: true, time: new Date().toISOString() })
 );
@@ -217,7 +224,6 @@ app.post("/server-config", (req, res) => {
 });
 
 // Endpoint de debug histórico
-
 app.get("/__debug_hist", (req, res) => {
   try {
     const rows = dbHist
@@ -236,6 +242,192 @@ app.get("/__debug_hist", (req, res) => {
     res.json({ error: e.message });
   }
 });
+
+// Servir archivos estáticos del cliente React (producción)
+// Buscar la carpeta build en diferentes ubicaciones posibles
+function findClientBuildPath() {
+  // __dirname es el directorio donde está server.js
+  // En desarrollo: server/
+  // En producción empaquetada: resources/app/server/ o similar
+  const serverDir = __dirname;
+  const appDir = path.dirname(serverDir); // Directorio de la app (IXORA/)
+  
+  // Usar APP_PATH si está disponible (pasado desde Electron)
+  let appBasePath = process.env.APP_PATH || appDir;
+  
+  // En Windows, process.execPath puede ser el .exe de Electron
+  // Necesitamos obtener el directorio base de la aplicación
+  try {
+    // Si estamos empaquetados, intentar encontrar resources/app
+    const execDir = path.dirname(process.execPath);
+    const possibleAppBase = path.join(execDir, "resources", "app");
+    if (fs.existsSync(possibleAppBase)) {
+      appBasePath = possibleAppBase;
+      console.log(`✅ Encontrado resources/app en: ${possibleAppBase}`);
+    }
+    
+    // También verificar si APP_PATH apunta a resources/app
+    if (process.env.APP_PATH && process.env.APP_PATH.includes("resources")) {
+      appBasePath = process.env.APP_PATH;
+    }
+  } catch (e) {
+    console.error("Error buscando resources/app:", e.message);
+  }
+  
+  const possiblePaths = [
+    // PRIORIDAD 1: Usar APP_PATH si está disponible (más confiable desde Electron)
+    process.env.APP_PATH ? path.join(process.env.APP_PATH, "client", "build") : null,
+    // PRIORIDAD 2: Desarrollo: desde server/ hacia ../client/build (usar resolve para rutas absolutas)
+    path.resolve(serverDir, "..", "client", "build"),
+    // PRIORIDAD 3: Desde appDir hacia client/build
+    path.resolve(appDir, "client", "build"),
+    // PRIORIDAD 4: Producción empaquetada: desde appBasePath hacia client/build
+    path.resolve(appBasePath, "client", "build"),
+    // PRIORIDAD 5: Buscar desde process.cwd() (puede variar según cómo se ejecute)
+    path.resolve(process.cwd(), "..", "client", "build"),
+    path.resolve(process.cwd(), "client", "build"),
+    // PRIORIDAD 6: Si está empaquetado de otra manera
+    process.execPath ? path.resolve(path.dirname(process.execPath), "resources", "app", "client", "build") : null,
+    process.execPath ? path.resolve(path.dirname(process.execPath), "client", "build") : null,
+  ].filter(p => p !== null); // Filtrar nulls
+  
+  console.log(`🔍 Buscando carpeta build del cliente...`);
+  console.log(`   APP_PATH (desde Electron): ${process.env.APP_PATH || 'no definido'}`);
+  console.log(`   Directorio del servidor: ${serverDir}`);
+  console.log(`   Directorio de la app: ${appDir}`);
+  console.log(`   App base path: ${appBasePath}`);
+  console.log(`   process.cwd(): ${process.cwd()}`);
+  console.log(`   process.execPath: ${process.execPath}`);
+  
+  for (const buildPath of possiblePaths) {
+    try {
+      const normalizedPath = path.resolve(buildPath); // Usar resolve en lugar de normalize
+      if (fs.existsSync(normalizedPath)) {
+        const indexPath = path.join(normalizedPath, "index.html");
+        // Verificar con diferentes métodos para asegurarnos
+        const indexPathResolved = path.resolve(normalizedPath, "index.html");
+        
+        if (fs.existsSync(indexPath) || fs.existsSync(indexPathResolved)) {
+          console.log(`✅ Encontrado en: ${normalizedPath}`);
+          console.log(`   index.html verificado en: ${indexPathResolved}`);
+          return normalizedPath;
+        } else {
+          // Listar archivos en la carpeta para debugging
+          try {
+            const files = fs.readdirSync(normalizedPath);
+            console.log(`⚠️  Carpeta existe pero no tiene index.html: ${normalizedPath}`);
+            console.log(`   Archivos en la carpeta: ${files.slice(0, 5).join(', ')}${files.length > 5 ? '...' : ''}`);
+            console.log(`   Buscado en: ${indexPathResolved}`);
+          } catch (e) {
+            console.log(`⚠️  Carpeta existe pero no se puede leer: ${normalizedPath} - ${e.message}`);
+          }
+        }
+      }
+    } catch (e) {
+      // Ignorar errores de rutas inválidas
+      continue;
+    }
+  }
+  
+  console.warn(`❌ No se encontró la carpeta build en ninguna ubicación posible.`);
+  console.warn(`   Rutas probadas:`);
+  possiblePaths.forEach(p => {
+    const normalizedPath = path.normalize(p);
+    const exists = fs.existsSync(normalizedPath);
+    console.warn(`   ${exists ? '✓' : '✗'} ${normalizedPath}`);
+  });
+  
+  return null;
+}
+
+const clientBuildPath = findClientBuildPath();
+
+if (clientBuildPath) {
+  console.log(`✅ Serviendo archivos estáticos desde: ${clientBuildPath}`);
+  
+  // Verificar que el index.html existe
+  const indexPath = path.join(clientBuildPath, "index.html");
+  if (!fs.existsSync(indexPath)) {
+    console.error(`❌ ERROR: No se encontró index.html en: ${indexPath}`);
+  } else {
+    console.log(`✅ index.html encontrado en: ${indexPath}`);
+  }
+  
+  // Servir archivos estáticos (CSS, JS, imágenes, etc.)
+  app.use(express.static(clientBuildPath, {
+    index: false, // No usar index.html automáticamente, lo manejaremos manualmente
+  }));
+  
+  // Catch-all handler: enviar React app para todas las rutas no API
+  // Esto permite que React Router maneje el enrutamiento del lado del cliente
+  app.get("*", (req, res, next) => {
+    // Si la ruta es una ruta de API o de backend, devolver 404
+    if (
+      req.path.startsWith("/api") ||
+      req.path.startsWith("/auth") ||
+      req.path.startsWith("/admin") ||
+      req.path.startsWith("/inventario") ||
+      req.path.startsWith("/picking") ||
+      req.path.startsWith("/reenvios") ||
+      req.path.startsWith("/reportes") ||
+      req.path.startsWith("/devoluciones") ||
+      req.path.startsWith("/chat") ||
+      req.path.startsWith("/notificaciones") ||
+      req.path.startsWith("/uploads") ||
+      req.path.startsWith("/sounds") ||
+      req.path.startsWith("/personalizacion") ||
+      req.path.startsWith("/activaciones") ||
+      req.path.startsWith("/activos") ||
+      req.path.startsWith("/health") ||
+      req.path.startsWith("/server-info") ||
+      req.path.startsWith("/server-config") ||
+      req.path.startsWith("/__debug_hist") ||
+      req.path.startsWith("/tienda")
+    ) {
+      return next(); // Continuar al siguiente middleware (404 handler de Express)
+    }
+    
+    // Para todas las demás rutas, servir el index.html de React
+    const htmlPath = path.join(clientBuildPath, "index.html");
+    if (fs.existsSync(htmlPath)) {
+      res.sendFile(htmlPath, (err) => {
+        if (err) {
+          console.error("Error enviando index.html:", err);
+          res.status(500).send(`Error al cargar la aplicación: ${err.message}`);
+        }
+      });
+    } else {
+      console.error(`❌ No se puede enviar index.html: no existe en ${htmlPath}`);
+      res.status(500).send(`Error: No se encontró el archivo index.html en: ${htmlPath}`);
+    }
+  });
+} else {
+  console.error("❌ ERROR CRÍTICO: No se encontró la carpeta client/build.");
+  console.error(`   Directorio actual: ${process.cwd()}`);
+  console.error(`   process.execPath: ${process.execPath}`);
+  console.error("   La aplicación React no se podrá cargar en producción.");
+  
+  // Servir una página de error útil
+  app.get("/", (req, res) => {
+    res.status(500).send(`
+      <html>
+        <head><title>Error - IXORA</title></head>
+        <body style="font-family: Arial; padding: 40px; text-align: center;">
+          <h1>❌ Error al cargar la aplicación</h1>
+          <p>No se encontró la carpeta <code>client/build</code></p>
+          <p>Por favor, verifica que la aplicación se haya compilado correctamente.</p>
+          <pre style="background: #f0f0f0; padding: 20px; margin: 20px; text-align: left;">
+Directorios buscados:
+- ${process.env.APP_PATH || 'APP_PATH no definido'}
+- ${path.dirname(__dirname)}
+- ${process.cwd()}
+- ${process.execPath ? path.dirname(process.execPath) : 'N/A'}
+          </pre>
+        </body>
+      </html>
+    `);
+  });
+}
 
 // Iniciar servidor
 const PORT = process.env.PORT || 3001;

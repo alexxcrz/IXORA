@@ -1,7 +1,7 @@
 const { createProxyMiddleware } = require('http-proxy-middleware');
 
 // IP y puerto del servidor - actualizar según sea necesario
-const SERVER_IP = process.env.REACT_APP_SERVER_IP || '172.16.30.12';
+const SERVER_IP = process.env.REACT_APP_SERVER_IP || '172.16.30.5';
 const SERVER_PORT = process.env.REACT_APP_SERVER_PORT || '3001';
 const SERVER_URL = `http://${SERVER_IP}:${SERVER_PORT}`;
 

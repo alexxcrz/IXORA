@@ -349,8 +349,8 @@ h4:not(.texto-secundario):not(.texto-terciario),
 h5:not(.texto-secundario):not(.texto-terciario),
 h6:not(.texto-secundario):not(.texto-terciario),
 p:not(.texto-secundario):not(.texto-terciario),
-span:not(.texto-secundario):not(.texto-terciario):not(.mes-txt):not(.mes-total):not(.chev):not(.tab-icon):not(.tab-label):not(.chat-badge-small):not(.chat-badge),
-div:not(.texto-secundario):not(.texto-terciario):not(.msg-yo-pro):not(.msg-otro-pro),
+span:not(.texto-secundario):not(.texto-terciario):not(.mes-txt):not(.mes-total):not(.chev):not(.tab-icon):not(.tab-label):not(.chat-badge-small):not(.chat-badge):not(.dev-contador-badge),
+div:not(.texto-secundario):not(.texto-terciario):not(.msg-yo-pro):not(.msg-otro-pro):not(.chat-tabs .tab.active):not(.tab.active):not(.dev-contador-badge),
 label:not(.texto-secundario):not(.texto-terciario),
 li:not(.texto-secundario):not(.texto-terciario),
 td:not(.texto-secundario):not(.texto-terciario),
@@ -367,6 +367,16 @@ th:not(.texto-secundario):not(.texto-terciario) {
 .chat-badge-small,
 .chat-badge {
   color: inherit !important;
+}
+
+/* Excepción para tabs activos del chat - texto siempre blanco */
+.chat-tabs .tab.active,
+.chat-tabs .tab.active *,
+.chat-tabs .tab.active span,
+div.chat-tabs div.tab.active,
+div.chat-tabs div.tab.active * {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
 }
 
 /* Excepciones para mensajes del chat - deben usar sus propios colores */
@@ -448,15 +458,36 @@ textarea:not(.login-bg textarea):not(.login-container textarea):not(.login-form-
 
 /* =======================================================
    TABLAS - PROFESIONALES Y LEGIBLES
+   ALINEACIÓN ESTRICTA Y SCROLL HORIZONTAL
    ====================================================== */
+
+/* Contenedores de tabla - Scroll horizontal obligatorio */
+.table-wrapper,
+.tabla-container,
+.table-container,
+.items-table,
+.admin-table-wrapper,
+.gestion-table-wrapper,
+[class*="table-wrapper"],
+[class*="tabla-container"],
+[class*="table-container"] {
+  overflow-x: auto !important;
+  overflow-y: visible !important;
+  -webkit-overflow-scrolling: touch !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  position: relative !important;
+}
 
 table {
   background: var(--fondo-card);
   border: 1px solid var(--borde-sutil);
   border-radius: var(--radio-xl);
-  overflow: hidden;
-  width: 100%;
-  border-collapse: collapse;
+  overflow: visible !important;
+  width: max-content !important;
+  min-width: 100% !important;
+  border-collapse: collapse !important;
+  table-layout: fixed !important;
 }
 
 thead {
@@ -473,6 +504,10 @@ th {
   font-size: 0.875rem;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  white-space: nowrap !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+  position: relative !important;
 }
 
 td {
@@ -481,6 +516,10 @@ td {
   border-bottom: 1px solid var(--borde-sutil) !important;
   padding: var(--espacio-md);
   font-size: 0.9rem;
+  white-space: nowrap !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+  vertical-align: middle !important;
 }
 
 /* Unificar fondos de contenedores principales de pestañas */
@@ -525,15 +564,77 @@ table textarea {
 
 tbody tr {
   transition: all var(--transicion-rapida);
+  display: table-row !important;
 }
 
 tbody tr:hover {
   box-shadow: inset 2px 0 0 var(--borde-visible);
 }
 
-
 tbody tr:last-child td {
   border-bottom: none;
+}
+
+/* =======================================================
+   REGLAS ESTRICTAS PARA TODAS LAS TABLAS
+   Prohibir desalineación - Scroll horizontal obligatorio
+   ====================================================== */
+
+/* TODAS las tablas deben tener scroll horizontal */
+table,
+.table,
+.tabla,
+[class*="table"],
+[class*="tabla"] {
+  width: max-content !important;
+  min-width: 100% !important;
+  table-layout: fixed !important;
+  border-collapse: collapse !important;
+  overflow: visible !important;
+}
+
+/* TODOS los contenedores de tabla deben tener scroll */
+.table-wrapper,
+.tabla-container,
+.table-container,
+.items-table,
+.admin-table-wrapper,
+.gestion-table-wrapper,
+[class*="table-wrapper"],
+[class*="tabla-container"],
+[class*="table-container"],
+[class*="wrapper"]:has(table) {
+  overflow-x: auto !important;
+  overflow-y: visible !important;
+  -webkit-overflow-scrolling: touch !important;
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+/* TODAS las celdas deben mantener alineación estricta */
+table th,
+table td,
+.table th,
+.table td,
+.tabla th,
+.tabla td,
+[class*="table"] th,
+[class*="table"] td {
+  white-space: nowrap !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+  vertical-align: middle !important;
+}
+
+/* Eliminar cualquier regla que interfiera con la alineación */
+table th[style*="white-space"],
+table td[style*="white-space"] {
+  white-space: nowrap !important;
+}
+
+table th[style*="overflow"],
+table td[style*="overflow"] {
+  overflow: visible !important;
 }
 
 /* =======================================================
@@ -561,6 +662,40 @@ tbody tr:last-child td {
   padding: 20px !important;
 }
 
+/* CRÍTICO: Forzar tamaño pequeño en móviles para TODOS los modales */
+@media (max-width: 768px) {
+  .modal-overlay {
+    padding: 10px !important;
+  }
+
+  /* Aplicar a TODOS los modales sin excepción - máxima especificidad */
+  .modal-overlay > .modal,
+  div.modal-overlay > div.modal,
+  .modal-overlay .modal,
+  [class*="modal-overlay"] > [class*="modal"],
+  body > div.modal-overlay > div.modal,
+  html body div.modal-overlay > div.modal {
+    max-width: calc(100vw - 20px) !important;
+    width: calc(100vw - 20px) !important;
+    min-width: 0 !important;
+    margin: 0 !important;
+    max-height: calc(100vh - 20px) !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Específico para modal-sm */
+  .modal-overlay > .modal.modal-sm,
+  div.modal-overlay > div.modal.modal-sm,
+  .modal-overlay .modal.modal-sm,
+  [class*="modal-overlay"] > [class*="modal"][class*="modal-sm"],
+  body > div.modal-overlay > div.modal.modal-sm {
+    max-width: calc(100vw - 20px) !important;
+    width: calc(100vw - 20px) !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+  }
+}
+
 .modal-content {
   background: var(--fondo-card);
   color: var(--texto-principal);
@@ -572,6 +707,167 @@ tbody tr:last-child td {
   width: 90%;
   margin: auto;
   position: relative;
+}
+
+/* Sistema de tamaños proporcionales para modales */
+.modal {
+  background: var(--fondo-card);
+  border-radius: 12px;
+  box-shadow: var(--sombra-xl);
+  border: 1px solid var(--borde-sutil);
+  color: var(--texto-principal);
+  display: flex;
+  flex-direction: column;
+  max-height: 90vh;
+  overflow: hidden;
+  margin: auto;
+  position: relative;
+}
+
+/* Modal pequeño - Formularios simples (3-4 campos) */
+.modal.modal-sm {
+  max-width: 400px;
+  width: calc(100% - 40px);
+}
+
+/* Modal mediano - Formularios normales (5-8 campos) */
+.modal.modal-md {
+  max-width: 500px;
+  width: calc(100% - 40px);
+}
+
+/* Modal grande - Formularios extensos o contenido con tablas pequeñas */
+.modal.modal-lg {
+  max-width: 700px;
+  width: calc(100% - 40px);
+}
+
+/* Modal extra grande - Solo para contenido muy extenso */
+.modal.modal-xl {
+  max-width: 900px;
+  width: calc(100% - 40px);
+}
+
+/* Si no tiene clase de tamaño, usar mediano por defecto */
+.modal:not(.modal-sm):not(.modal-md):not(.modal-lg):not(.modal-xl):not(.modal-qr) {
+  max-width: 500px;
+  width: calc(100% - 40px);
+}
+
+/* =======================================================
+   MODALES RESPONSIVE - DISPOSITIVOS PEQUEÑOS
+   ====================================================== */
+@media (max-width: 768px) {
+  .modal-overlay {
+    padding: 10px !important;
+  }
+
+  .modal-overlay .modal,
+  .modal,
+  div.modal-overlay > div.modal {
+    max-width: calc(100vw - 20px) !important;
+    width: calc(100vw - 20px) !important;
+    margin: 0 !important;
+    max-height: calc(100vh - 20px) !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  .modal-overlay .modal.modal-sm,
+  .modal.modal-sm,
+  div.modal-overlay > div.modal.modal-sm {
+    max-width: calc(100vw - 20px) !important;
+    width: calc(100vw - 20px) !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Forzar que los modales pequeños no excedan el viewport - MÁXIMA ESPECIFICIDAD */
+  div.modal-overlay > div.modal.modal-sm,
+  .modal-overlay > .modal.modal-sm,
+  div[class*="modal-overlay"] > div[class*="modal"][class*="modal-sm"],
+  div[class*="modal-overlay"] > div.modal.modal-sm {
+    max-width: calc(100vw - 20px) !important;
+    width: calc(100vw - 20px) !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Asegurar que ningún estilo inline o de otro CSS pueda sobrescribir */
+  div[class*="modal-overlay"] > div[class*="modal"][class*="modal-sm"],
+  body > div.modal-overlay > div.modal.modal-sm,
+  html body div.modal-overlay > div.modal.modal-sm {
+    max-width: calc(100vw - 20px) !important;
+    width: calc(100vw - 20px) !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  .modal.modal-md {
+    max-width: calc(100% - 20px) !important;
+    width: calc(100% - 20px) !important;
+  }
+
+  .modal.modal-lg {
+    max-width: calc(100% - 20px) !important;
+    width: calc(100% - 20px) !important;
+  }
+
+  .modal.modal-xl {
+    max-width: calc(100% - 20px) !important;
+    width: calc(100% - 20px) !important;
+  }
+
+  .modal-content {
+    max-width: calc(100% - 20px) !important;
+    width: calc(100% - 20px) !important;
+    padding: 16px !important;
+  }
+
+  .modal-header {
+    padding: 12px 16px !important;
+  }
+
+  .modal-header h3 {
+    font-size: 1.1rem !important;
+  }
+
+  .modal-body {
+    padding: 16px !important;
+  }
+
+  .modal-body label {
+    font-size: 0.85rem !important;
+    margin-bottom: 4px !important;
+  }
+
+  .modal-body input,
+  .modal-body textarea,
+  .modal-body select {
+    padding: 8px 12px !important;
+    font-size: 0.9rem !important;
+    margin-bottom: 12px !important;
+  }
+
+  .modal-actions {
+    padding: 12px 16px !important;
+    gap: 8px !important;
+    flex-wrap: wrap;
+  }
+
+  .modal-actions .btn,
+  .modal-actions button {
+    padding: 10px 16px !important;
+    font-size: 0.9rem !important;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .modal-close {
+    width: 28px !important;
+    height: 28px !important;
+    font-size: 1.5rem !important;
+  }
 }
 
 .modal-actions,
@@ -803,23 +1099,37 @@ html body label:not(.login-bg label):not(.login-container label):not(.login-form
   .tabla-wrapper,
   .table-wrapper,
   .gestion-table-wrapper,
-  .admin-table-wrapper {
+  .admin-table-wrapper,
+  .items-table,
+  [class*="table-wrapper"],
+  [class*="tabla-container"] {
     overflow-x: auto !important;
-    -webkit-overflow-scrolling: touch;
-    max-width: 100%;
+    overflow-y: visible !important;
+    -webkit-overflow-scrolling: touch !important;
+    max-width: 100% !important;
+    width: 100% !important;
   }
 
   table {
-    display: block;
-    width: 100%;
-    overflow-x: auto;
+    width: max-content !important;
+    min-width: 100% !important;
+    table-layout: fixed !important;
+    display: table !important;
+    overflow: visible !important;
   }
 
   table thead,
   table tbody,
   table tfoot {
-    display: table;
-    width: 100%;
+    display: table-row-group !important;
+    width: 100% !important;
+  }
+
+  table thead th,
+  table tbody td {
+    white-space: nowrap !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
   }
 
   /* Tabs adaptables */
@@ -884,8 +1194,8 @@ html body #root .app .card h4:not(.texto-secundario):not(.texto-terciario),
 html body #root .app .card h5:not(.texto-secundario):not(.texto-terciario),
 html body #root .app .card h6:not(.texto-secundario):not(.texto-terciario),
 html body #root .app .card p:not(.texto-secundario):not(.texto-terciario),
-html body #root .app .card span:not(.texto-secundario):not(.texto-terciario):not(.mes-txt):not(.mes-total):not(.chev):not(.tab-icon):not(.tab-label):not(.chat-badge-small):not(.chat-badge):not(.msg-yo-pro):not(.msg-otro-pro),
-html body #root .app .card div:not(.texto-secundario):not(.texto-terciario):not(.msg-yo-pro):not(.msg-otro-pro),
+html body #root .app .card span:not(.texto-secundario):not(.texto-terciario):not(.mes-txt):not(.mes-total):not(.chev):not(.tab-icon):not(.tab-label):not(.chat-badge-small):not(.chat-badge):not(.msg-yo-pro):not(.msg-otro-pro):not(.dev-contador-badge),
+html body #root .app .card div:not(.texto-secundario):not(.texto-terciario):not(.msg-yo-pro):not(.msg-otro-pro):not(.dev-contador-badge),
 html body #root .app .modal-content h1:not(.texto-secundario):not(.texto-terciario),
 html body #root .app .modal-content h2:not(.texto-secundario):not(.texto-terciario),
 html body #root .app .modal-content h3:not(.texto-secundario):not(.texto-terciario),
@@ -893,8 +1203,8 @@ html body #root .app .modal-content h4:not(.texto-secundario):not(.texto-terciar
 html body #root .app .modal-content h5:not(.texto-secundario):not(.texto-terciario),
 html body #root .app .modal-content h6:not(.texto-secundario):not(.texto-terciario),
 html body #root .app .modal-content p:not(.texto-secundario):not(.texto-terciario),
-html body #root .app .modal-content span:not(.texto-secundario):not(.texto-terciario):not(.mes-txt):not(.mes-total):not(.chev):not(.tab-icon):not(.tab-label):not(.chat-badge-small):not(.chat-badge):not(.msg-yo-pro):not(.msg-otro-pro),
-html body #root .app .modal-content div:not(.texto-secundario):not(.texto-terciario):not(.msg-yo-pro):not(.msg-otro-pro) {
+html body #root .app .modal-content span:not(.texto-secundario):not(.texto-terciario):not(.mes-txt):not(.mes-total):not(.chev):not(.tab-icon):not(.tab-label):not(.chat-badge-small):not(.chat-badge):not(.msg-yo-pro):not(.msg-otro-pro):not(.dev-contador-badge),
+html body #root .app .modal-content div:not(.texto-secundario):not(.texto-terciario):not(.msg-yo-pro):not(.msg-otro-pro):not(.dev-contador-badge) {
   color: var(--texto-principal) !important;
 }
 
@@ -902,16 +1212,16 @@ html body #root .app .modal-content div:not(.texto-secundario):not(.texto-tercia
 html body #root .app table th:not(.texto-secundario):not(.texto-terciario),
 html body #root .app table td:not(.texto-secundario):not(.texto-terciario),
 html body #root .app table label:not(.texto-secundario):not(.texto-terciario),
-html body #root .app table span:not(.texto-secundario):not(.texto-terciario):not(.mes-txt):not(.mes-total):not(.chev):not(.tab-icon):not(.tab-label):not(.chat-badge-small):not(.chat-badge):not(.msg-yo-pro):not(.msg-otro-pro),
-html body #root .app table div:not(.texto-secundario):not(.texto-terciario):not(.msg-yo-pro):not(.msg-otro-pro) {
+html body #root .app table span:not(.texto-secundario):not(.texto-terciario):not(.mes-txt):not(.mes-total):not(.chev):not(.tab-icon):not(.tab-label):not(.chat-badge-small):not(.chat-badge):not(.msg-yo-pro):not(.msg-otro-pro):not(.dev-contador-badge),
+html body #root .app table div:not(.texto-secundario):not(.texto-terciario):not(.msg-yo-pro):not(.msg-otro-pro):not(.dev-contador-badge) {
   color: var(--texto-principal) !important;
 }
 
 /* Asegurar que TODOS los elementos de texto en listas sean visibles */
 html body #root .app ul li:not(.texto-secundario):not(.texto-terciario),
 html body #root .app ol li:not(.texto-secundario):not(.texto-terciario),
-html body #root .app ul li span:not(.texto-secundario):not(.texto-terciario):not(.mes-txt):not(.mes-total):not(.chev):not(.tab-icon):not(.tab-label):not(.chat-badge-small):not(.chat-badge):not(.msg-yo-pro):not(.msg-otro-pro),
-html body #root .app ol li span:not(.texto-secundario):not(.texto-terciario):not(.mes-txt):not(.mes-total):not(.chev):not(.tab-icon):not(.tab-label):not(.chat-badge-small):not(.chat-badge):not(.msg-yo-pro):not(.msg-otro-pro) {
+html body #root .app ul li span:not(.texto-secundario):not(.texto-terciario):not(.mes-txt):not(.mes-total):not(.chev):not(.tab-icon):not(.tab-label):not(.chat-badge-small):not(.chat-badge):not(.msg-yo-pro):not(.msg-otro-pro):not(.dev-contador-badge),
+html body #root .app ol li span:not(.texto-secundario):not(.texto-terciario):not(.mes-txt):not(.mes-total):not(.chev):not(.tab-icon):not(.tab-label):not(.chat-badge-small):not(.chat-badge):not(.msg-yo-pro):not(.msg-otro-pro):not(.dev-contador-badge) {
   color: var(--texto-principal) !important;
 }
 

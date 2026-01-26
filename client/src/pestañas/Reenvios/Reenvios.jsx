@@ -4,7 +4,7 @@ import "./Reenvios.css";
 import { useAuth } from "../../AuthContext";
 import { useAlert } from "../../components/AlertModal";
 
-export default function Reenvios({ serverUrl, pushToast, fecha }) {
+export default function Reenvios({ serverUrl, pushToast, fecha, socket }) {
   const { authFetch } = useAuth();
   const { showConfirm, showAlert } = useAlert();
   const [reenvios, setReenvios] = useState([]);
@@ -211,6 +211,23 @@ export default function Reenvios({ serverUrl, pushToast, fecha }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ───────────────────────────
+  // SOCKET.IO - ACTUALIZACIONES EN TIEMPO REAL
+  // ───────────────────────────
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleReenviosActualizados = () => {
+      cargar();
+    };
+
+    socket.on("reenvios_actualizados", handleReenviosActualizados);
+
+    return () => {
+      socket.off("reenvios_actualizados", handleReenviosActualizados);
+    };
+  }, [socket, serverUrl]);
+
   const shareHandledRef = useRef(false);
 
   const abrirDetalleReenvio = async (item, esHistorico = false) => {
@@ -266,7 +283,6 @@ export default function Reenvios({ serverUrl, pushToast, fecha }) {
     const socket = window.socket;
 
     const handleReenviosActualizados = () => {
-      console.log("📡 Evento reenvios_actualizados recibido, recargando...");
       // Pequeño delay para asegurar que el servidor haya completado la transacción
       setTimeout(() => {
         cargar();
@@ -937,19 +953,8 @@ export default function Reenvios({ serverUrl, pushToast, fecha }) {
   };
 
   const cambiarEstatus = async (item, estatus, cerrarModal = false) => {
-    try {
-      await authFetch(`${serverUrl}/reenvios/${item.id}/estatus`, {
-        method: "PUT",
-        body: JSON.stringify({ estatus }),
-      });
-      pushToast?.("✅ Estatus actualizado", "ok");
-      // Cerrar modal si se solicitó
-      if (cerrarModal) {
-        setDetalleOpen(false);
-      }
-      
-      // Si se marca como "Enviado", reordenar la lista moviendo ese elemento al final
-      if (estatus === "Enviado") {
+    // Actualizar estado local inmediatamente para respuesta instantánea
+    if (estatus === "Enviado") {
         setReenvios((prevReenvios) => {
           const reenvioActualizado = prevReenvios.find((r) => r.id === item.id);
           if (!reenvioActualizado) return prevReenvios;
@@ -1015,11 +1020,26 @@ export default function Reenvios({ serverUrl, pushToast, fecha }) {
         });
       }
       
-      // NO recargar - ya se actualizó el estado local arriba
-    } catch (e) {
+    // Feedback inmediato
+    pushToast?.("✅ Estatus actualizado", "ok");
+    if (cerrarModal) {
+      setDetalleOpen(false);
+    }
+    
+    // Llamada al servidor en segundo plano sin bloquear
+    authFetch(`${serverUrl}/reenvios/${item.id}/estatus`, {
+      method: "PUT",
+      body: JSON.stringify({ estatus }),
+    }).catch((e) => {
       console.error("cambiarEstatus", e);
       pushToast?.("❌ Error actualizando estatus", "err");
-    }
+      // Revertir cambio local si falla
+      setReenvios((prevReenvios) => {
+        return prevReenvios.map((r) =>
+          r.id === item.id ? { ...r, estatus: item.estatus } : r
+        );
+      });
+    });
   };
 
   const detener = async (item) => {
@@ -1332,8 +1352,22 @@ export default function Reenvios({ serverUrl, pushToast, fecha }) {
         }
       }
 
-      pushToast?.("✅ Reenvío guardado", "ok");
+      // Cerrar modal inmediatamente para respuesta instantánea
       setModalOpen(false);
+      
+      // Feedback inmediato
+      pushToast?.("✅ Reenvío guardado", "ok");
+      
+      // Limpiar formulario inmediatamente
+      setPedido("");
+      setGuia("");
+      setPaqueteria("");
+      setMotivo("");
+      setFotos([]);
+      setPreviews([]);
+      setStep(1);
+      setModoLiberacion(false);
+      setLibSourceId(null);
     } catch (e) {
       console.error("finalizar", e);
       pushToast?.("❌ " + e.message, "err");
@@ -1730,10 +1764,43 @@ export default function Reenvios({ serverUrl, pushToast, fecha }) {
 
                 {/* Pestaña visible cuando está colapsada en móvil */}
                 <div className="tarjeta-pestana-movil">
-                  <div className="pedido-pestana">
+                  <div className="pedido-pestana" style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '4px' }}>
                     {r.pedido}
                     {r.estatus === "Enviado" && (
                       <span className="badge-enviado-movil" title="Enviado">✓</span>
+                    )}
+                    {r.estatus !== "Enviado" && window.innerWidth <= 520 && (
+                      <button
+                        className="btn-enviado-discreto-movil"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          cambiarEstatus(r, "Enviado", false);
+                        }}
+                        title="Marcar como enviado"
+                        style={{
+                          background: 'rgba(76, 175, 80, 0.1)',
+                          border: '1px solid rgba(76, 175, 80, 0.3)',
+                          borderRadius: '4px',
+                          color: '#4CAF50',
+                          fontSize: '0.7rem',
+                          padding: '1px 4px',
+                          cursor: 'pointer',
+                          opacity: 0.6,
+                          transition: 'all 0.2s',
+                          marginLeft: '4px',
+                          lineHeight: '1.2'
+                        }}
+                        onMouseEnter={(e) => {
+                          e.target.style.opacity = '1';
+                          e.target.style.background = 'rgba(76, 175, 80, 0.2)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.target.style.opacity = '0.6';
+                          e.target.style.background = 'rgba(76, 175, 80, 0.1)';
+                        }}
+                      >
+                        ✓
+                      </button>
                     )}
                   </div>
                   <div className="icono-expandir">{estaExpandida ? "▼" : "▶"}</div>
@@ -1848,7 +1915,7 @@ export default function Reenvios({ serverUrl, pushToast, fecha }) {
       =========================================================== */}
       {editOpen && (
         <div className="modal-overlay edit-modal-overlay" onClick={() => setEditOpen(false)}>
-          <div className="modal edit-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "600px", width: "90%" }}>
+          <div className="modal edit-modal modal-lg" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header edit-modal-header">
               <h3>✏️ Editar Reenvío</h3>
               <button className="modal-close" onClick={() => setEditOpen(false)}>×</button>
@@ -2103,9 +2170,8 @@ export default function Reenvios({ serverUrl, pushToast, fecha }) {
       {compartirOpen && (
         <div className="modal-overlay" onClick={() => setCompartirOpen(false)}>
           <div
-            className="modal"
+            className="modal modal-md"
             onClick={(e) => e.stopPropagation()}
-            style={{ maxWidth: "520px", width: "92%" }}
           >
             <div className="modal-header">
               <h3>📤 Compartir reenvío por chat</h3>
@@ -3216,9 +3282,8 @@ export default function Reenvios({ serverUrl, pushToast, fecha }) {
           {modalActualizarEstado && detalleItem && (
             <div className="modal-overlay" onClick={() => setModalActualizarEstado(false)}>
               <div
-                className="modal"
+                className="modal modal-sm"
                 onClick={(e) => e.stopPropagation()}
-                style={{ maxWidth: "500px" }}
               >
                 <div className="modal-header">
                   <h3>Actualizar Estado del Reenvío</h3>
@@ -3381,7 +3446,7 @@ export default function Reenvios({ serverUrl, pushToast, fecha }) {
               onClick={() => !cerrarLoading && setCerrarModalOpen(false)}
             >
               <div
-                className="modal"
+                className="modal modal-lg"
                 onClick={(e) => e.stopPropagation()}
               >
                 <div className="modal-header">
@@ -3458,9 +3523,8 @@ export default function Reenvios({ serverUrl, pushToast, fecha }) {
               onClick={() => setQrModalOpen(false)}
             >
               <div
-                className="modal"
+                className="modal modal-qr"
                 onClick={(e) => e.stopPropagation()}
-                style={{ maxWidth: "500px", width: "90%" }}
               >
                 <div className="modal-header">
                   <h2>📱 Tomar foto desde celular</h2>
@@ -3576,7 +3640,7 @@ export default function Reenvios({ serverUrl, pushToast, fecha }) {
               }}
             >
               <div
-                className="modal"
+                className="modal modal-lg"
                 onClick={(e) => e.stopPropagation()}
                 style={{ 
                   maxWidth: "90%", 

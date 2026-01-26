@@ -25,7 +25,7 @@ const OPCIONES_ESTATUS = [
   { value: "No Aplica", color: "#ef4444" }
 ];
 
-export default function Activaciones({ SERVER_URL }) {
+export default function Activaciones({ SERVER_URL, socket }) {
   const { authFetch, user } = useAuth();
   const { showAlert, showConfirm } = useAlert();
 
@@ -82,8 +82,7 @@ export default function Activaciones({ SERVER_URL }) {
 
   // Socket para tiempo real
   useEffect(() => {
-    if (!window.socket) return;
-    const socket = window.socket;
+    if (!socket) return;
 
     const handleActualizacion = () => {
       cargarRegistros();
@@ -94,7 +93,7 @@ export default function Activaciones({ SERVER_URL }) {
     return () => {
       socket.off("activaciones_actualizadas", handleActualizacion);
     };
-  }, [SERVER_URL, cargarRegistros]);
+  }, [socket, SERVER_URL, cargarRegistros]);
 
   // Búsqueda de productos con debounce
   useEffect(() => {

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import { createPortal } from "react-dom";
 import "./Picking.css";
 import { useAuth } from "../../AuthContext";
 import { safeFocus, puedeHacerFocus } from "../../utils/focusHelper";
@@ -61,6 +62,15 @@ export default function Picking({
   const [pxc, setPXC] = useState("");
   const [mensaje, setMensaje] = useState("");
 
+  // Estados para autocompletado de nombre
+  const [sugerenciasNombre, setSugerenciasNombre] = useState([]);
+  const [mostrarSugerencias, setMostrarSugerencias] = useState(false);
+  const [buscandoNombre, setBuscandoNombre] = useState(false);
+  const busquedaNombreTimeoutRef = useRef(null);
+  const nombreInputRef = useRef(null);
+  const sugerenciasRef = useRef(null);
+  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0, width: 0 });
+
   // Modal duplicado — ahora incluye PXC y estado de surtido
   const [modalDuplicado, setModalDuplicado] = useState({
     open: false,
@@ -72,12 +82,11 @@ export default function Picking({
     esSurtido: false // true = surtido (bloquear), false = no surtido (permitir)
   });
 
-  // Modal búsqueda por nombre (solo para canales nuevos)
-  const [modalBusquedaOpen, setModalBusquedaOpen] = useState(false);
-  const [busquedaNombre, setBusquedaNombre] = useState("");
-  const [resultadosNombre, setResultadosNombre] = useState([]);
-  const [cargandoBusqueda, setCargandoBusqueda] = useState(false);
-  const [errorBusqueda, setErrorBusqueda] = useState("");
+
+  // Modal productos agotados
+  const [modalAgotadosOpen, setModalAgotadosOpen] = useState(false);
+  const [productosAgotados, setProductosAgotados] = useState([]);
+  const [cargandoAgotados, setCargandoAgotados] = useState(false);
 
   // Protección contra procesamiento simultáneo
   const procesandoRef = useRef(false);
@@ -659,39 +668,176 @@ export default function Picking({
   };
 
   /* ========================================================
-     BÚSQUEDA POR NOMBRE (modal)
+     BÚSQUEDA POR NOMBRE (autocompletado con sugerencias)
   ======================================================== */
-  const buscarProductosPorNombre = async () => {
-    const termino = (busquedaNombre || "").trim();
-    if (!termino) {
-      setErrorBusqueda("Ingresa un nombre para buscar.");
-      setResultadosNombre([]);
+  // Buscar sugerencias mientras se escribe
+  useEffect(() => {
+    const termino = (nombre || "").trim();
+    
+    // Limpiar timeout anterior
+    if (busquedaNombreTimeoutRef.current) {
+      clearTimeout(busquedaNombreTimeoutRef.current);
+    }
+
+    // Si el término es muy corto, no buscar
+    if (termino.length < 2) {
+      setSugerenciasNombre([]);
+      setMostrarSugerencias(false);
       return;
     }
-    setCargandoBusqueda(true);
-    setErrorBusqueda("");
-    try {
-      const data = await authFetch(
-        `${SERVER_URL}/inventario/buscar-por-nombre/${encodeURIComponent(termino)}?multiples=true`
-      );
-      if (Array.isArray(data)) {
-        setResultadosNombre(data);
-        if (data.length === 0) {
-          setErrorBusqueda("No se encontraron productos.");
-        }
-      } else if (data && data.codigo) {
-        setResultadosNombre([data]);
-      } else {
-        setResultadosNombre([]);
-        setErrorBusqueda("No se encontraron productos.");
-      }
-    } catch (err) {
-      setResultadosNombre([]);
-      setErrorBusqueda("No se encontraron productos.");
-    } finally {
-      setCargandoBusqueda(false);
+
+    // Si hay un código activo y el nombre coincide con el nombre del producto activo,
+    // no mostrar sugerencias (está procesando un escaneo)
+    if (ultimoCodigoRef.current && nombreRef.current && nombreRef.current === termino) {
+      setSugerenciasNombre([]);
+      setMostrarSugerencias(false);
+      return;
     }
+
+    // Si se está procesando un escaneo, no buscar sugerencias
+    if (procesandoRef.current) {
+      setSugerenciasNombre([]);
+      setMostrarSugerencias(false);
+      return;
+    }
+
+    setBuscandoNombre(true);
+    
+    // Debounce: esperar 300ms después de que el usuario deje de escribir
+    busquedaNombreTimeoutRef.current = setTimeout(async () => {
+      // Verificar nuevamente antes de buscar (puede haber cambiado el estado)
+      if (procesandoRef.current || (ultimoCodigoRef.current && nombreRef.current === termino)) {
+        setSugerenciasNombre([]);
+        setMostrarSugerencias(false);
+        setBuscandoNombre(false);
+        return;
+      }
+
+      try {
+        // Buscar productos (el servidor ya filtra solo CEDIS - inventario_id = 1)
+        let data = await authFetch(
+          `${SERVER_URL}/inventario/buscar-por-nombre/${encodeURIComponent(termino)}?multiples=true`
+        );
+
+        // El servidor ya devuelve solo productos de CEDIS, pero verificamos por seguridad
+        let resultadosCEDIS = [];
+        
+        if (Array.isArray(data)) {
+          // Filtrar estrictamente solo CEDIS (por seguridad, aunque el servidor ya lo hace)
+          resultadosCEDIS = data.filter(p => {
+            const inventarioId = p.inventario_id || p.inventarioId || 1;
+            return inventarioId === 1;
+          });
+        } else if (data && data.codigo) {
+          // Si es un solo producto, verificar que sea de CEDIS
+          const inventarioId = data.inventario_id || data.inventarioId || 1;
+          if (inventarioId === 1) {
+            resultadosCEDIS = [data];
+          }
+        }
+
+        // Verificar una vez más después de la búsqueda
+        if (procesandoRef.current || (ultimoCodigoRef.current && nombreRef.current === termino)) {
+          setSugerenciasNombre([]);
+          setMostrarSugerencias(false);
+          setBuscandoNombre(false);
+          return;
+        }
+
+        // Mostrar SOLO resultados de CEDIS
+        if (resultadosCEDIS.length > 0) {
+          setSugerenciasNombre(resultadosCEDIS.slice(0, 10));
+          setMostrarSugerencias(true);
+        } else {
+          // No hay resultados en CEDIS, no mostrar nada
+          setSugerenciasNombre([]);
+          setMostrarSugerencias(false);
+        }
+      } catch (err) {
+        console.error("Error buscando sugerencias:", err);
+        setSugerenciasNombre([]);
+        setMostrarSugerencias(false);
+      } finally {
+        setBuscandoNombre(false);
+      }
+    }, 300);
+
+    return () => {
+      if (busquedaNombreTimeoutRef.current) {
+        clearTimeout(busquedaNombreTimeoutRef.current);
+      }
+    };
+  }, [nombre, SERVER_URL]);
+
+  // Seleccionar un producto de las sugerencias
+  const seleccionarProducto = async (producto) => {
+    if (!producto || !producto.codigo) return;
+
+    // Ocultar sugerencias
+    setMostrarSugerencias(false);
+    setSugerenciasNombre([]);
+    
+    // Limpiar el input de nombre
+    setNombre("");
+
+    // Procesar como si fuera un escaneo
+    await procesarScan(producto.codigo);
+    beepSuccess();
+    
+    // Enfocar de vuelta al input de código
+    setTimeout(() => {
+      const el = document.getElementById("inputCodigo");
+      if (el) safeFocus(el, 0);
+    }, 100);
   };
+
+  // Calcular posición del dropdown cuando se muestre
+  useEffect(() => {
+    if (mostrarSugerencias && nombreInputRef.current) {
+      const updatePosition = () => {
+        if (nombreInputRef.current) {
+          const inputRect = nombreInputRef.current.getBoundingClientRect();
+          // Hacer el dropdown solo un poco más ancho que el input para que quepa código y presentación
+          const anchoDropdown = Math.max(inputRect.width * 1.15, inputRect.width + 50);
+          setDropdownPosition({
+            top: inputRect.bottom + 4, // Usar getBoundingClientRect que ya incluye scroll
+            left: inputRect.left,
+            width: anchoDropdown
+          });
+        }
+      };
+      
+      updatePosition();
+      
+      // Actualizar posición en scroll y resize
+      window.addEventListener('scroll', updatePosition, true);
+      window.addEventListener('resize', updatePosition);
+      
+      return () => {
+        window.removeEventListener('scroll', updatePosition, true);
+        window.removeEventListener('resize', updatePosition);
+      };
+    }
+  }, [mostrarSugerencias, sugerenciasNombre]);
+
+  // Cerrar sugerencias al hacer click fuera
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (
+        nombreInputRef.current &&
+        !nombreInputRef.current.contains(event.target) &&
+        sugerenciasRef.current &&
+        !sugerenciasRef.current.contains(event.target)
+      ) {
+        setMostrarSugerencias(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
 
   /* ========================================================
      PROCESAR ESCANEO
@@ -742,6 +888,10 @@ export default function Picking({
 
       // Limpiar estados del anterior antes de procesar el nuevo
       limpiarEstadosCompletamente();
+
+      // Ocultar sugerencias cuando se procesa un escaneo
+      setMostrarSugerencias(false);
+      setSugerenciasNombre([]);
 
       // Buscar el nuevo producto - OPTIMIZADO: mostrar desde cache inmediatamente
       const cachedProduct = productosCacheRef.current.get(codigoLimpio);
@@ -1096,31 +1246,49 @@ export default function Picking({
         pushToast(`🔍 Buscando "${nombreProducto}" en inventario...`, "ok");
         
         try {
-          // Buscar producto por nombre
+          // Buscar producto por nombre (el servidor ya filtra solo CEDIS - inventario_id = 1)
           const producto = await authFetch(`${SERVER_URL}/inventario/buscar-por-nombre/${encodeURIComponent(nombreProducto)}`);
           
-          if (producto && producto.codigo) {
-            pushToast(`✅ Producto encontrado: ${producto.nombre}`, "ok");
+          // Filtrar SOLO productos de CEDIS (por seguridad, aunque el servidor ya lo hace)
+          let productoFinal = null;
+          if (producto) {
+            if (Array.isArray(producto)) {
+              // Si es array, buscar SOLO en CEDIS
+              productoFinal = producto.find(p => {
+                const inventarioId = p.inventario_id || p.inventarioId || 1;
+                return inventarioId === 1;
+              });
+            } else if (producto.codigo) {
+              // Si es un solo producto, verificar que sea de CEDIS
+              const inventarioId = producto.inventario_id || producto.inventarioId || 1;
+              if (inventarioId === 1) {
+                productoFinal = producto;
+              }
+            }
+          }
+          
+          if (productoFinal && productoFinal.codigo) {
+            pushToast(`✅ Producto encontrado: ${productoFinal.nombre}`, "ok");
             
             // Procesar como escaneo
             if (procesarScanRef.current) {
-              await procesarScanRef.current(producto.codigo);
+              await procesarScanRef.current(productoFinal.codigo);
             }
             
             // Esperar y establecer las cajas
             setTimeout(async () => {
-              if (ultimoCodigoRef.current === producto.codigo) {
+              if (ultimoCodigoRef.current === productoFinal.codigo) {
                 setCajas(cantidadCajas);
                 cajasRef.current = cantidadCajas;
                 
                 // Guardar automáticamente
                 if (guardarProductoActualRef.current) {
                   await guardarProductoActualRef.current(
-                    producto.codigo,
-                    producto.nombre,
+                    productoFinal.codigo,
+                    productoFinal.nombre,
                     cantidadCajas
                   );
-                  pushToast(`✅ ${cantidadCajas} cajas de ${producto.nombre} agregadas`, "ok");
+                  pushToast(`✅ ${cantidadCajas} cajas de ${productoFinal.nombre} agregadas`, "ok");
                 }
               }
             }, 1000);
@@ -1160,81 +1328,81 @@ export default function Picking({
   });
 
   /* ========================================================
+     DETECCIÓN DE PC (para layout diferente)
+  ======================================================== */
+  const [isPC, setIsPC] = useState(typeof window !== 'undefined' && window.innerWidth > 768);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsPC(window.innerWidth > 768);
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  /* ========================================================
      RENDER
   ======================================================== */
+
   return (
     <div className="card picking-container">
-      <div className="picking-header">
-        <h2 className="picking-titulo">{titulo || "Picking"}</h2>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+      <div className="picking-header" style={isPC ? { flexDirection: 'column', gap: '12px' } : {}}>
+        <h2 className="picking-titulo" style={isPC ? { width: '100%', textAlign: 'center' } : {}}>{titulo || "Picking"}</h2>
+        <div style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: '10px',
+          ...(isPC && { justifyContent: 'center', width: '100%' })
+        }}>
           {cambiarModulo && (
             <button
               onClick={() => cambiarModulo(moduloRegistros || "registros")}
               style={{
-                fontSize: '18px',
+                fontSize: '24px',
                 background: 'var(--color-primario, #3b82f6)',
                 color: '#fff',
                 border: 'none',
                 cursor: 'pointer',
-                padding: '8px 16px',
+                padding: '8px',
                 borderRadius: '8px',
                 fontWeight: '500',
                 transition: 'all 0.2s ease',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '6px',
-                boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                justifyContent: 'center',
+                gap: '0',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+                height: '44px',
+                minHeight: '44px',
+                minWidth: '44px',
+                width: '44px'
               }}
               title="Ir a Surtido Picking"
             >
-              🗃️ Surtido
-            </button>
-          )}
-          {mostrarBusquedaNombre && (
-            <button
-              onClick={() => {
-                setModalBusquedaOpen(true);
-                setBusquedaNombre("");
-                setResultadosNombre([]);
-                setErrorBusqueda("");
-              }}
-              style={{
-                fontSize: '16px',
-                background: 'var(--fondo-input)',
-                color: 'var(--texto-principal)',
-                border: '1px solid var(--borde-medio)',
-                cursor: 'pointer',
-                padding: '8px 12px',
-                borderRadius: '8px',
-                fontWeight: '500',
-                transition: 'all 0.2s ease',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.08)'
-              }}
-              title="Buscar producto por nombre"
-            >
-              🔎 Nombre
+              🗃️
             </button>
           )}
           <button
             onClick={toggleVoz}
             style={{
-              fontSize: '24px',
-              background: vozEscuchando ? 'rgba(76, 175, 80, 0.1)' : 'transparent',
-              border: vozEscuchando ? '2px solid rgba(76, 175, 80, 0.5)' : '2px solid transparent',
+              fontSize: '20px',
+              background: vozEscuchando ? 'rgba(76, 175, 80, 0.1)' : 'var(--fondo-input)',
+              border: vozEscuchando ? '2px solid rgba(76, 175, 80, 0.5)' : '1px solid var(--borde-medio)',
               cursor: 'pointer',
-              color: vozEscuchando ? '#4CAF50' : '#888',
+              color: vozEscuchando ? '#4CAF50' : 'var(--texto-principal)',
               transition: 'all 0.3s ease',
               position: 'relative',
-              padding: '10px',
-              borderRadius: '50%',
+              padding: '8px 12px',
+              borderRadius: '8px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               minWidth: '44px',
+              width: '44px',
+              height: '44px',
               minHeight: '44px',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
               ...(vozEscuchando && {
                 boxShadow: '0 0 20px rgba(76, 175, 80, 0.9), 0 0 40px rgba(76, 175, 80, 0.6), 0 0 60px rgba(76, 175, 80, 0.3)',
                 animation: 'pulse-glow 2s ease-in-out infinite'
@@ -1252,6 +1420,45 @@ export default function Picking({
         {canalActual === "picking" && (
           <button className="btn-corte-picking" onClick={cerrarDia}>🔒</button>
         )}
+        <button
+          onClick={async () => {
+            setModalAgotadosOpen(true);
+            setCargandoAgotados(true);
+            try {
+              const productos = await authFetch(`${SERVER_URL}/inventario/agotados`);
+              setProductosAgotados(Array.isArray(productos) ? productos : []);
+            } catch (err) {
+              console.error("Error cargando productos agotados:", err);
+              setProductosAgotados([]);
+              await showAlert("Error al cargar productos agotados", "error");
+            } finally {
+              setCargandoAgotados(false);
+            }
+          }}
+          style={{
+            fontSize: '24px',
+            background: '#ef4444',
+            color: '#fff',
+            border: 'none',
+            cursor: 'pointer',
+            padding: '8px',
+            borderRadius: '8px',
+            fontWeight: '500',
+            transition: 'all 0.2s ease',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '0',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+            height: '44px',
+            minHeight: '44px',
+            minWidth: '44px',
+            width: '44px'
+          }}
+          title="Ver productos agotados"
+        >
+          ⚠️
+        </button>
         </div>
       </div>
 
@@ -1285,12 +1492,120 @@ export default function Picking({
           className="picking-input-codigo"
         />
 
-        <input
-          placeholder="Nombre"
-          value={nombre}
-          readOnly
-          className="picking-input-nombre"
-        />
+        <div className="picking-nombre-container" style={{ position: 'relative' }} ref={nombreInputRef}>
+          <input
+            placeholder="Nombre"
+            value={nombre}
+            onChange={(e) => {
+              const valor = e.target.value;
+              setNombre(valor);
+              // Mostrar sugerencias si hay texto
+              if (valor.trim().length >= 2) {
+                setMostrarSugerencias(true);
+              } else {
+                setMostrarSugerencias(false);
+              }
+            }}
+            onKeyDown={(e) => {
+              // Si hay sugerencias y presiona Enter, seleccionar la primera
+              if (e.key === "Enter" && sugerenciasNombre.length > 0) {
+                e.preventDefault();
+                seleccionarProducto(sugerenciasNombre[0]);
+              } else if (e.key === "Escape") {
+                setMostrarSugerencias(false);
+              }
+            }}
+            onFocus={() => {
+              // Mostrar sugerencias si hay texto
+              if (nombre.trim().length >= 2 && sugerenciasNombre.length > 0) {
+                setMostrarSugerencias(true);
+              }
+            }}
+            className="picking-input-nombre"
+            style={{ position: 'relative' }}
+          />
+        </div>
+        
+        {/* Dropdown de sugerencias renderizado fuera del contenedor usando Portal */}
+        {mostrarSugerencias && sugerenciasNombre.length > 0 && dropdownPosition.width > 0 && createPortal(
+          <div
+            ref={sugerenciasRef}
+            style={{
+              position: 'fixed',
+              top: `${dropdownPosition.top}px`,
+              left: `${dropdownPosition.left}px`,
+              width: `${dropdownPosition.width}px`,
+              zIndex: 10000,
+              backgroundColor: 'var(--fondo-card)',
+              border: '1px solid var(--borde-medio)',
+              borderRadius: '2px',
+              maxHeight: '300px',
+              overflowY: 'auto',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
+            }}
+          >
+            {buscandoNombre && (
+              <div style={{ padding: '8px', textAlign: 'center', color: 'var(--texto-secundario)', fontSize: '0.8rem' }}>
+                Buscando...
+              </div>
+            )}
+            {!buscandoNombre && sugerenciasNombre.map((prod, index) => (
+              <button
+                key={prod.codigo || index}
+                onClick={() => seleccionarProducto(prod)}
+                style={{
+                  width: '100%',
+                  padding: '8px 10px',
+                  textAlign: 'left',
+                  background: 'transparent',
+                  border: 'none',
+                  borderBottom: index < sugerenciasNombre.length - 1 ? '1px solid var(--borde-sutil)' : 'none',
+                  cursor: 'pointer',
+                  color: 'var(--texto-principal)',
+                  transition: 'background 0.2s',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '3px',
+                  borderRadius: '0',
+                  whiteSpace: 'normal',
+                  wordWrap: 'break-word',
+                  overflowWrap: 'break-word'
+                }}
+                onMouseEnter={(e) => {
+                  e.target.style.backgroundColor = 'var(--fondo-input)';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.backgroundColor = 'transparent';
+                }}
+              >
+                <div style={{ 
+                  fontWeight: '600', 
+                  fontSize: '0.8rem',
+                  lineHeight: '1.3',
+                  wordBreak: 'break-word',
+                  overflowWrap: 'break-word'
+                }}>
+                  {prod.nombre || 'Sin nombre'}
+                </div>
+                <div style={{ 
+                  fontSize: '0.7rem', 
+                  color: 'var(--texto-secundario)', 
+                  display: 'flex', 
+                  gap: '6px',
+                  flexWrap: 'nowrap',
+                  lineHeight: '1.2',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis'
+                }}>
+                  <span>Código: {prod.codigo || 'N/A'}</span>
+                  {prod.presentacion && <span>· {prod.presentacion}</span>}
+                </div>
+              </button>
+            ))}
+          </div>,
+          document.body
+        )}
 
         <input
           placeholder="Presentación"
@@ -1322,72 +1637,6 @@ export default function Picking({
 
       {mensaje && <p className="picking-mensaje">{mensaje}</p>}
 
-      {/* MODAL BÚSQUEDA POR NOMBRE */}
-      {modalBusquedaOpen && (
-        <div
-          className="modal-overlay-picking"
-          onClick={() => setModalBusquedaOpen(false)}
-        >
-          <div
-            className="modal-busqueda-picking"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3>🔎 Buscar producto</h3>
-            <div className="busqueda-row">
-              <input
-                type="text"
-                placeholder="Nombre del producto..."
-                value={busquedaNombre}
-                onChange={(e) => setBusquedaNombre(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    buscarProductosPorNombre();
-                  }
-                }}
-                className="busqueda-input"
-              />
-              <button
-                className="busqueda-btn"
-                onClick={buscarProductosPorNombre}
-                disabled={cargandoBusqueda}
-              >
-                {cargandoBusqueda ? "Buscando..." : "Buscar"}
-              </button>
-            </div>
-
-            {errorBusqueda && (
-              <p className="busqueda-error">{errorBusqueda}</p>
-            )}
-
-            <div className="busqueda-resultados">
-              {resultadosNombre.map((prod) => (
-                <button
-                  key={prod.codigo}
-                  className="busqueda-item"
-                  onClick={() => {
-                    setModalBusquedaOpen(false);
-                    setBusquedaNombre("");
-                    setResultadosNombre([]);
-                    setErrorBusqueda("");
-                    if (prod.codigo) {
-                      procesarScan(prod.codigo);
-                    }
-                  }}
-                >
-                  <div className="busqueda-item-nombre">
-                    {prod.nombre || "Sin nombre"}
-                  </div>
-                  <div className="busqueda-item-detalle">
-                    <span>{prod.codigo || "Sin código"}</span>
-                    {prod.presentacion && <span>· {prod.presentacion}</span>}
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* MODAL DUPLICADO */}
       {modalDuplicado.open && (
@@ -1513,6 +1762,68 @@ export default function Picking({
                   </button>
                 </>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Productos Agotados */}
+      {modalAgotadosOpen && (
+        <div className="modal-overlay-picking" onClick={() => setModalAgotadosOpen(false)}>
+          <div className="modal-busqueda-picking" onClick={(e) => e.stopPropagation()}>
+            <h3>Productos Agotados</h3>
+            
+            {cargandoAgotados ? (
+              <div style={{ textAlign: 'center', padding: '12px', fontSize: '0.85rem' }}>
+                <p>Cargando productos agotados...</p>
+              </div>
+            ) : productosAgotados.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '12px', fontSize: '0.85rem' }}>
+                <p>No hay productos agotados</p>
+              </div>
+            ) : (
+              <div className="busqueda-resultados" style={{ maxHeight: '450px', overflowY: 'auto' }}>
+                {productosAgotados.map((producto) => (
+                  <div
+                    key={producto.id}
+                    className="busqueda-item"
+                    onClick={async () => {
+                      try {
+                        // Agregar el producto a la lista de picking
+                        await guardarProductoActual(
+                          producto.codigo,
+                          producto.nombre,
+                          1 // Cajas por defecto
+                        );
+                        setModalAgotadosOpen(false);
+                        pushToast(`✅ ${producto.nombre} agregado a la lista`, "ok");
+                        beepSuccess();
+                      } catch (err) {
+                        console.error("Error agregando producto agotado:", err);
+                        await showAlert("Error al agregar producto", "error");
+                      }
+                    }}
+                  >
+                    <div className="busqueda-item-nombre">
+                      {producto.codigo} - {producto.nombre}
+                    </div>
+                    <div className="busqueda-item-detalle">
+                      {producto.presentacion && <span>📦 {producto.presentacion}</span>}
+                      {producto.categoria && <span>🏷️ {producto.categoria}</span>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="modal-buttons-picking">
+              <button
+                className="btn-no-picking"
+                onClick={() => setModalAgotadosOpen(false)}
+                style={{ width: 'auto', padding: '10px 20px' }}
+              >
+                Cerrar
+              </button>
             </div>
           </div>
         </div>

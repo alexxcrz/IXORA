@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import { useAuth } from "../../AuthContext";
 import "./Administrador.css";
 import Personalizacion from "./Personalizacion";
@@ -101,6 +101,7 @@ const PERMISOS_POR_MODULO = {
     "inventario.activar_lotes": "Activar/desactivar lotes",
     "inventario.mostrar_en_pagina": "Agregar/quitar de tienda",
     "inventario.activar_productos": "Activar/desactivar productos",
+    "inventario.crear_inventario": "Crear nuevos inventarios",
     "inventario.ajustes": "Ajustes de inventario",
     "inventario.exportar": "Exportar inventario",
     "inventario.importar": "Importar productos",
@@ -238,7 +239,7 @@ const detectarTabsYPermisos = (permsAll) => {
   return { tabs, adminPerms, permisosPorModulo };
 };
 
-export default function Administrador({ serverUrl, pushToast }) {
+function Administrador({ serverUrl, pushToast, socket }) {
   const { token, user } = useAuth();
   const { showConfirm } = useAlert();
 
@@ -283,6 +284,8 @@ export default function Administrador({ serverUrl, pushToast }) {
   const [auditoria, setAuditoria] = useState([]);
   const [usuariosActivos, setUsuariosActivos] = useState([]);
   const [loadingAuditoria, setLoadingAuditoria] = useState(false);
+  const auditoriaCompletaRef = useRef([]);
+  const cargandoAuditoriaRef = useRef(false);
   const [filtroUsuario, setFiltroUsuario] = useState("");
   const [filtroAccion, setFiltroAccion] = useState("");
   const [filtroBusqueda, setFiltroBusqueda] = useState("");
@@ -411,34 +414,101 @@ export default function Administrador({ serverUrl, pushToast }) {
   }, [serverUrl, token]);
 
   // ───────────────────────────
-  // CARGAR AUDITORÍA (MANUAL)
+  // SOCKET.IO - ACTUALIZACIONES EN TIEMPO REAL
   // ───────────────────────────
-  const cargarAuditoria = async () => {
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleUsuariosActualizados = () => {
+      // Recargar usuarios y roles cuando hay cambios
+      const recargar = async () => {
+        try {
+          const [u, r] = await Promise.all([
+            authFetch(`${serverUrl}/admin/users`),
+            authFetch(`${serverUrl}/admin/roles`),
+          ]);
+          setUsuarios(u || []);
+          setRoles(r || []);
+        } catch (err) {
+          console.error("Error recargando datos:", err);
+        }
+      };
+      recargar();
+    };
+
+    const handleRolesActualizados = () => {
+      // Recargar roles cuando hay cambios
+      const recargar = async () => {
+        try {
+          const r = await authFetch(`${serverUrl}/admin/roles`);
+          setRoles(r || []);
+        } catch (err) {
+          console.error("Error recargando roles:", err);
+        }
+      };
+      recargar();
+    };
+
+    socket.on("usuarios_actualizados", handleUsuariosActualizados);
+    socket.on("roles_actualizados", handleRolesActualizados);
+
+    return () => {
+      socket.off("usuarios_actualizados", handleUsuariosActualizados);
+      socket.off("roles_actualizados", handleRolesActualizados);
+    };
+  }, [socket, serverUrl, token]);
+
+  // ───────────────────────────
+  // CARGAR AUDITORÍA (MANUAL) - Optimizada para evitar parpadeos
+  // ───────────────────────────
+  const cargarAuditoriaManualRef = useRef(false);
+  
+  const cargarAuditoriaManual = useCallback(async () => {
+    if (cargarAuditoriaManualRef.current || cargandoAuditoriaRef.current) return; // Evitar llamadas simultáneas
     if (!token) return;
     try {
+      cargarAuditoriaManualRef.current = true;
+      cargandoAuditoriaRef.current = true;
       setLoadingAuditoria(true);
       const params = new URLSearchParams();
       if (filtroUsuario) params.append("usuario", filtroUsuario);
       if (filtroAccion) params.append("accion", filtroAccion);
+      if (filtroFecha) params.append("fecha", filtroFecha);
       params.append("limite", "500");
 
       const data = await authFetch(
         `${serverUrl}/admin/auditoria?${params.toString()}`
       );
       
-        setAuditoriaCompleta(data.registros || []);
-        setTotalAuditoria(data.total || 0);
-      } catch (err) {
-        if (err.silent) {
-          // Error de autenticación, no mostrar error
-          return;
-        }
-        console.error("Error cargando auditoría:", err);
-        notify("❌ Error cargando auditoría", "err");
+      const nuevosRegistros = data.registros || [];
+      const nuevoTotal = data.total || 0;
+      
+      // Solo actualizar si hay cambios reales para evitar re-renders innecesarios
+      const registrosAnteriores = auditoriaCompletaRef.current;
+      const hayCambios = 
+        registrosAnteriores.length === 0 || 
+        nuevosRegistros.length === 0 ||
+        registrosAnteriores.length !== nuevosRegistros.length ||
+        registrosAnteriores[0]?.id !== nuevosRegistros[0]?.id || 
+        registrosAnteriores[registrosAnteriores.length - 1]?.id !== nuevosRegistros[nuevosRegistros.length - 1]?.id;
+      
+      if (hayCambios) {
+        auditoriaCompletaRef.current = nuevosRegistros;
+        setAuditoriaCompleta(nuevosRegistros);
+        setTotalAuditoria(nuevoTotal);
+      }
+    } catch (err) {
+      if (err.silent) {
+        return;
+      }
+      console.error("Error cargando auditoría:", err);
+      notify("❌ Error cargando auditoría", "err");
     } finally {
       setLoadingAuditoria(false);
+      cargarAuditoriaManualRef.current = false;
+      cargandoAuditoriaRef.current = false;
     }
-  };
+  }, [filtroUsuario, filtroAccion, filtroFecha, serverUrl, token, authFetch]);
 
   // ───────────────────────────
   // CARGAR USUARIOS ACTIVOS
@@ -457,6 +527,11 @@ export default function Administrador({ serverUrl, pushToast }) {
 
   // Estado para almacenar todos los registros sin filtrar
   const [auditoriaCompleta, setAuditoriaCompleta] = useState([]);
+  
+  // Sincronizar ref con el estado
+  useEffect(() => {
+    auditoriaCompletaRef.current = auditoriaCompleta;
+  }, [auditoriaCompleta]);
 
   // Actualizar fecha automáticamente cuando cambia el día
   useEffect(() => {
@@ -487,57 +562,34 @@ export default function Administrador({ serverUrl, pushToast }) {
     // Actualizar inmediatamente
     actualizarFecha();
     
-    // Actualizar cada minuto para detectar cambios de día
-    const interval = setInterval(actualizarFecha, 60000);
+    // Actualizar cada 5 minutos para detectar cambios de día (reducir re-renders)
+    const interval = setInterval(actualizarFecha, 300000);
     
     return () => clearInterval(interval);
   }, []);
 
-  // Cargar auditoría desde servidor (sin filtro de búsqueda)
+  // Cargar auditoría desde servidor (optimizado para evitar parpadeos)
   useEffect(() => {
     if (!token) return;
     if (tabActivaAdmin !== "auditoria") return;
     
-    const cargar = async () => {
-      try {
-        setLoadingAuditoria(true);
-        const params = new URLSearchParams();
-        if (filtroUsuario) params.append("usuario", filtroUsuario);
-        if (filtroAccion) params.append("accion", filtroAccion);
-        if (filtroFecha) params.append("fecha", filtroFecha);
-        params.append("limite", "500");
+    // Cargar solo una vez al abrir la pestaña
+    if (!cargandoAuditoriaRef.current) {
+      cargarAuditoriaManual();
+      cargarUsuariosActivos();
+    }
 
-        const data = await authFetch(
-          `${serverUrl}/admin/auditoria?${params.toString()}`
-        );
-        
-        setAuditoriaCompleta(data.registros || []);
-        setTotalAuditoria(data.total || 0);
-      } catch (err) {
-        if (err.silent) {
-          // Error de autenticación, no mostrar error
-          return;
-        }
-        console.error("Error cargando auditoría:", err);
-        notify("❌ Error cargando auditoría", "err");
-      } finally {
-        setLoadingAuditoria(false);
-      }
-    };
-
-    cargar();
-    cargarUsuariosActivos();
-
+    // Aumentar intervalo a 90 segundos para reducir parpadeos (era 30 segundos)
     const interval = setInterval(() => {
-      if (tabActivaAdmin === "auditoria") {
-        cargar();
+      if (tabActivaAdmin === "auditoria" && !cargandoAuditoriaRef.current) {
+        cargarAuditoriaManual();
         cargarUsuariosActivos();
       }
-    }, 30000); // Actualizar cada 30 segundos
+    }, 90000); // Actualizar cada 90 segundos para mejor rendimiento
 
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filtroUsuario, filtroAccion, filtroFecha, tabActivaAdmin, serverUrl, token]);
+  }, [tabActivaAdmin, token]); // Removido cargarAuditoriaManual de dependencias
 
   // Cargar eventos de seguridad
   const cargarEventosSeguridad = async () => {
@@ -695,6 +747,7 @@ export default function Administrador({ serverUrl, pushToast }) {
     
     cargarEventosSeguridad();
 
+    // Aumentar intervalo a 60 segundos para reducir parpadeos
     const interval = setInterval(() => {
       if (tabActivaAdmin === "seguridad") {
         cargarEventosSeguridad();
@@ -702,28 +755,44 @@ export default function Administrador({ serverUrl, pushToast }) {
         cargarIPsBloqueadas();
         cargarEstadisticasSeguridad();
       }
-    }, 30000); // Actualizar cada 30 segundos
+    }, 60000); // Actualizar cada 60 segundos (era 30)
 
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filtroEventoTipo, filtroEventoIP, tabActivaAdmin, serverUrl, token]);
 
   // Aplicar filtro de búsqueda localmente
-  useEffect(() => {
+  // Optimizar filtro de búsqueda con useMemo para evitar re-renders innecesarios
+  const auditoriaFiltrada = useMemo(() => {
+    const registros = auditoriaCompleta;
     if (!filtroBusqueda) {
-      setAuditoria(auditoriaCompleta);
-      return;
+      return registros;
     }
 
     const busquedaLower = filtroBusqueda.toLowerCase();
-    const filtrados = auditoriaCompleta.filter((r) =>
+    return registros.filter((r) =>
       (r.usuario && r.usuario.toLowerCase().includes(busquedaLower)) ||
       (r.accion && r.accion.toLowerCase().includes(busquedaLower)) ||
       (r.detalle && r.detalle.toLowerCase().includes(busquedaLower)) ||
       (r.tabla_afectada && r.tabla_afectada.toLowerCase().includes(busquedaLower))
     );
-    setAuditoria(filtrados);
   }, [filtroBusqueda, auditoriaCompleta]);
+
+  // Sincronizar auditoriaFiltrada con el estado solo cuando realmente cambia
+  useEffect(() => {
+    // Comparar si realmente hay cambios antes de actualizar
+    const auditoriaActual = auditoria;
+    const hayCambios = 
+      auditoriaActual.length !== auditoriaFiltrada.length ||
+      auditoriaActual.length === 0 ||
+      auditoriaFiltrada.length === 0 ||
+      (auditoriaActual.length > 0 && auditoriaFiltrada.length > 0 && 
+       auditoriaActual[0]?.id !== auditoriaFiltrada[0]?.id);
+    
+    if (hayCambios) {
+      setAuditoria(auditoriaFiltrada);
+    }
+  }, [auditoriaFiltrada, auditoria]);
 
   // ───────────────────────────
   // ABRIR MODAL USUARIO
@@ -2329,7 +2398,7 @@ export default function Administrador({ serverUrl, pushToast }) {
             />
             <button
               className="btn-small admin-auditoria-btn"
-              onClick={cargarAuditoria}
+              onClick={cargarAuditoriaManual}
               disabled={loadingAuditoria}
             >
               {loadingAuditoria ? "Cargando..." : "🔄 Actualizar"}
@@ -2551,15 +2620,31 @@ export default function Administrador({ serverUrl, pushToast }) {
                       return descripcion;
                     };
 
+                    // Obtener nombre de usuario - intentar varios campos
+                    const obtenerNombreUsuario = () => {
+                      if (a.usuario && a.usuario.trim() !== "") {
+                        return a.usuario;
+                      }
+                      // Intentar extraer del detalle si está disponible
+                      if (a.detalle) {
+                        // Buscar patrones comunes como "por Usuario" o similar
+                        const matchUsuario = a.detalle.match(/(?:por|de|usuario|user)[:\s]+([A-Za-zÁÉÍÓÚáéíóúÑñ\s]+?)(?:\s|$|,|\.)/i);
+                        if (matchUsuario && matchUsuario[1] && matchUsuario[1].trim().length > 2) {
+                          return matchUsuario[1].trim();
+                        }
+                      }
+                      return "Sistema";
+                    };
+
                     return (
                       <tr key={a.id}>
-                        <td style={{ fontSize: "0.8rem", color: "#00ff88", fontWeight: "500", whiteSpace: "nowrap" }}>
+                        <td style={{ fontSize: "0.8rem", color: "#00ff88", fontWeight: "500", whiteSpace: "nowrap", padding: "8px 10px" }}>
                           {formatearFecha(a.fecha)}
                         </td>
-                        <td>
-                          <strong style={{ color: "#fff", fontSize: "0.8rem" }}>{a.usuario || "—"}</strong>
+                        <td style={{ padding: "10px 12px", whiteSpace: "normal", wordBreak: "break-word", overflowWrap: "break-word", overflow: "visible", boxSizing: "border-box" }}>
+                          <strong style={{ color: "var(--texto-principal)", fontSize: "0.8rem" }}>{obtenerNombreUsuario()}</strong>
                         </td>
-                        <td>
+                        <td style={{ padding: "10px 12px", whiteSpace: "normal", wordBreak: "break-word", overflowWrap: "break-word", overflow: "visible", boxSizing: "border-box" }}>
                           <span
                             style={{
                               background:
@@ -2583,6 +2668,8 @@ export default function Administrador({ serverUrl, pushToast }) {
                               fontSize: "0.75rem",
                               fontWeight: "600",
                               display: "inline-block",
+                              wordBreak: "break-word",
+                              whiteSpace: "normal",
                             }}
                           >
                             {a.accion?.includes("CREAR") || a.accion?.includes("AGREGAR") || a.accion?.includes("INSERT")
@@ -2594,10 +2681,10 @@ export default function Administrador({ serverUrl, pushToast }) {
                               : a.accion || "—"}
                           </span>
                         </td>
-                        <td style={{ maxWidth: "400px", wordBreak: "break-word", color: "#e0e0e0", fontSize: "0.8rem", lineHeight: "1.4" }}>
+                        <td style={{ padding: "10px 12px", wordBreak: "break-word", overflowWrap: "break-word", overflow: "visible", boxSizing: "border-box", color: "#e0e0e0", fontSize: "0.8rem", lineHeight: "1.5", whiteSpace: "normal" }}>
                           {obtenerDescripcionAccion()}
                         </td>
-                        <td style={{ maxWidth: "350px", wordBreak: "break-word", color: "#ffd93d", fontSize: "0.75rem", lineHeight: "1.4", fontWeight: "500" }}>
+                        <td style={{ padding: "10px 12px", wordBreak: "break-word", overflowWrap: "break-word", overflow: "visible", boxSizing: "border-box", color: "#ffd93d", fontSize: "0.75rem", lineHeight: "1.5", fontWeight: "500", whiteSpace: "normal" }}>
                           {(() => {
                             const detalle = a.detalle || "";
                             // Buscar la sección de cambios específicos
@@ -2628,7 +2715,7 @@ export default function Administrador({ serverUrl, pushToast }) {
                             return "—";
                           })()}
                         </td>
-                        <td style={{ color: "#b0b0b0", fontSize: "0.75rem" }}>
+                        <td style={{ padding: "10px 12px", color: "#b0b0b0", fontSize: "0.75rem", whiteSpace: "nowrap" }}>
                           {nombreTabla(a.tabla_afectada) || "—"}
                         </td>
                       </tr>
@@ -3564,3 +3651,5 @@ export default function Administrador({ serverUrl, pushToast }) {
     </div>
   );
 }
+
+export default React.memo(Administrador);

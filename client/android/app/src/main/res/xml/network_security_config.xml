@@ -2,7 +2,7 @@
 <network-security-config>
     <!-- Permitir tráfico HTTP para la IP específica del servidor -->
     <domain-config cleartextTrafficPermitted="true">
-        <domain includeSubdomains="true">172.16.30.12</domain>
+        <domain includeSubdomains="true">172.16.30.5</domain>
     </domain-config>
     
     <!-- Permitir todo el tráfico HTTP como fallback (necesario para servidores locales sin HTTPS) -->

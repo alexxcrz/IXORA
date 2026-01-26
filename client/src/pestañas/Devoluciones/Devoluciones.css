@@ -60,6 +60,7 @@ textarea:focus {
   box-shadow: var(--sombra-xs);
   margin-top: 12px;
   transition: all var(--transicion-media);
+  overflow-x: auto;
 }
 
 .card:hover {
@@ -513,6 +514,7 @@ textarea:focus {
   .card {
     padding: 12px;
     border-radius: 12px;
+    overflow-x: auto;
   }
 
   .tabs-container {
@@ -576,6 +578,7 @@ textarea:focus {
 
   .tabla-devoluciones {
     font-size: 0.75rem;
+    overflow-x: auto;
   }
 
   .tabla-devoluciones th,
@@ -592,6 +595,7 @@ textarea:focus {
   .card {
     padding: 10px;
     margin-top: 8px;
+    overflow-x: auto;
   }
 
   .tab-btn {
@@ -610,6 +614,7 @@ textarea:focus {
 
   .tabla-devoluciones {
     font-size: 0.7rem;
+    overflow-x: auto;
   }
 
   .tabla-devoluciones th,
@@ -656,8 +661,8 @@ textarea:focus {
 
 .modal-content-activacion {
     background: var(--fondo-card); 
-    width: min(650px, 95vw);
-    max-width: calc(100vw - 40px);
+    width: calc(100% - 40px);
+    max-width: 600px;
     max-height: calc(100vh - 40px);
     border-radius: var(--radio-xl); 
     padding: 20px;
@@ -669,6 +674,135 @@ textarea:focus {
     overflow-y: auto;
     overflow-x: hidden;
     margin: auto;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Sistema de tamaños proporcionales para modales de Devoluciones */
+.modal {
+  background: var(--fondo-card);
+  border-radius: 12px;
+  box-shadow: var(--sombra-xl);
+  border: 1px solid var(--borde-sutil);
+  color: var(--texto-principal);
+  display: flex;
+  flex-direction: column;
+  max-height: 90vh;
+  overflow: hidden;
+  margin: auto;
+  position: relative;
+}
+
+.modal.modal-sm {
+  max-width: 400px;
+  width: calc(100% - 40px);
+}
+
+.modal.modal-md {
+  max-width: 500px;
+  width: calc(100% - 40px);
+}
+
+.modal.modal-lg {
+  max-width: 700px;
+  width: calc(100% - 40px);
+}
+
+.modal:not(.modal-sm):not(.modal-md):not(.modal-lg):not(.modal-xl) {
+  max-width: 500px;
+  width: calc(100% - 40px);
+}
+
+/* Responsive para móviles */
+@media (max-width: 768px) {
+  .modal-overlay,
+  .activation-modal-overlay {
+    padding: 10px !important;
+  }
+
+  .modal {
+    max-width: calc(100% - 20px) !important;
+    width: calc(100% - 20px) !important;
+    max-height: calc(100vh - 20px) !important;
+  }
+
+  .modal.modal-sm,
+  .modal.modal-md,
+  .modal.modal-lg {
+    max-width: calc(100% - 20px) !important;
+    width: calc(100% - 20px) !important;
+  }
+
+  .modal-nuevocodigo {
+    width: calc(100% - 20px) !important;
+    max-width: calc(100% - 20px) !important;
+    padding: 16px !important;
+  }
+
+  .modal-nuevocodigo h3 {
+    font-size: 1.1rem !important;
+    margin-bottom: 8px !important;
+  }
+
+  .activation-modal {
+    width: calc(100% - 20px) !important;
+    max-width: calc(100% - 20px) !important;
+    padding: 10px !important;
+  }
+
+  .modal-content-activacion {
+    width: calc(100% - 20px) !important;
+    max-width: calc(100% - 20px) !important;
+    padding: 16px !important;
+  }
+
+  .modal-header {
+    padding: 12px 16px !important;
+  }
+
+  .modal-header h3 {
+    font-size: 1.1rem !important;
+  }
+
+  .modal-body {
+    padding: 16px !important;
+  }
+
+  .modal-body label {
+    font-size: 0.85rem !important;
+    margin-bottom: 4px !important;
+  }
+
+  .modal-body input,
+  .modal-body textarea,
+  .modal-body select {
+    padding: 8px 12px !important;
+    font-size: 0.9rem !important;
+    margin-bottom: 12px !important;
+  }
+
+  .modal-actions,
+  .modal-footer {
+    padding: 12px 16px !important;
+    gap: 8px !important;
+    flex-wrap: wrap;
+  }
+
+  .modal-actions .btn,
+  .modal-actions button,
+  .modal-btn-cancel,
+  .modal-btn-confirm {
+    padding: 10px 16px !important;
+    font-size: 0.9rem !important;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .modal-close {
+    width: 28px !important;
+    height: 28px !important;
+    font-size: 1.5rem !important;
+  }
 }
 
 /* ------------------------------------------------ */
@@ -1175,26 +1309,30 @@ button.btn-green,
 }
 
 .gestion-table {
-  width: 100%;
+  width: max-content;
+  min-width: 1220px;
   border-collapse: collapse;
   background: var(--fondo-card);
-  table-layout: auto;
+  table-layout: fixed;
 }
 
 .gestion-table-wrapper {
   overflow-x: auto;
   overflow-y: visible;
   width: 100%;
+  padding-bottom: 8px;
 }
 
 .gestion-table th {
   background: var(--fondo-secundario);
-  padding: 12px 10px;
+  padding: 10px 8px;
   text-align: left;
   font-size: 0.9rem;
   color: var(--texto-principal);
   font-weight: 600;
   border-bottom: 2px solid var(--borde-visible);
+  white-space: nowrap;
+  min-width: 0;
 }
 
 .gestion-table td {
@@ -1205,9 +1343,49 @@ button.btn-green,
   font-size: 0.9rem;
   position: relative !important;
   overflow: visible !important;
-  min-width: 120px !important;
+  min-width: 0 !important;
   vertical-align: middle !important;
   white-space: nowrap !important;
+}
+
+/* Anchos fijos por columna para alinear encabezado y cuerpo */
+.col-area { width: 100px; text-align: left; }
+.col-codigo { width: 130px; text-align: left; }
+.col-nombre { width: 200px; text-align: left; white-space: normal; }
+.col-presentacion { width: 170px; text-align: left; white-space: normal; }
+.col-lote { width: 190px; white-space: normal; }
+.col-cantidad { width: 110px; text-align: center; }
+.col-activo { width: 110px; text-align: center; }
+.col-accion { width: 120px; text-align: center; }
+
+/* Vista móvil: tabla fija con scroll horizontal y anchos compactos */
+@media (max-width: 768px) {
+  .gestion-table-wrapper {
+    overflow-x: auto !important;
+  }
+  .gestion-table {
+    width: max-content;
+    min-width: 960px;
+    table-layout: fixed;
+    font-size: 0.82rem;
+  }
+  .gestion-table th {
+    font-size: 0.8rem;
+    padding: 8px 6px;
+  }
+  .gestion-table td {
+    padding: 8px 6px !important;
+    font-size: 0.8rem;
+    white-space: nowrap !important;
+  }
+  .col-area { width: 90px; }
+  .col-codigo { width: 120px; }
+  .col-nombre { width: 170px; white-space: normal; }
+  .col-presentacion { width: 150px; white-space: normal; }
+  .col-lote { width: 170px; white-space: normal; }
+  .col-cantidad { width: 95px; }
+  .col-activo { width: 95px; }
+  .col-accion { width: 100px; }
 }
 
 /* FORZAR QUE LAS CELDAS CON INPUTS SEAN VISIBLES */
@@ -1217,7 +1395,7 @@ button.btn-green,
   overflow: visible !important;
   position: relative !important;
   z-index: 1 !important;
-  min-width: 150px !important;
+  min-width: 0 !important;
 }
 
 .gestion-table tbody tr:hover {
@@ -1237,16 +1415,16 @@ table.gestion-table td select,
 .gestion-table-input-lote,
 .gestion-table-input-cantidad {
   width: 100% !important;
-  min-width: 160px !important;
+  min-width: 0 !important;
   max-width: 100% !important;
   border-radius: var(--radio-md) !important;
   border: 2px solid var(--azul-primario) !important;
-  padding: 14px 16px !important;
+  padding: 10px 12px !important;
   background: var(--fondo-input) !important;
   color: var(--texto-boton, var(--texto-principal)) !important;
-  font-size: 20px !important;
+  font-size: 14px !important;
   font-weight: 600 !important;
-  min-height: 55px !important;
+  min-height: 42px !important;
   max-height: none !important;
   height: auto !important;
   line-height: 1.5 !important;
@@ -1310,9 +1488,9 @@ table.gestion-table td select,
 .activation-modal {
   background: var(--fondo-card);
   border-radius: var(--radio-xl);
-  width: min(520px, 98vw) !important;
+  width: calc(100% - 40px) !important;
+  max-width: 500px !important;
   max-height: calc(80vh - 24px) !important;
-  max-width: 98vw !important;
   overflow-y: auto;
   overflow-x: hidden;
   padding: 12px !important;
@@ -1879,6 +2057,52 @@ table.gestion-table td select,
     flex: 0 0 auto !important;
     min-height: 42px !important;
   }
+
+/* Asignar anchos fijos por columna para alinear encabezados */
+.gestion-table th:nth-child(1),
+.gestion-table td:nth-child(1) { width: 110px; }
+.gestion-table th:nth-child(2),
+.gestion-table td:nth-child(2) { width: 180px; }
+.gestion-table th:nth-child(3),
+.gestion-table td:nth-child(3) { width: 140px; }
+.gestion-table th:nth-child(4),
+.gestion-table td:nth-child(4) { width: 130px; }
+.gestion-table th:nth-child(5),
+.gestion-table td:nth-child(5) { width: 110px; }
+.gestion-table th:nth-child(6),
+.gestion-table td:nth-child(6) { width: 100px; }
+.gestion-table th:nth-child(7),
+.gestion-table td:nth-child(7) { width: 110px; }
+
+/* En pantallas pequeñas, dejar que la tabla se ensanche y use scroll sin romper alineación */
+@media (max-width: 768px) {
+  .gestion-table {
+    width: max-content;
+    min-width: 600px;
+    table-layout: auto;
+  }
+
+  .gestion-table th,
+  .gestion-table td {
+    min-width: 0 !important;
+    padding: 8px 6px !important;
+  }
+
+  .gestion-table th:nth-child(1),
+  .gestion-table td:nth-child(1) { width: 90px; }
+  .gestion-table th:nth-child(2),
+  .gestion-table td:nth-child(2) { width: 150px; }
+  .gestion-table th:nth-child(3),
+  .gestion-table td:nth-child(3) { width: 120px; }
+  .gestion-table th:nth-child(4),
+  .gestion-table td:nth-child(4) { width: 110px; }
+  .gestion-table th:nth-child(5),
+  .gestion-table td:nth-child(5) { width: 100px; }
+  .gestion-table th:nth-child(6),
+  .gestion-table td:nth-child(6) { width: 90px; }
+  .gestion-table th:nth-child(7),
+  .gestion-table td:nth-child(7) { width: 100px; }
+}
   
   .gestion-table-wrapper {
     margin-top: 8px !important;
@@ -1979,8 +2203,8 @@ table.gestion-table td select,
 }
 
 .modal-nuevocodigo {
-  width: min(420px, 95vw);
-  max-width: calc(100vw - 40px);
+  width: calc(100% - 40px);
+  max-width: 420px;
   max-height: calc(100vh - 40px);
   background: var(--fondo-card);
   border-radius: var(--radio-xl);

@@ -7,7 +7,7 @@ const config: CapacitorConfig = {
   server: {
     // Configuración del servidor para desarrollo
     // En producción, la app usará la IP detectada automáticamente o la configurada
-    // url: 'http://172.16.30.12:3001', // Descomentar si necesitas forzar una IP específica
+    // url: 'http://172.16.30.5:3001', // Descomentar si necesitas forzar una IP específica
     androidScheme: 'http',
     cleartext: true // Permitir tráfico HTTP (necesario para servidores sin HTTPS)
   },

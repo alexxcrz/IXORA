@@ -5,9 +5,8 @@ import { useAlert } from "../../components/AlertModal";
 import { safeFocus, puedeHacerFocus } from "../../utils/focusHelper";
 import ExcelJS from "exceljs";
 import { Document, Packer, Paragraph, AlignmentType, TextRun, Table, TableRow, TableCell, WidthType } from "docx";
-import { getServerUrl } from "../../config/server";
 
-export default function Auditoria({ SERVER_URL }) {
+export default function Auditoria({ SERVER_URL, socket }) {
   const { authFetch, can } = useAuth();
   const { showAlert, showConfirm } = useAlert();
   
@@ -18,29 +17,85 @@ export default function Auditoria({ SERVER_URL }) {
   // Verificar si el usuario puede ver todos los items (admin o tiene permiso de inventario)
   const puedeVerTodo = can("admin") || can("tab:inventario");
   const [codigoInput, setCodigoInput] = useState("");
-  const [cantidadInput, setCantidadInput] = useState("");
-  const [piezasNoAptasInput, setPiezasNoAptasInput] = useState("");
-  const [loteInput, setLoteInput] = useState("");
+  const [nombreProducto, setNombreProducto] = useState("");
+  const [lotesInput, setLotesInput] = useState([{ lote: "", cantidad: "", caducidad: "", piezasNoAptas: "" }]);
   const [mostrarNuevaAuditoria, setMostrarNuevaAuditoria] = useState(false);
   const [nombreAuditoria, setNombreAuditoria] = useState("");
+  const [inventarios, setInventarios] = useState([]);
+  const [inventarioSeleccionado, setInventarioSeleccionado] = useState(null);
   const [filtroDiferencias, setFiltroDiferencias] = useState("todos"); // todos, diferencias, coincidencias
   const [busqueda, setBusqueda] = useState("");
   const [exportando, setExportando] = useState(false);
   const [estadisticasInventario, setEstadisticasInventario] = useState({ totalProductos: 0, totalPiezas: 0 });
+  const [showModalEliminarAuditoria, setShowModalEliminarAuditoria] = useState(false);
+  const [auditoriaAEliminar, setAuditoriaAEliminar] = useState(null);
+  const [passwordEliminar, setPasswordEliminar] = useState("");
+  const [cargandoAuditoria, setCargandoAuditoria] = useState(false);
+  const [cargandoItems, setCargandoItems] = useState(false);
   
   const codigoInputRef = useRef(null);
-  const cantidadInputRef = useRef(null);
+  const primerLoteInputRef = useRef(null);
   const procesandoRef = useRef(false);
+  const auditoriaActualRef = useRef(null);
+  const itemsEscaneadosRef = useRef([]);
+  
+  // Mantener refs sincronizados con el estado
+  useEffect(() => {
+    auditoriaActualRef.current = auditoriaActual;
+  }, [auditoriaActual]);
+  
+  useEffect(() => {
+    itemsEscaneadosRef.current = itemsEscaneados;
+  }, [itemsEscaneados]);
 
   // Cargar auditorías y estadísticas del inventario al montar
   useEffect(() => {
-    cargarAuditorias();
-    cargarEstadisticasInventario();
+    let mounted = true;
+    
+    const cargarDatos = async () => {
+      try {
+        await Promise.all([
+          cargarAuditorias(),
+          cargarEstadisticasInventario(),
+          cargarInventarios()
+        ]);
+      } catch (err) {
+        console.error("Error cargando datos iniciales:", err);
+        if (mounted) {
+          await showAlert("Error cargando datos iniciales. Por favor, recarga la página.", "error");
+        }
+      }
+    };
+    
+    cargarDatos();
+    
+    return () => {
+      mounted = false;
+    };
   }, []);
+
+  // Cargar inventarios disponibles
+  const cargarInventarios = async () => {
+    try {
+      const data = await authFetch(`${SERVER_URL}/inventario/inventarios`);
+      if (Array.isArray(data) && data.length > 0) {
+        setInventarios(data);
+      } else {
+        // Si no hay inventarios, crear el por defecto
+        const inventarioDefault = { id: 1, nombre: "Inventario", alias: "CEDIS" };
+        setInventarios([inventarioDefault]);
+      }
+    } catch (err) {
+      console.error("❌ Error cargando inventarios:", err);
+      // En caso de error, usar inventario por defecto
+      const inventarioDefault = { id: 1, nombre: "Inventario", alias: "CEDIS" };
+      setInventarios([inventarioDefault]);
+    }
+  };
 
   // Sincronización en tiempo real con Socket.IO
   useEffect(() => {
-    const socket = window.socket;
+    if (!socket) return;
     
     const handleAuditoriaCreada = (nuevaAuditoria) => {
       setAuditorias(prev => {
@@ -62,22 +117,29 @@ export default function Auditoria({ SERVER_URL }) {
     };
 
     const handleAuditoriaActualizada = async ({ auditoriaId }) => {
-      // Si la auditoría actual es la que se actualizó, recargar sus items
-      if (auditoriaActual && auditoriaActual.id === auditoriaId) {
+      // Usar ref para evitar dependencias que causen re-renderizados infinitos
+      const audActual = auditoriaActualRef.current;
+      if (audActual && audActual.id === auditoriaId) {
         try {
+          setCargandoItems(true);
           const data = await authFetch(`${SERVER_URL}/api/auditoria/${auditoriaId}/items`);
           setItemsEscaneados(data || []);
         } catch (err) {
           console.error("Error recargando items de auditoría:", err);
+        } finally {
+          setCargandoItems(false);
         }
       }
-      // También recargar la lista de auditorías
-      handleAuditoriasActualizadas();
+      // También recargar la lista de auditorías solo si no hay auditoría abierta
+      if (!audActual) {
+        handleAuditoriasActualizadas();
+      }
     };
 
     const handleItemAgregado = ({ auditoriaId, item }) => {
-      // Si la auditoría actual es la que se actualizó, agregar el item
-      if (auditoriaActual && auditoriaActual.id === auditoriaId) {
+      // Usar ref para evitar dependencias
+      const audActual = auditoriaActualRef.current;
+      if (audActual && audActual.id === auditoriaId) {
         setItemsEscaneados(prev => {
           // Evitar duplicados
           if (prev.find(i => i.id === item.id)) {
@@ -89,26 +151,36 @@ export default function Auditoria({ SERVER_URL }) {
     };
 
     const handleItemEliminado = ({ auditoriaId, itemId }) => {
-      // Si la auditoría actual es la que se actualizó, eliminar el item
-      if (auditoriaActual && auditoriaActual.id === auditoriaId) {
+      // Usar ref para evitar dependencias
+      const audActual = auditoriaActualRef.current;
+      if (audActual && audActual.id === auditoriaId) {
         setItemsEscaneados(prev => prev.filter(i => i.id !== itemId));
       }
     };
 
     const handleAuditoriaFinalizada = (auditoriaFinalizada) => {
       setAuditorias(prev => prev.map(a => a.id === auditoriaFinalizada.id ? auditoriaFinalizada : a));
-      // Si la auditoría actual es la que se finalizó, actualizarla
-      if (auditoriaActual && auditoriaActual.id === auditoriaFinalizada.id) {
+      // Usar ref para evitar dependencias
+      const audActual = auditoriaActualRef.current;
+      if (audActual && audActual.id === auditoriaFinalizada.id) {
         setAuditoriaActual(auditoriaFinalizada);
       }
     };
 
     const handleEstadisticasInventarioActualizadas = async () => {
-      try {
-        const data = await authFetch(`${SERVER_URL}/api/auditoria/estadisticas-inventario`);
-        setEstadisticasInventario(data || { totalProductos: 0, totalPiezas: 0 });
-      } catch (err) {
-        console.error("Error cargando estadísticas de inventario:", err);
+      // Solo actualizar si no hay auditoría abierta o si está cargando
+      const audActual = auditoriaActualRef.current;
+      if (!audActual || !cargandoItems) {
+        try {
+          const inventarioId = audActual?.inventario_id;
+          const url = inventarioId 
+            ? `${SERVER_URL}/api/auditoria/estadisticas-inventario?inventario_id=${inventarioId}`
+            : `${SERVER_URL}/api/auditoria/estadisticas-inventario`;
+          const data = await authFetch(url);
+          setEstadisticasInventario(data || { totalProductos: 0, totalPiezas: 0 });
+        } catch (err) {
+          console.error("Error cargando estadísticas de inventario:", err);
+        }
       }
     };
 
@@ -131,16 +203,37 @@ export default function Auditoria({ SERVER_URL }) {
       socket.off("auditoria_estadisticas_inventario_actualizadas", handleEstadisticasInventarioActualizadas);
       socket.off("inventario_actualizado", handleEstadisticasInventarioActualizadas);
     };
-  }, [auditoriaActual, authFetch, SERVER_URL]);
+  }, [socket, authFetch, SERVER_URL]); // Removido auditoriaActual de las dependencias
 
   const cargarEstadisticasInventario = async () => {
+    // Evitar cargar si ya está cargando una auditoría
+    if (cargandoAuditoria) return;
+    
     try {
-      const data = await authFetch(`${SERVER_URL}/api/auditoria/estadisticas-inventario`);
-      setEstadisticasInventario(data || { totalProductos: 0, totalPiezas: 0 });
+      // Usar ref para obtener el valor actual sin causar re-renderizados
+      const audActual = auditoriaActualRef.current;
+      
+      // Si hay una auditoría activa con inventario_id, usar ese inventario
+      if (audActual && audActual.inventario_id) {
+        const data = await authFetch(`${SERVER_URL}/api/auditoria/estadisticas-inventario?inventario_id=${audActual.inventario_id}`);
+        setEstadisticasInventario(data || { totalProductos: 0, totalPiezas: 0 });
+      } else {
+        // Si no hay auditoría activa, cargar estadísticas generales (inventario por defecto)
+        const data = await authFetch(`${SERVER_URL}/api/auditoria/estadisticas-inventario`);
+        setEstadisticasInventario(data || { totalProductos: 0, totalPiezas: 0 });
+      }
     } catch (err) {
       console.error("Error cargando estadísticas de inventario:", err);
     }
   };
+
+  // Recargar estadísticas cuando cambia la auditoría actual
+  useEffect(() => {
+    if (auditoriaActual && !cargandoAuditoria) {
+      cargarEstadisticasInventario();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [auditoriaActual?.id]); // Solo cuando cambia el ID, no el objeto completo
 
   // Auto-focus en el input de código
   useEffect(() => {
@@ -159,6 +252,7 @@ export default function Auditoria({ SERVER_URL }) {
       setAuditorias(data || []);
     } catch (err) {
       console.error("Error cargando auditorías:", err);
+      await showAlert(err.message || "Error cargando lista de auditorías", "error");
     }
   };
 
@@ -168,17 +262,54 @@ export default function Auditoria({ SERVER_URL }) {
       return;
     }
 
+    if (!inventarioSeleccionado) {
+      await showAlert("Debes seleccionar un inventario para la auditoría", "warning");
+      return;
+    }
+
+    // BARRERA: Verificar que no haya otra auditoría activa
+    const auditoriasActivas = auditorias.filter(a => a.estado === "en_proceso");
+    if (auditoriasActivas.length > 0) {
+      const confirmado = await showConfirm(
+        `Ya existe una auditoría en proceso: "${auditoriasActivas[0].nombre}". Solo puede haber una auditoría activa a la vez. ¿Deseas cerrar la auditoría actual y crear una nueva?`,
+        "Auditoría Activa Existente"
+      );
+      
+      if (!confirmado) {
+        return;
+      }
+      
+      // Cerrar todas las auditorías activas
+      for (const aud of auditoriasActivas) {
+        try {
+          await authFetch(`${SERVER_URL}/api/auditoria/${aud.id}/finalizar`, {
+            method: "POST",
+          });
+        } catch (err) {
+          console.error("Error finalizando auditoría activa:", err);
+        }
+      }
+      
+      // Recargar auditorías
+      await cargarAuditorias();
+    }
+
     try {
       const data = await authFetch(`${SERVER_URL}/api/auditoria/crear`, {
         method: "POST",
-        body: JSON.stringify({ nombre: nombreAuditoria.trim() }),
+        body: JSON.stringify({ 
+          nombre: nombreAuditoria.trim(),
+          inventario_id: inventarioSeleccionado
+        }),
       });
 
       setAuditoriaActual(data);
       setItemsEscaneados([]);
       setMostrarNuevaAuditoria(false);
       setNombreAuditoria("");
+      setInventarioSeleccionado(null);
       await cargarAuditorias();
+      await cargarEstadisticasInventario();
       await showAlert("Auditoría creada exitosamente", "success");
     } catch (err) {
       await showAlert(err.message || "Error creando auditoría", "error");
@@ -186,12 +317,85 @@ export default function Auditoria({ SERVER_URL }) {
   };
 
   const abrirAuditoria = async (auditoria) => {
+    if (cargandoAuditoria) return; // Evitar múltiples llamadas simultáneas
+    
+    // Si ya está abierta esta auditoría, no hacer nada
+    if (auditoriaActual?.id === auditoria.id && !cargandoItems) {
+      return;
+    }
+    
+    setCargandoAuditoria(true);
+    setCargandoItems(true);
+    
+    // Timeout de seguridad (30 segundos)
+    let timeoutId;
     try {
+      timeoutId = setTimeout(() => {
+        setCargandoAuditoria(false);
+        setCargandoItems(false);
+        showAlert("La carga está tardando demasiado. Por favor, intenta nuevamente.", "warning");
+      }, 30000);
+      
+      // Cargar la auditoría completa para obtener el inventario_id
+      const auditoriaCompleta = await authFetch(`${SERVER_URL}/api/auditoria/${auditoria.id}`);
+      if (!auditoriaCompleta) {
+        throw new Error("No se pudo cargar la información de la auditoría");
+      }
+      
+      // Cargar items de la auditoría
       const data = await authFetch(`${SERVER_URL}/api/auditoria/${auditoria.id}/items`);
-      setAuditoriaActual(auditoria);
-      setItemsEscaneados(data || []);
+      
+      // Actualizar estados de una vez para evitar múltiples re-renderizados
+      setAuditoriaActual(auditoriaCompleta);
+      setItemsEscaneados(Array.isArray(data) ? data : []);
     } catch (err) {
-      await showAlert(err.message || "Error cargando auditoría", "error");
+      console.error("Error cargando auditoría:", err);
+      await showAlert(err.message || "Error cargando auditoría. Por favor, intenta nuevamente.", "error");
+      // Limpiar estado en caso de error
+      setAuditoriaActual(null);
+      setItemsEscaneados([]);
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId);
+      setCargandoAuditoria(false);
+      setCargandoItems(false);
+    }
+  };
+
+  // Función para obtener el nombre del producto al escanear código
+  const obtenerNombreProducto = async (codigo) => {
+    if (!codigo || !codigo.trim()) {
+      setNombreProducto("");
+      return;
+    }
+
+    if (!auditoriaActual || !auditoriaActual.inventario_id) {
+      setNombreProducto("");
+      return;
+    }
+
+    try {
+      // Validar código en el inventario específico de la auditoría
+      const validacion = await authFetch(`${SERVER_URL}/inventario/inventarios/${auditoriaActual.inventario_id}/validar-codigo/${codigo.trim()}`);
+      
+      if (validacion.existe) {
+        const producto = await authFetch(`${SERVER_URL}/inventario/inventarios/${auditoriaActual.inventario_id}/producto/${validacion.codigo_principal}`);
+        setNombreProducto(producto.nombre || "");
+        
+        // Pasar foco al primer input de lote automáticamente
+        setTimeout(() => {
+          const primerLoteInput = document.querySelector(`input[data-lote-index="0"][data-campo="lote"]`);
+          if (primerLoteInput) {
+            primerLoteInput.focus();
+            primerLoteInput.select();
+          } else if (primerLoteInputRef.current) {
+            safeFocus(primerLoteInputRef.current, 0);
+          }
+        }, 150);
+      } else {
+        setNombreProducto("");
+      }
+    } catch (err) {
+      setNombreProducto("");
     }
   };
 
@@ -213,12 +417,19 @@ export default function Auditoria({ SERVER_URL }) {
 
     procesandoRef.current = true;
 
+    // BARRERA: Verificar que la auditoría tenga inventario_id
+    if (!auditoriaActual.inventario_id) {
+      await showAlert("Esta auditoría no tiene un inventario asociado. Por favor, crea una nueva auditoría.", "error");
+      procesandoRef.current = false;
+      return;
+    }
+
     try {
-      // Validar código en el sistema
-      const validacion = await authFetch(`${SERVER_URL}/inventario/validar-codigo/${codigo}`);
+      // Validar código en el inventario específico de la auditoría
+      const validacion = await authFetch(`${SERVER_URL}/inventario/inventarios/${auditoriaActual.inventario_id}/validar-codigo/${codigo}`);
       
       if (!validacion.existe) {
-        await showAlert(`Código ${codigo} no existe en el sistema`, "warning");
+        await showAlert(`Código ${codigo} no existe en el inventario seleccionado`, "warning");
         setCodigoInput("");
         procesandoRef.current = false;
         if (codigoInputRef.current) safeFocus(codigoInputRef.current, 0);
@@ -227,32 +438,115 @@ export default function Auditoria({ SERVER_URL }) {
 
       const codigoPrincipal = validacion.codigo_principal;
       
-      // Obtener información del producto del sistema
-      const producto = await authFetch(`${SERVER_URL}/inventario/producto/${codigoPrincipal}`);
+      // Obtener información del producto del inventario específico
+      const producto = await authFetch(`${SERVER_URL}/inventario/inventarios/${auditoriaActual.inventario_id}/producto/${codigoPrincipal}`);
       
-      // Obtener cantidad física (si no se ingresó, usar 0)
-      const cantidadFisica = parseInt(cantidadInput) || 0;
-      const piezasNoAptas = parseInt(piezasNoAptasInput) || 0;
-      const lote = loteInput.trim() || producto.lote || "";
+      // Validar que haya al menos un lote con número de lote
+      // Validación más permisiva: cualquier lote que tenga algún valor en el campo lote
+      const lotesNoVacios = lotesInput.filter(l => {
+        if (!l) return false;
+        // Verificar si tiene lote (puede ser string, number, etc.)
+        const loteValue = l.lote;
+        if (loteValue === null || loteValue === undefined) return false;
+        // Convertir a string y verificar que no esté vacío después de trim
+        const loteStr = String(loteValue).trim();
+        return loteStr.length > 0;
+      });
+      
+      console.log("🔍 Debug - lotesInput:", lotesInput);
+      console.log("🔍 Debug - lotesNoVacios:", lotesNoVacios);
+      console.log("🔍 Debug - lotesNoVacios.length:", lotesNoVacios.length);
+      
+      if (lotesNoVacios.length === 0) {
+        await showAlert("Debes agregar al menos un lote con número de lote. Verifica que los lotes tengan un número ingresado.", "warning");
+        procesandoRef.current = false;
+        // Pasar foco al primer input de lote
+        setTimeout(() => {
+          const primerLoteInput = document.querySelector(`input[data-lote-index="0"][data-campo="lote"]`);
+          if (primerLoteInput) primerLoteInput.focus();
+        }, 100);
+        return;
+      }
 
-      // Obtener cantidad del sistema (suma de lotes activos)
-      const lotes = await authFetch(`${SERVER_URL}/inventario/lotes/${codigoPrincipal}`);
+      // Usar los lotes validados (pueden venir del DOM o del estado)
+      // Normalizar los lotes para asegurar que tengan todos los campos necesarios
+      const lotesValidos = lotesNoVacios.map(l => ({
+        lote: (l.lote || "").trim(),
+        cantidad: l.cantidad || "",
+        caducidad: l.caducidad || "",
+        piezasNoAptas: l.piezasNoAptas || ""
+      }));
+
+      // Calcular cantidad física total (suma de todas las cantidades de lotes, usando 0 si no hay cantidad)
+      const cantidadFisica = lotesValidos.reduce((sum, l) => sum + (parseInt(l.cantidad) || 0), 0);
+      
+      // Calcular total de piezas no aptas (suma de todas las piezas no aptas de los lotes)
+      const piezasNoAptas = lotesValidos.reduce((sum, l) => sum + (parseInt(l.piezasNoAptas) || 0), 0);
+
+      // Obtener cantidad del sistema (suma de lotes activos) del inventario específico
+      const lotes = await authFetch(`${SERVER_URL}/inventario/inventarios/${auditoriaActual.inventario_id}/lotes/${codigoPrincipal}/completo`);
       const cantidadSistema = lotes.reduce((sum, l) => sum + (l.cantidad_piezas || 0), 0);
 
-      // Calcular diferencia (la cantidad física ya incluye las piezas no aptas, pero las descontamos del inventario)
-      // La diferencia se calcula como: cantidad_fisica - cantidad_sistema
-      // Pero las piezas no aptas se descontarán del inventario
+      // Calcular diferencia
       const diferencia = cantidadFisica - cantidadSistema;
       const tipoDiferencia = diferencia > 0 ? "sobrante" : diferencia < 0 ? "faltante" : "coincide";
 
+      // Preparar lotes con formato para guardar (incluyendo piezas no aptas por lote)
+      // Normalizar valores: usar valores por defecto si faltan y asegurar que sean válidos
+      const lotesParaGuardar = lotesValidos.map(l => {
+        // Asegurar que todos los valores sean válidos para JSON
+        const lote = String(l.lote || "").trim();
+        const cantidad = parseInt(String(l.cantidad || 0)) || 0;
+        const caducidad = String(l.caducidad || "").trim();
+        const piezasNoAptas = parseInt(String(l.piezasNoAptas || 0)) || 0;
+        
+        return {
+          lote: lote,
+          cantidad: cantidad,
+          caducidad: caducidad,
+          piezasNoAptas: piezasNoAptas
+        };
+      }).filter(l => l.lote && l.lote.length > 0); // Filtrar lotes sin número
+
+      // Validar que haya al menos un lote después de normalizar
+      if (lotesParaGuardar.length === 0) {
+        await showAlert("Debes agregar al menos un lote con número de lote válido", "warning");
+        procesandoRef.current = false;
+        return;
+      }
+
+      // Validar que los lotes sean válidos (sin stringificar aún, el body lo hará)
+      try {
+        // Validar que sea un array válido
+        if (!Array.isArray(lotesParaGuardar)) {
+          throw new Error("Lotes no es un array válido");
+        }
+        // Validar que cada lote tenga estructura válida
+        lotesParaGuardar.forEach(l => {
+          if (typeof l.lote !== 'string') throw new Error("Lote debe ser string");
+          if (typeof l.cantidad !== 'number') throw new Error("Cantidad debe ser número");
+          if (typeof l.caducidad !== 'string') throw new Error("Caducidad debe ser string");
+          if (typeof l.piezasNoAptas !== 'number') throw new Error("PiezasNoAptas debe ser número");
+        });
+      } catch (jsonErr) {
+        console.error("❌ Error validando lotes:", jsonErr);
+        console.error("Lotes a convertir:", lotesParaGuardar);
+        await showAlert("Error preparando lotes. Por favor, verifica que todos los campos sean válidos.", "error");
+        procesandoRef.current = false;
+        return;
+      }
+
       // Agregar o actualizar item en la auditoría
+      // Enviar lotes como array directamente, el backend lo convertirá a string si es necesario
       const itemData = {
         codigo: codigoPrincipal,
         nombre: producto.nombre,
-        lote: lote,
+        lote: lotesParaGuardar[0]?.lote || "", // Lote principal (primer lote) para compatibilidad
+        lotes: lotesParaGuardar, // Enviar como array, no como string JSON
         cantidad_sistema: cantidadSistema,
         cantidad_fisica: cantidadFisica,
         piezas_no_aptas: piezasNoAptas,
+        lote_piezas_no_aptas: null, // Ya no necesario, cada lote tiene sus propias piezas no aptas
         diferencia: diferencia,
         tipo_diferencia: tipoDiferencia,
       };
@@ -262,8 +556,8 @@ export default function Auditoria({ SERVER_URL }) {
         body: JSON.stringify(itemData),
       });
 
-      // Actualizar lista local
-      const itemExistente = itemsEscaneados.find(i => i.codigo === codigoPrincipal && i.lote === lote);
+      // Actualizar lista local (buscar por código ya que ahora puede haber múltiples lotes)
+      const itemExistente = itemsEscaneados.find(i => i.codigo === codigoPrincipal);
       if (itemExistente) {
         setItemsEscaneados(itemsEscaneados.map(i => 
           i.id === itemExistente.id ? resultado : i
@@ -274,16 +568,15 @@ export default function Auditoria({ SERVER_URL }) {
 
       // Limpiar inputs
       setCodigoInput("");
-      setCantidadInput("");
-      setPiezasNoAptasInput("");
-      setLoteInput("");
+      setNombreProducto("");
+      setLotesInput([{ lote: "", cantidad: "", caducidad: "", piezasNoAptas: "" }]);
       
       // Actualizar estadísticas de la auditoría
       await cargarAuditorias();
       const auditoriaActualizada = await authFetch(`${SERVER_URL}/api/auditoria/${auditoriaActual.id}`);
       setAuditoriaActual(auditoriaActualizada);
 
-      // Focus de vuelta al input
+      // Focus de vuelta al input de código
       setTimeout(() => {
         if (codigoInputRef.current) safeFocus(codigoInputRef.current, 0);
       }, 100);
@@ -295,17 +588,89 @@ export default function Auditoria({ SERVER_URL }) {
     }
   };
 
-  const handleKeyDown = (e) => {
+  // Funciones para manejar múltiples lotes
+  const agregarLote = () => {
+    setLotesInput([...lotesInput, { lote: "", cantidad: "", caducidad: "", piezasNoAptas: "" }]);
+  };
+
+  const eliminarLote = (index) => {
+    if (lotesInput.length > 1) {
+      setLotesInput(lotesInput.filter((_, i) => i !== index));
+    }
+  };
+
+  const actualizarLote = (index, campo, valor) => {
+    const nuevosLotes = [...lotesInput];
+    nuevosLotes[index] = { ...nuevosLotes[index], [campo]: valor };
+    setLotesInput(nuevosLotes);
+  };
+
+  const handleKeyDown = async (e) => {
     if (e.key === "Enter") {
       e.preventDefault();
+      
+      // Navegación entre inputs con Enter
       if (e.target.id === "codigoInput") {
-        if (cantidadInputRef.current) {
-          cantidadInputRef.current.focus();
-        } else {
-          procesarCodigo();
+        // Al presionar Enter en código, obtener nombre y pasar foco al primer lote
+        await obtenerNombreProducto(codigoInput);
+      } else if (e.target.dataset.loteIndex !== undefined) {
+        // Si está en un input de lote, pasar al siguiente campo
+        const index = parseInt(e.target.dataset.loteIndex);
+        const campo = e.target.dataset.campo;
+        
+        if (campo === "lote") {
+          // Lote -> Cantidad
+          const cantidadInput = document.querySelector(`input[data-lote-index="${index}"][data-campo="cantidad"]`);
+          if (cantidadInput) {
+            cantidadInput.focus();
+            cantidadInput.select();
+          }
+        } else if (campo === "cantidad") {
+          // Cantidad -> Caducidad
+          const caducidadInput = document.querySelector(`input[data-lote-index="${index}"][data-campo="caducidad"]`);
+          if (caducidadInput) {
+            caducidadInput.focus();
+            // Intentar abrir calendario
+            try {
+              caducidadInput.showPicker && caducidadInput.showPicker();
+            } catch (err) {
+              // Si showPicker no está disponible, solo focus
+            }
+          }
+        } else if (campo === "caducidad") {
+          // Caducidad -> Piezas No Aptas
+          const noAptasInput = document.querySelector(`input[data-lote-index="${index}"][data-campo="piezasNoAptas"]`);
+          if (noAptasInput) {
+            noAptasInput.focus();
+            noAptasInput.select();
+          }
+        } else if (campo === "piezasNoAptas") {
+          // Piezas No Aptas -> Agregar el lote automáticamente y preparar para siguiente lote
+          // Verificar que el lote actual tenga datos mínimos
+          const loteActual = lotesInput[index];
+          if (loteActual && loteActual.lote && loteActual.lote.trim()) {
+            // Si ya hay más de un lote o este es el primero completo, agregar nuevo lote
+            if (index === lotesInput.length - 1) {
+              // Es el último lote, agregar uno nuevo y pasar foco
+              agregarLote();
+              // Esperar un poco para que React renderice el nuevo lote
+              setTimeout(() => {
+                const nuevoLoteInput = document.querySelector(`input[data-lote-index="${lotesInput.length}"][data-campo="lote"]`);
+                if (nuevoLoteInput) {
+                  nuevoLoteInput.focus();
+                  nuevoLoteInput.select();
+                }
+              }, 100);
+            } else {
+              // Hay más lotes, pasar al siguiente
+              const siguienteLote = document.querySelector(`input[data-lote-index="${index + 1}"][data-campo="lote"]`);
+              if (siguienteLote) {
+                siguienteLote.focus();
+                siguienteLote.select();
+              }
+            }
+          }
         }
-      } else if (e.target.id === "cantidadInput") {
-        procesarCodigo();
       }
     }
   };
@@ -378,8 +743,15 @@ export default function Auditoria({ SERVER_URL }) {
   const estadisticas = {
     total: itemsEscaneados.length,
     coincidencias: itemsEscaneados.filter(i => i.diferencia === 0).length,
-    sobrantes: itemsEscaneados.filter(i => i.diferencia > 0).length,
-    faltantes: itemsEscaneados.filter(i => i.diferencia < 0).length,
+    sobrantes: itemsEscaneados.filter(i => i.diferencia > 0).length, // Cantidad de productos con sobrante
+    sobrantesPiezas: itemsEscaneados
+      .filter(i => i.diferencia > 0)
+      .reduce((sum, i) => sum + i.diferencia, 0), // Total de piezas sobrantes
+    faltantes: itemsEscaneados.filter(i => i.diferencia < 0).length, // Cantidad de productos con faltante
+    faltantesPiezas: Math.abs(itemsEscaneados
+      .filter(i => i.diferencia < 0)
+      .reduce((sum, i) => sum + i.diferencia, 0)), // Total de piezas faltantes (valor absoluto)
+    piezasNoAptas: itemsEscaneados.reduce((sum, i) => sum + (parseInt(i.piezas_no_aptas) || 0), 0), // Total de piezas no aptas
     diferenciaTotal: itemsEscaneados.reduce((sum, i) => sum + i.diferencia, 0),
   };
 
@@ -718,19 +1090,94 @@ export default function Auditoria({ SERVER_URL }) {
     }
   };
 
+  // Función para eliminar auditoría
+  const eliminarAuditoria = async () => {
+    if (!passwordEliminar.trim()) {
+      await showAlert("Debes ingresar tu contraseña de administrador", "warning");
+      return;
+    }
+
+    if (!auditoriaAEliminar) {
+      await showAlert("No se ha seleccionado una auditoría para eliminar", "error");
+      return;
+    }
+
+    try {
+      const data = await authFetch(`${SERVER_URL}/api/auditoria/${auditoriaAEliminar.id}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: passwordEliminar })
+      });
+
+      // Recargar lista de auditorías
+      await cargarAuditorias();
+      
+      // Si la auditoría eliminada era la actual, cerrarla
+      if (auditoriaAEliminar.id === auditoriaActual?.id) {
+        setAuditoriaActual(null);
+        setItemsEscaneados([]);
+      }
+      
+      // Cerrar modal y limpiar
+      setShowModalEliminarAuditoria(false);
+      setAuditoriaAEliminar(null);
+      setPasswordEliminar("");
+      
+      await showAlert(
+        `✅ Auditoría "${auditoriaAEliminar.nombre}" eliminada exitosamente (${data.items_eliminados || 0} items eliminados)`, 
+        "success"
+      );
+    } catch (err) {
+      await showAlert(err.message || "Error eliminando auditoría", "error");
+      setPasswordEliminar(""); // Limpiar contraseña en caso de error
+    }
+  };
+
   return (
     <div className="auditoria-container">
       {/* Modal Nueva Auditoría */}
       {mostrarNuevaAuditoria && (
         <div className="modal-overlay" onClick={() => setMostrarNuevaAuditoria(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
+          <div 
+            className="modal modal-sm" 
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              maxWidth: window.innerWidth <= 768 ? 'calc(100vw - 20px)' : undefined,
+              width: window.innerWidth <= 768 ? 'calc(100vw - 20px)' : undefined
+            }}
+          >
             <div className="modal-header">
               <h3>Nueva Auditoría</h3>
               <button className="modal-close" onClick={() => setMostrarNuevaAuditoria(false)}>×</button>
             </div>
             <div className="modal-body">
               <label>
-                Nombre de la Auditoría
+                Inventario *
+                <select
+                  value={inventarioSeleccionado || ""}
+                  onChange={(e) => setInventarioSeleccionado(e.target.value ? parseInt(e.target.value) : null)}
+                  style={{
+                    width: "100%",
+                    padding: "8px 12px",
+                    border: "1px solid var(--borde-medio)",
+                    borderRadius: "var(--radio-full)",
+                    background: "var(--fondo-input)",
+                    color: "var(--texto-principal)",
+                    fontSize: "0.9rem",
+                    marginBottom: "12px"
+                  }}
+                  required
+                >
+                  <option value="">Selecciona un inventario...</option>
+                  {inventarios.map(inv => (
+                    <option key={inv.id} value={inv.id}>
+                      {inv.nombre} {inv.alias ? `(${inv.alias})` : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Nombre de la Auditoría *
                 <input
                   type="text"
                   value={nombreAuditoria}
@@ -744,10 +1191,91 @@ export default function Auditoria({ SERVER_URL }) {
                   }}
                 />
               </label>
+              {inventarioSeleccionado && (
+                <div style={{
+                  padding: "10px",
+                  background: "rgba(59, 130, 246, 0.1)",
+                  border: "1px solid rgba(59, 130, 246, 0.3)",
+                  borderRadius: "8px",
+                  marginTop: "10px",
+                  fontSize: "0.85rem",
+                  color: "var(--texto-principal)"
+                }}>
+                  ⚠️ <strong>Importante:</strong> Esta auditoría solo trabajará con el inventario seleccionado. 
+                  Solo se actualizará ese inventario al finalizar la auditoría.
+                </div>
+              )}
             </div>
             <div className="modal-actions">
               <button className="btn" onClick={() => setMostrarNuevaAuditoria(false)}>Cancelar</button>
               <button className="btn-primary" onClick={crearNuevaAuditoria}>Crear</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Eliminar Auditoría */}
+      {showModalEliminarAuditoria && auditoriaAEliminar && (
+        <div className="modal-overlay" onClick={() => {
+          setShowModalEliminarAuditoria(false);
+          setAuditoriaAEliminar(null);
+          setPasswordEliminar("");
+        }}>
+          <div 
+            className="modal modal-sm" 
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              maxWidth: window.innerWidth <= 768 ? 'calc(100vw - 20px)' : undefined,
+              width: window.innerWidth <= 768 ? 'calc(100vw - 20px)' : undefined
+            }}
+          >
+            <div className="modal-header">
+              <h3>🗑️ Eliminar Auditoría</h3>
+              <button className="modal-close" onClick={() => {
+                setShowModalEliminarAuditoria(false);
+                setAuditoriaAEliminar(null);
+                setPasswordEliminar("");
+              }}>×</button>
+            </div>
+            <div className="modal-body">
+              <p style={{ marginBottom: "15px", color: "var(--color-warning, #f59e0b)", fontWeight: "600" }}>
+                ⚠️ Esta acción no se puede deshacer
+              </p>
+              <p style={{ marginBottom: "15px" }}>
+                Estás a punto de eliminar la auditoría: <strong>{auditoriaAEliminar.nombre}</strong>
+              </p>
+              <p style={{ marginBottom: "20px", fontSize: "0.9rem", color: "var(--texto-secundario)" }}>
+                Todos los items de esta auditoría también serán eliminados permanentemente.
+              </p>
+              <label>
+                Contraseña de Administrador *
+                <input
+                  type="password"
+                  value={passwordEliminar}
+                  onChange={(e) => setPasswordEliminar(e.target.value)}
+                  placeholder="Ingresa tu contraseña para confirmar"
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      eliminarAuditoria();
+                    }
+                  }}
+                />
+              </label>
+            </div>
+            <div className="modal-actions">
+              <button onClick={() => {
+                setShowModalEliminarAuditoria(false);
+                setAuditoriaAEliminar(null);
+                setPasswordEliminar("");
+              }}>Cancelar</button>
+              <button 
+                className="btn-primary" 
+                onClick={eliminarAuditoria}
+                style={{ background: "var(--color-danger, #ef4444)" }}
+              >
+                Eliminar Auditoría
+              </button>
             </div>
           </div>
         </div>
@@ -776,23 +1304,40 @@ export default function Auditoria({ SERVER_URL }) {
                   <div 
                     key={aud.id} 
                     className="auditoria-card"
-                    onClick={() => abrirAuditoria(aud)}
                   >
-                    <div className="auditoria-card-header">
-                      <h4>{aud.nombre}</h4>
-                      <span className={`auditoria-estado ${aud.estado}`}>
-                        {aud.estado === "en_proceso" ? "🟢 En Proceso" : "✅ Finalizada"}
-                      </span>
+                    <div 
+                      onClick={() => abrirAuditoria(aud)}
+                      style={{ cursor: "pointer" }}
+                    >
+                      <div className="auditoria-card-header">
+                        <h4>{aud.nombre}</h4>
+                        <span className={`auditoria-estado ${aud.estado}`}>
+                          {aud.estado === "en_proceso" ? "🟢 En Proceso" : "✅ Finalizada"}
+                        </span>
+                      </div>
+                      <div className="auditoria-card-info">
+                        <p><strong>Usuario:</strong> {aud.usuario}</p>
+                        <p><strong>Fecha:</strong> {new Date(aud.fecha_inicio).toLocaleDateString()}</p>
+                        <p><strong>Productos:</strong> {aud.productos_escaneados} / {aud.total_productos}</p>
+                        {aud.diferencias_encontradas > 0 && (
+                          <p className="diferencias-badge">
+                            ⚠️ {aud.diferencias_encontradas} diferencia(s)
+                          </p>
+                        )}
+                      </div>
                     </div>
-                    <div className="auditoria-card-info">
-                      <p><strong>Usuario:</strong> {aud.usuario}</p>
-                      <p><strong>Fecha:</strong> {new Date(aud.fecha_inicio).toLocaleDateString()}</p>
-                      <p><strong>Productos:</strong> {aud.productos_escaneados} / {aud.total_productos}</p>
-                      {aud.diferencias_encontradas > 0 && (
-                        <p className="diferencias-badge">
-                          ⚠️ {aud.diferencias_encontradas} diferencia(s)
-                        </p>
-                      )}
+                    <div style={{ marginTop: "10px", display: "flex", justifyContent: "flex-end" }}>
+                      <button
+                        className="btn btn-danger"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setAuditoriaAEliminar(aud);
+                          setShowModalEliminarAuditoria(true);
+                        }}
+                        style={{ fontSize: "0.85rem", padding: "6px 12px" }}
+                      >
+                        🗑️ Eliminar
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -802,7 +1347,19 @@ export default function Auditoria({ SERVER_URL }) {
         )}
 
         {/* Vista de Auditoría Activa */}
-        {auditoriaActual && (
+        {cargandoAuditoria ? (
+          <div style={{ 
+            textAlign: "center", 
+            padding: "60px 20px", 
+            color: "var(--texto-principal)",
+            fontSize: "1.1rem"
+          }}>
+            <div style={{ marginBottom: "15px", fontSize: "1.2rem" }}>⏳ Cargando auditoría...</div>
+            <div style={{ fontSize: "0.9rem", color: "var(--texto-secundario)", opacity: 0.8 }}>
+              Por favor espera mientras se cargan los datos
+            </div>
+          </div>
+        ) : auditoriaActual && (
         <div className="auditoria-activa">
           <div className="auditoria-activa-header">
             <div>
@@ -811,7 +1368,29 @@ export default function Auditoria({ SERVER_URL }) {
                 {auditoriaActual.estado === "en_proceso" ? "🟢 En Proceso" : "✅ Finalizada"} • 
                 Creada por: {auditoriaActual.usuario} • 
                 Fecha: {new Date(auditoriaActual.fecha_inicio).toLocaleString()}
+                {auditoriaActual.inventario_id && (
+                  <>
+                    {" • "}
+                    <strong>Inventario:</strong> {
+                      inventarios.find(inv => inv.id === auditoriaActual.inventario_id)?.nombre || 
+                      `ID: ${auditoriaActual.inventario_id}`
+                    }
+                  </>
+                )}
               </p>
+              {auditoriaActual.inventario_id && (
+                <div style={{
+                  marginTop: "8px",
+                  padding: "8px 12px",
+                  background: "rgba(59, 130, 246, 0.1)",
+                  border: "1px solid rgba(59, 130, 246, 0.3)",
+                  borderRadius: "6px",
+                  fontSize: "0.85rem",
+                  color: "var(--texto-principal)"
+                }}>
+                  🔒 Esta auditoría está vinculada a un inventario específico. Solo se trabajará con productos de ese inventario.
+                </div>
+              )}
             </div>
             <div className="auditoria-actions">
               <div className="auditoria-actions-group">
@@ -875,12 +1454,16 @@ export default function Auditoria({ SERVER_URL }) {
               <div className="stat-label">Coinciden</div>
             </div>
             <div className="stat-card stat-sobrante">
-              <div className="stat-value">{estadisticas.sobrantes}</div>
-              <div className="stat-label">Sobrantes</div>
+              <div className="stat-value">{estadisticas.sobrantesPiezas}</div>
+              <div className="stat-label">Piezas Sobrantes</div>
             </div>
             <div className="stat-card stat-faltante">
-              <div className="stat-value">{estadisticas.faltantes}</div>
-              <div className="stat-label">Faltantes</div>
+              <div className="stat-value">{estadisticas.faltantesPiezas}</div>
+              <div className="stat-label">Piezas Faltantes</div>
+            </div>
+            <div className="stat-card stat-no-aptas">
+              <div className="stat-value">{estadisticas.piezasNoAptas}</div>
+              <div className="stat-label">Piezas No Aptas</div>
             </div>
             <div className="stat-card stat-diferencia">
               <div className="stat-value">{estadisticas.diferenciaTotal > 0 ? "+" : ""}{estadisticas.diferenciaTotal}</div>
@@ -916,53 +1499,132 @@ export default function Auditoria({ SERVER_URL }) {
                     ref={codigoInputRef}
                     type="text"
                     value={codigoInput}
-                    onChange={(e) => setCodigoInput(e.target.value)}
+                    onChange={(e) => {
+                      setCodigoInput(e.target.value);
+                      obtenerNombreProducto(e.target.value);
+                    }}
                     onKeyDown={handleKeyDown}
                     placeholder="Escanear o escribir código..."
                     autoFocus
                   />
                 </div>
                 <div className="input-group">
-                  <label>Cantidad Física</label>
-                  <input
-                    id="cantidadInput"
-                    ref={cantidadInputRef}
-                    type="number"
-                    value={cantidadInput}
-                    onChange={(e) => setCantidadInput(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    placeholder="Cantidad encontrada..."
-                    min="0"
-                  />
-                </div>
-                <div className="input-group">
-                  <label>Piezas No Aptas</label>
-                  <input
-                    type="number"
-                    value={piezasNoAptasInput}
-                    onChange={(e) => setPiezasNoAptasInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        procesarCodigo();
-                      }
-                    }}
-                    placeholder="Piezas dañadas..."
-                    min="0"
-                  />
-                </div>
-                <div className="input-group">
-                  <label>Lote (Opcional)</label>
+                  <label>Nombre del Producto</label>
                   <input
                     type="text"
-                    value={loteInput}
-                    onChange={(e) => setLoteInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        procesarCodigo();
-                      }
+                    value={nombreProducto}
+                    readOnly
+                    placeholder="Aparecerá automáticamente al escanear código..."
+                    style={{ 
+                      padding: "10px", 
+                      borderRadius: "6px", 
+                      border: "1px solid #ddd",
+                      background: "#f9fafb",
+                      color: "#666",
+                      cursor: "not-allowed"
                     }}
-                    placeholder="Lote..."
                   />
+                </div>
+                {/* Múltiples lotes */}
+                <div className="input-group" style={{ gridColumn: "1 / -1" }}>
+                  <label>Lotes * (Obligatorio - Agregar cantidad y caducidad para cada lote)</label>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                    {lotesInput.map((loteItem, index) => (
+                      <div key={index} style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr auto", gap: "8px", alignItems: "center" }}>
+                        <input
+                          ref={index === 0 ? primerLoteInputRef : null}
+                          type="text"
+                          value={loteItem.lote}
+                          onChange={(e) => actualizarLote(index, "lote", e.target.value)}
+                          onKeyDown={handleKeyDown}
+                          data-lote-index={index}
+                          data-campo="lote"
+                          placeholder="Lote *"
+                          required
+                          style={{ padding: "10px", borderRadius: "6px", border: "1px solid #ddd" }}
+                        />
+                        <input
+                          type="number"
+                          value={loteItem.cantidad}
+                          onChange={(e) => actualizarLote(index, "cantidad", e.target.value)}
+                          onKeyDown={handleKeyDown}
+                          data-lote-index={index}
+                          data-campo="cantidad"
+                          placeholder="Cantidad *"
+                          min="1"
+                          required
+                          style={{ padding: "10px", borderRadius: "6px", border: "1px solid #ddd" }}
+                        />
+                        <input
+                          type="date"
+                          value={loteItem.caducidad}
+                          onChange={(e) => {
+                            actualizarLote(index, "caducidad", e.target.value);
+                            // Cuando se selecciona fecha, pasar automáticamente a no aptas
+                            if (e.target.value) {
+                              setTimeout(() => {
+                                const noAptasInput = document.querySelector(`input[data-lote-index="${index}"][data-campo="piezasNoAptas"]`);
+                                if (noAptasInput) {
+                                  noAptasInput.focus();
+                                  noAptasInput.select();
+                                }
+                              }, 100);
+                            }
+                          }}
+                          onKeyDown={handleKeyDown}
+                          data-lote-index={index}
+                          data-campo="caducidad"
+                          placeholder="Caducidad *"
+                          required
+                          style={{ padding: "10px", borderRadius: "6px", border: "1px solid #ddd" }}
+                        />
+                        <input
+                          type="number"
+                          value={loteItem.piezasNoAptas}
+                          onChange={(e) => actualizarLote(index, "piezasNoAptas", e.target.value)}
+                          onKeyDown={handleKeyDown}
+                          data-lote-index={index}
+                          data-campo="piezasNoAptas"
+                          placeholder="No Aptas"
+                          min="0"
+                          style={{ padding: "10px", borderRadius: "6px", border: "1px solid #ddd" }}
+                          title="Piezas no aptas que se descontarán de este lote"
+                        />
+                        {lotesInput.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => eliminarLote(index)}
+                            style={{
+                              padding: "10px",
+                              background: "#ef4444",
+                              color: "white",
+                              border: "none",
+                              borderRadius: "6px",
+                              cursor: "pointer",
+                              fontSize: "18px"
+                            }}
+                          >
+                            ×
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={agregarLote}
+                      style={{
+                        padding: "8px",
+                        background: "#10b981",
+                        color: "white",
+                        border: "none",
+                        borderRadius: "6px",
+                        cursor: "pointer",
+                        alignSelf: "flex-start"
+                      }}
+                    >
+                      + Agregar otro lote
+                    </button>
+                  </div>
                 </div>
                 <button className="btn-primary btn-escaneo" onClick={procesarCodigo}>
                   Agregar
@@ -996,63 +1658,126 @@ export default function Auditoria({ SERVER_URL }) {
             <h4>
               {puedeVerTodo ? "Productos Escaneados" : "Mis Productos Escaneados"} ({itemsFiltrados.length})
             </h4>
-            {itemsFiltrados.length === 0 ? (
+            {cargandoItems ? (
+              <div style={{ 
+                textAlign: "center", 
+                padding: "40px", 
+                color: "var(--texto-secundario)",
+                fontSize: "1rem"
+              }}>
+                <div style={{ marginBottom: "10px" }}>⏳ Cargando items de auditoría...</div>
+                <div style={{ fontSize: "0.85rem", opacity: 0.7 }}>
+                  Total de registros: {itemsEscaneados.length}
+                </div>
+              </div>
+            ) : itemsFiltrados.length === 0 ? (
               <p className="sin-datos">No hay productos escaneados aún</p>
             ) : (
               <div className="items-table">
                 <table>
+                  <colgroup>
+                    <col className="col-codigo" />
+                    <col className="col-nombre" />
+                    <col className="col-lote" />
+                    <col className="col-cant-lote" />
+                    <col className="col-sistema" />
+                    <col className="col-fisico" />
+                    <col className="col-no-aptas" />
+                    <col className="col-diferencia" />
+                    <col className="col-estado" />
+                    {puedeVerTodo && <col className="col-usuario" />}
+                    {auditoriaActual.estado === "en_proceso" && <col className="col-acciones" />}
+                  </colgroup>
                   <thead>
                     <tr>
-                      <th>Código</th>
-                      <th>Nombre</th>
-                      <th>Lote</th>
-                      <th>Sistema</th>
-                      <th>Físico</th>
-                      <th>No Aptas</th>
-                      <th>Diferencia</th>
-                      <th>Estado</th>
-                      {puedeVerTodo && <th>Usuario</th>}
-                      {auditoriaActual.estado === "en_proceso" && <th>Acciones</th>}
+                      <th className="col-codigo">Código</th>
+                      <th className="col-nombre">Nombre</th>
+                      <th className="col-lote">Lote / Caducidad</th>
+                      <th className="col-cant-lote">Cant. Lote</th>
+                      <th className="col-sistema">Sistema</th>
+                      <th className="col-fisico">Físico</th>
+                      <th className="col-no-aptas">No Aptas</th>
+                      <th className="col-diferencia">Diferencia</th>
+                      <th className="col-estado">Estado</th>
+                      {puedeVerTodo && <th className="col-usuario">Usuario</th>}
+                      {auditoriaActual.estado === "en_proceso" && <th className="col-acciones">Acciones</th>}
                     </tr>
                   </thead>
                   <tbody>
-                    {itemsFiltrados.map(item => (
-                      <tr key={item.id} className={item.diferencia !== 0 ? "con-diferencia" : ""}>
-                        <td>{item.codigo}</td>
-                        <td>{item.nombre}</td>
-                        <td>{item.lote || "-"}</td>
-                        <td>{item.cantidad_sistema}</td>
-                        <td>{item.cantidad_fisica}</td>
-                        <td style={{ color: item.piezas_no_aptas > 0 ? "#ef4444" : "var(--texto-secundario)", fontWeight: item.piezas_no_aptas > 0 ? 600 : 400 }}>
-                          {item.piezas_no_aptas || 0}
-                        </td>
-                        <td className={item.diferencia > 0 ? "sobrante" : item.diferencia < 0 ? "faltante" : "coincide"}>
-                          {item.diferencia > 0 ? "+" : ""}{item.diferencia}
-                        </td>
-                        <td>
-                          <span className={`badge-${item.tipo_diferencia}`}>
-                            {item.tipo_diferencia === "sobrante" ? "📈 Sobrante" :
-                             item.tipo_diferencia === "faltante" ? "📉 Faltante" :
-                             "✅ Coincide"}
-                          </span>
-                        </td>
-                        {puedeVerTodo && (
-                          <td style={{ fontSize: "0.85rem", color: "var(--texto-secundario)" }}>
-                            {item.usuario || "-"}
-                          </td>
-                        )}
-                        {auditoriaActual.estado === "en_proceso" && (
-                          <td>
-                            <button 
-                              className="btn-danger btn-sm"
-                              onClick={() => eliminarItem(item.id)}
-                            >
-                              Eliminar
-                            </button>
-                          </td>
-                        )}
-                      </tr>
-                    ))}
+                    {itemsFiltrados.map(item => {
+                      // Intentar parsear lotes del JSON
+                      let lotesMostrar = [];
+                      if (item.lotes) {
+                        try {
+                          lotesMostrar = typeof item.lotes === 'string' ? JSON.parse(item.lotes) : item.lotes;
+                        } catch (e) {
+                          // Si falla, usar lote único
+                          if (item.lote) {
+                            lotesMostrar = [{ lote: item.lote, cantidad: item.cantidad_fisica || 0, caducidad: "" }];
+                          }
+                        }
+                      } else if (item.lote) {
+                        lotesMostrar = [{ lote: item.lote, cantidad: item.cantidad_fisica || 0, caducidad: "" }];
+                      }
+
+                      return (
+                        <React.Fragment key={item.id}>
+                          {lotesMostrar.map((loteItem, loteIndex) => (
+                            <tr key={`${item.id}-${loteIndex}`} className={item.diferencia !== 0 ? "con-diferencia" : ""}>
+                              {loteIndex === 0 && (
+                                <>
+                                  <td className="col-codigo" rowSpan={lotesMostrar.length}>{item.codigo}</td>
+                                  <td className="col-nombre" rowSpan={lotesMostrar.length}>{item.nombre}</td>
+                                </>
+                              )}
+                              <td className="col-lote">
+                                {loteItem.lote}
+                                {loteItem.caducidad && (
+                                  <div style={{ fontSize: "0.8rem", color: "#666", marginTop: "2px" }}>
+                                    Cad: {new Date(loteItem.caducidad).toLocaleDateString()}
+                                  </div>
+                                )}
+                              </td>
+                              <td className="col-cant-lote center">{loteItem.cantidad || 0} pz</td>
+                              {loteIndex === 0 && (
+                                <>
+                                  <td className="col-sistema center" rowSpan={lotesMostrar.length}>{item.cantidad_sistema}</td>
+                                  <td className="col-fisico center" rowSpan={lotesMostrar.length}>{item.cantidad_fisica}</td>
+                                  <td className="col-no-aptas center" rowSpan={lotesMostrar.length} style={{ color: item.piezas_no_aptas > 0 ? "#ef4444" : "var(--texto-secundario)", fontWeight: item.piezas_no_aptas > 0 ? 600 : 400 }}>
+                                    {item.piezas_no_aptas || 0}
+                                  </td>
+                                  <td className={`col-diferencia center ${item.diferencia > 0 ? "sobrante" : item.diferencia < 0 ? "faltante" : "coincide"}`} rowSpan={lotesMostrar.length}>
+                                    {item.diferencia > 0 ? "+" : ""}{item.diferencia}
+                                  </td>
+                                  <td className="col-estado center" rowSpan={lotesMostrar.length}>
+                                    <span className={`badge-${item.tipo_diferencia}`}>
+                                      {item.tipo_diferencia === "sobrante" ? "📈 Sobrante" :
+                                       item.tipo_diferencia === "faltante" ? "📉 Faltante" :
+                                       "✅ Coincide"}
+                                    </span>
+                                  </td>
+                                  {puedeVerTodo && (
+                                    <td className="col-usuario" rowSpan={lotesMostrar.length} style={{ fontSize: "0.85rem", color: "var(--texto-secundario)" }}>
+                                      {item.usuario || "-"}
+                                    </td>
+                                  )}
+                                  {auditoriaActual.estado === "en_proceso" && (
+                                    <td className="col-acciones center" rowSpan={lotesMostrar.length}>
+                                      <button 
+                                        className="btn-danger btn-sm"
+                                        onClick={() => eliminarItem(item.id)}
+                                      >
+                                        Eliminar
+                                      </button>
+                                    </td>
+                                  )}
+                                </>
+                              )}
+                            </tr>
+                          ))}
+                        </React.Fragment>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

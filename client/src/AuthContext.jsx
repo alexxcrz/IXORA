@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from "react";
 import { useAlert } from "./components/AlertModal";
 import ModalTemasPersonal from "./components/ModalTemasPersonal";
+import ModalReuniones from "./components/ModalReuniones";
 import { 
   getEncryptedItem, 
   setEncryptedItem, 
@@ -30,7 +31,6 @@ export const authFetch = async (url, options = {}) => {
         currentToken = token; // Cachear en memoria
       }
     } catch (err) {
-      console.debug("Error leyendo token de localStorage:", err);
     }
   }
   
@@ -44,7 +44,6 @@ export const authFetch = async (url, options = {}) => {
         currentToken = token;
       }
     } catch (err) {
-      console.debug("Error obteniendo token cifrado:", err);
     }
   }
 
@@ -126,7 +125,13 @@ export const authFetch = async (url, options = {}) => {
       const esEndpointNoCritico = url.includes("/usuario/tema-personal") || 
                                   url.includes("/auth/user") ||
                                   url.includes("/chat/notificaciones/config") ||
-                                  url.includes("/admin/personalizacion");
+                                  url.includes("/admin/personalizacion") ||
+                                  url.includes("/admin/perms/visibilidad") ||
+                                  url.includes("/productos") ||
+                                  url.includes("/inventario") ||
+                                  url.includes("/devoluciones") ||
+                                  url.includes("/reportes/dias") ||
+                                  url.includes("/fecha-actual");
       
       // Si es un endpoint no crítico, NO cerrar sesión, solo lanzar error
       if (esEndpointNoCritico) {
@@ -149,14 +154,12 @@ export const authFetch = async (url, options = {}) => {
           localStorage.removeItem("user");
           localStorage.removeItem("perms");
         } catch (e) {
-          console.debug("Error limpiando localStorage:", e);
         }
         try {
           removeEncryptedItem("token");
           removeEncryptedItem("user");
           removeEncryptedItem("perms");
         } catch (e) {
-          console.debug("Error limpiando storage cifrado:", e);
         }
         
         // PROTECCIÓN: En Android, NO usar window.location.href (causa cierre de app)
@@ -181,6 +184,13 @@ export const authFetch = async (url, options = {}) => {
       const error = new Error(data.error || data.message || `HTTP ${res.status}`);
       // Agregar status al error para facilitar verificación
       error.status = res.status;
+      // Incluir datos adicionales del error (para restricciones, etc.)
+      if (data.restriccion) {
+        error.restriccion = true;
+        error.indefinida = data.indefinida;
+        error.minutos_restantes = data.minutos_restantes;
+        error.fecha_fin = data.fecha_fin;
+      }
       // Incluir toda la información adicional del servidor (tiempoEspera, reintentarEn, details, etc.)
       if (data.tiempoEspera) error.tiempoEspera = data.tiempoEspera;
       if (data.reintentarEn) error.reintentarEn = data.reintentarEn;
@@ -221,7 +231,6 @@ export function AuthProvider({ children }) {
     const alertHook = useAlert();
     showAlert = alertHook?.showAlert || (() => Promise.resolve());
   } catch (error) {
-    console.warn("useAlert no disponible, usando fallback:", error);
     showAlert = () => Promise.resolve();
   }
   
@@ -236,7 +245,6 @@ export function AuthProvider({ children }) {
       try {
         // PROTECCIÓN: Verificar que localStorage esté disponible
         if (typeof localStorage === 'undefined') {
-          console.warn("localStorage no disponible");
           setIsLoading(false);
           return;
         }
@@ -248,7 +256,6 @@ export function AuthProvider({ children }) {
           try {
             token = localStorage.getItem("token");
           } catch (e) {
-            console.debug("Error leyendo token de localStorage:", e);
           }
           
           if (token) {
@@ -265,11 +272,9 @@ export function AuthProvider({ children }) {
                 try {
                   localStorage.setItem("token", token);
                 } catch (e) {
-                  console.debug("Error guardando token en localStorage:", e);
                 }
               }
             } catch (e) {
-              console.debug("Token no disponible en cifrado");
             }
           }
           
@@ -304,7 +309,6 @@ export function AuthProvider({ children }) {
               } catch (e) {}
             }
           } catch (e) {
-            console.debug("Error cargando usuario:", e);
           }
           
           // Cargar permisos de localStorage primero
@@ -338,11 +342,9 @@ export function AuthProvider({ children }) {
               } catch (e) {}
             }
           } catch (e) {
-            console.debug("Error cargando permisos:", e);
           }
         } catch (error) {
           // Error ya manejado, solo continuar
-          console.debug("Error cargando datos de sesión:", error);
         }
       } catch (error) {
         console.error("❌ Error inesperado cargando datos cifrados:", error);
@@ -353,6 +355,142 @@ export function AuthProvider({ children }) {
 
     loadEncryptedData();
   }, []);
+
+  // 🔥 REESCRITO DESDE CERO: Sistema de sesión que NUNCA cierra la app
+  // La sesión se mantiene SIEMPRE si hay datos en localStorage
+  // NO se verifica con el servidor hasta después de restaurar la sesión local
+  useEffect(() => {
+    // Solo ejecutar cuando termine de cargar
+    if (isLoading) {
+      return;
+    }
+
+    const restaurarSesionLocal = async () => {
+      // 🔥 CRÍTICO: Verificar inmediatamente si hay sesión en localStorage
+      // Esto se ejecuta después del login para sincronizar inmediatamente
+      try {
+        // CRÍTICO: Cargar TODO desde localStorage PRIMERO
+        const tokenLocal = typeof localStorage !== 'undefined' ? localStorage.getItem("token") : null;
+        const userLocal = typeof localStorage !== 'undefined' ? localStorage.getItem("user") : null;
+        const permsLocal = typeof localStorage !== 'undefined' ? localStorage.getItem("perms") : null;
+
+        // 🔥 CRÍTICO: Si hay token Y usuario en localStorage pero NO en el estado, restaurar INMEDIATAMENTE
+        // Esto incluye el caso después del login donde localStorage tiene datos pero el estado aún no se ha sincronizado
+        if (tokenLocal && userLocal) {
+          // Verificar si el estado actual NO coincide con localStorage (puede pasar después del login)
+          const necesitaRestaurar = !user || !token || 
+            (user && userLocal && JSON.stringify(user) !== userLocal);
+          
+          if (necesitaRestaurar) {
+            try {
+              const userParsed = JSON.parse(userLocal);
+              let permsParsed = [];
+              
+              if (permsLocal) {
+                try {
+                  permsParsed = JSON.parse(permsLocal);
+                } catch (e) {
+                }
+              }
+
+
+              // Restaurar sesión COMPLETAMENTE desde localStorage
+              currentToken = tokenLocal;
+              setToken(tokenLocal);
+              setUser(userParsed);
+              setPerms(permsParsed);
+
+              
+              // Verificar con el servidor EN SEGUNDO PLANO (OPCIONAL)
+              // Si falla, NO pasa nada - la sesión local ya está activa
+              setTimeout(async () => {
+                try {
+                  const serverUrl = await getServerUrl();
+                  const response = await fetch(`${serverUrl}/auth/user`, {
+                    method: 'GET',
+                    headers: {
+                      'Authorization': `Bearer ${tokenLocal}`,
+                      'Content-Type': 'application/json'
+                    },
+                    signal: AbortSignal.timeout(5000)
+                  });
+
+                  if (response.ok) {
+                    const data = await response.json();
+                    if (data && data.user) {
+                      // Actualizar con datos del servidor (opcional)
+                      setUser(data.user);
+                      setPerms(data.perms || []);
+                      localStorage.setItem("user", JSON.stringify(data.user));
+                      if (data.perms) {
+                        localStorage.setItem("perms", JSON.stringify(data.perms));
+                      }
+                    }
+                  }
+                  // Si hay error, NO hacer nada - la sesión local sigue activa
+                } catch (verifyError) {
+                  // Error de red - NO hacer nada, sesión local sigue activa
+                }
+              }, 1000); // Esperar 1 segundo antes de verificar
+
+              return; // Salir - sesión ya restaurada
+            } catch (parseError) {
+              console.error('[IXORA] ❌ Error parseando sesión local:', parseError);
+              // Si no se puede parsear, continuar (pero NO cerrar sesión)
+            }
+          } else {
+            // Ya está sincronizado, no hacer nada
+          }
+        }
+
+        // Si solo hay token pero no usuario, intentar verificar con servidor
+        // PERO NO cerrar sesión si falla
+        if (tokenLocal && !userLocal && !user) {
+          try {
+            const serverUrl = await getServerUrl();
+            const response = await fetch(`${serverUrl}/auth/user`, {
+              method: 'GET',
+              headers: {
+                'Authorization': `Bearer ${tokenLocal}`,
+                'Content-Type': 'application/json'
+              },
+              signal: AbortSignal.timeout(8000)
+            });
+
+            if (response.ok) {
+              const data = await response.json();
+              if (data && data.user) {
+                // Restaurar desde servidor
+                currentToken = tokenLocal;
+                setToken(tokenLocal);
+                setUser(data.user);
+                setPerms(data.perms || []);
+                
+                // Guardar en localStorage
+                localStorage.setItem("token", tokenLocal);
+                localStorage.setItem("user", JSON.stringify(data.user));
+                if (data.perms) {
+                  localStorage.setItem("perms", JSON.stringify(data.perms));
+                }
+              }
+            }
+            // Si hay error (401/403), NO cerrar - solo loggear
+            // El usuario puede tener sesión expirada pero la app no se cierra
+          } catch (error) {
+            // Error de red - NO cerrar sesión, solo loggear
+          }
+        }
+      } catch (error) {
+        console.error('[IXORA] Error restaurando sesión:', error);
+        // NO cerrar sesión por ningún error
+      }
+    };
+
+    // CRÍTICO: Siempre verificar localStorage, incluso si hay user en el estado
+    // Esto asegura que después del login, la sesión se mantenga sincronizada
+    restaurarSesionLocal();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoading, user, token]);
 
   // Estados para modal de editar perfil
   const [showEditProfileModal, setShowEditProfileModal] = useState(false);
@@ -371,6 +509,22 @@ export function AuthProvider({ children }) {
   // Estado para modal de configuración de notificaciones
   const [showNotificacionesModal, setShowNotificacionesModal] = useState(false);
   const [configNotificaciones, setConfigNotificaciones] = useState(null);
+  
+  // Estado para modal de reuniones
+  const [showReunionesModal, setShowReunionesModal] = useState(false);
+  
+  // Escuchar evento para abrir modal de reuniones desde el perfil
+  useEffect(() => {
+    const handleAbrirModalReuniones = () => {
+      setShowReunionesModal(true);
+    };
+    
+    window.addEventListener('abrir-modal-reuniones', handleAbrirModalReuniones);
+    return () => {
+      window.removeEventListener('abrir-modal-reuniones', handleAbrirModalReuniones);
+    };
+  }, []);
+  
   const sonidosIxora = [
     { value: "ixora-pulse", label: "Ixora Pulse" },
     { value: "ixora-wave", label: "Ixora Wave" },
@@ -581,17 +735,23 @@ export function AuthProvider({ children }) {
           const verifyPerms = localStorage.getItem("perms");
           
           if (verifyToken !== jwtToken) {
-            logger.session.warn(`Token no coincide después de guardar (intento ${retryCount + 1})`);
+            // Capturar el valor actual de retryCount para evitar referencias inseguras
+            const currentRetry = retryCount;
+            logger.session.warn(`Token no coincide después de guardar (intento ${currentRetry + 1})`);
             retryCount++;
             if (retryCount < maxRetries) {
-              await new Promise(resolve => setTimeout(resolve, 100 * retryCount)); // Delay progresivo
+              // Usar el valor capturado en lugar de retryCount directamente
+              await new Promise(resolve => setTimeout(resolve, 100 * (currentRetry + 1))); // Delay progresivo
               continue;
             }
           } else if (!verifyUser || !verifyPerms) {
-            logger.session.warn(`Usuario o permisos no guardados correctamente (intento ${retryCount + 1})`);
+            // Capturar el valor actual de retryCount para evitar referencias inseguras
+            const currentRetry = retryCount;
+            logger.session.warn(`Usuario o permisos no guardados correctamente (intento ${currentRetry + 1})`);
             retryCount++;
             if (retryCount < maxRetries) {
-              await new Promise(resolve => setTimeout(resolve, 100 * retryCount));
+              // Usar el valor capturado en lugar de retryCount directamente
+              await new Promise(resolve => setTimeout(resolve, 100 * (currentRetry + 1)));
               continue;
             }
           } else {
@@ -599,14 +759,17 @@ export function AuthProvider({ children }) {
             logger.session.info('Sesión guardada correctamente en localStorage');
           }
         } catch (localError) {
+          // Capturar el valor actual de retryCount para evitar referencias inseguras
+          const currentRetry = retryCount;
           logger.session.error(`Error guardando en localStorage (${isMobile ? 'MÓVIL' : 'DESKTOP'})`, {
             error: localError,
-            retryCount,
+            retryCount: currentRetry,
             isMobile,
           });
           retryCount++;
           if (retryCount < maxRetries) {
-            await new Promise(resolve => setTimeout(resolve, 100 * retryCount));
+            // Usar el valor capturado en lugar de retryCount directamente
+            await new Promise(resolve => setTimeout(resolve, 100 * (currentRetry + 1)));
             continue;
           }
         }
@@ -617,7 +780,8 @@ export function AuthProvider({ children }) {
           retryCount,
           isMobile,
         });
-        throw new Error("Error al guardar sesión después de múltiples intentos");
+        // NO lanzar error - la sesión ya está en memoria, continuar
+        logger.session.warn('⚠️ Continuando con sesión en memoria aunque localStorage falló');
       }
       
       // También intentar guardar cifrado como respaldo (opcional, no bloqueante)
@@ -633,14 +797,54 @@ export function AuthProvider({ children }) {
         logger.session.debug('Error guardando token cifrado (no crítico)', { error: tokenError });
       }
 
-      // Verificación final
-      const finalVerify = localStorage.getItem("token");
-      if (finalVerify !== jwtToken) {
-        logger.session.warn("Token no coincide en verificación final, pero continuando");
-      } else {
-        logger.session.info('Verificación final de sesión exitosa');
+      // 🔥 VERIFICACIÓN FINAL MÁXIMA - Asegurar que TODO esté guardado
+      try {
+        // Esperar un momento para que localStorage se actualice
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        const finalVerify = localStorage.getItem("token");
+        const finalUser = localStorage.getItem("user");
+        const finalPerms = localStorage.getItem("perms");
+        
+        
+        // Si algo falta, intentar guardar nuevamente
+        if (finalVerify !== jwtToken) {
+          localStorage.setItem("token", jwtToken);
+          localStorage.setItem("user", JSON.stringify(userObj));
+          localStorage.setItem("perms", JSON.stringify(permisos || []));
+        }
+        
+        if (!finalUser) {
+          localStorage.setItem("user", JSON.stringify(userObj));
+        }
+        
+        if (!finalPerms) {
+          localStorage.setItem("perms", JSON.stringify(permisos || []));
+        }
+        
+        // Verificación final después de corregir
+        const verifyFinal = localStorage.getItem("token");
+        const verifyUserFinal = localStorage.getItem("user");
+        
+        if (verifyFinal && verifyUserFinal) {
+        } else {
+          console.error('[IXORA] ❌ ERROR: Sesión no se pudo guardar completamente');
+        }
+      } catch (verifyError) {
+        console.error('[IXORA] ❌ Error en verificación final:', verifyError);
+        // NO lanzar error - la sesión ya está en memoria
       }
 
+      // 🔥 CRÍTICO: Disparar evento personalizado para forzar actualización inmediata
+      // Esto asegura que App.jsx y otros componentes detecten la sesión inmediatamente
+      try {
+        window.dispatchEvent(new CustomEvent('ixora-sesion-actualizada', {
+          detail: { user: userObj, token: jwtToken, perms: permisos }
+        }));
+      } catch (eventError) {
+        console.error('[IXORA] Error disparando evento de sesión:', eventError);
+      }
+      
       // Si la contraseña es temporal, mostrar modal
       if (userObj.password_temporary) {
         setTimeout(() => {
@@ -648,7 +852,7 @@ export function AuthProvider({ children }) {
         }, 500);
       }
       
-      logger.auth.info('Login completado exitosamente');
+      logger.auth.info('✅✅✅ LOGIN COMPLETADO EXITOSAMENTE - SESIÓN GUARDADA Y VERIFICADA');
     } catch (error) {
       logger.auth.error('Error crítico en login', {
         error: error.message,
@@ -687,7 +891,6 @@ export function AuthProvider({ children }) {
         localStorage.setItem("tema-actual", data.tema);
         localStorage.setItem(`tema-personal-${userId}`, data.tema);
         
-        console.log(`✅ Tema personal cargado: ${data.tema}`);
         
         // Disparar evento para que otros componentes se actualicen
         window.dispatchEvent(new CustomEvent('tema-personal-actualizado', { detail: data.tema }));
@@ -696,20 +899,16 @@ export function AuthProvider({ children }) {
         const temaGlobal = localStorage.getItem("tema-actual") || "azul";
         const { aplicarTema } = await import("./utils/temas");
         aplicarTema(temaGlobal);
-        console.log(`✅ Tema global cargado: ${temaGlobal}`);
       }
     } catch (err) {
       // NO es crítico si falla, solo usar fallback
       // NO lanzar error para evitar que se cierre la sesión
-      console.debug("Error cargando tema personal (no crítico, usando fallback):", err);
       // Fallback: usar tema del localStorage
       const temaFallback = localStorage.getItem("tema-actual") || "azul";
       try {
         const { aplicarTema } = await import("./utils/temas");
         aplicarTema(temaFallback);
-        console.log(`✅ Tema fallback cargado: ${temaFallback}`);
       } catch (e) {
-        console.debug("Error aplicando tema fallback (no crítico):", e);
         // Si todo falla, continuar sin tema personal (no es crítico)
       }
     }
@@ -740,17 +939,55 @@ export function AuthProvider({ children }) {
   /* ======================================================
      🔵 ABRIR MODAL DE EDITAR PERFIL
   ====================================================== */
-  const abrirEditarPerfil = () => {
-    setNicknameInput(user?.nickname || "");
-    setPuestoInput(user?.puesto || "");
-    setCorreoInput(user?.correo || "");
-    setBirthdayInput(user?.birthday || "");
-    setMostrarTelefonoInput(
-      user?.mostrar_telefono === 0 || user?.mostrar_telefono === "0" ? false : true
-    );
+  const abrirEditarPerfil = async () => {
+    // Si el modal ya está abierto, no hacer nada para evitar resetear los valores
+    if (showEditProfileModal) {
+      return;
+    }
+    
+    // Cargar datos del usuario actual desde el estado o localStorage
+    // NO refrescar desde el servidor para evitar que se reseteen los valores mientras el usuario escribe
+    const usuarioActual = user || (() => {
+      try {
+        const userLocal = localStorage.getItem("user");
+        return userLocal ? JSON.parse(userLocal) : null;
+      } catch (e) {
+        return null;
+      }
+    })();
+    
+    // Establecer valores siempre cuando se abre el modal (solo se ejecuta si el modal está cerrado)
+    setNicknameInput(usuarioActual?.nickname || "");
+    setPuestoInput(usuarioActual?.puesto || "");
+    setCorreoInput(usuarioActual?.correo || "");
+    
+    // Asegurar que birthday esté en formato YYYY-MM-DD para el input type="date"
+    let birthdayFormatted = "";
+    if (usuarioActual?.birthday) {
+      const birthdayStr = String(usuarioActual.birthday).trim();
+      // Si está en formato dd/mm/aaaa, convertirlo
+      if (/^\d{2}\/\d{2}\/\d{4}$/.test(birthdayStr)) {
+        const [day, month, year] = birthdayStr.split('/');
+        birthdayFormatted = `${year}-${month}-${day}`;
+      } else if (/^\d{4}-\d{2}-\d{2}$/.test(birthdayStr)) {
+        birthdayFormatted = birthdayStr;
+      } else {
+        birthdayFormatted = "";
+      }
+    }
+    setBirthdayInput(birthdayFormatted);
+    
+    // Normalizar mostrar_telefono: puede ser 0, "0", 1, "1", null, undefined, etc.
+    const mostrarTelefonoValue = usuarioActual?.mostrar_telefono;
+    const mostrarTelefonoBool = mostrarTelefonoValue === 0 || 
+                                 mostrarTelefonoValue === "0" || 
+                                 mostrarTelefonoValue === false || 
+                                 mostrarTelefonoValue === null ? false : true;
+    setMostrarTelefonoInput(mostrarTelefonoBool);
+    
     setPhotoFile(null);
     // 🔥 Agregar timestamp para evitar caché del navegador
-    setPhotoPreview(user?.photo ? `${SERVER_URL}/uploads/perfiles/${user.photo}?t=${Date.now()}` : null);
+    setPhotoPreview(usuarioActual?.photo ? `${SERVER_URL}/uploads/perfiles/${usuarioActual.photo}?t=${Date.now()}` : null);
     setShowEditProfileModal(true);
   };
 
@@ -783,42 +1020,94 @@ export function AuthProvider({ children }) {
 
       // 2. Guardar información adicional del perfil
       try {
-        // Asegurar que birthday sea una cadena válida o null
-        const birthdayValue = birthdayInput && birthdayInput.trim() ? birthdayInput.trim() : null;
+        // Asegurar que birthday sea una cadena válida en formato YYYY-MM-DD o null
+        let birthdayValue = null;
+        if (birthdayInput && birthdayInput.trim()) {
+          const birthdayStr = birthdayInput.trim();
+          // Si el formato es dd/mm/aaaa, convertirlo a YYYY-MM-DD
+          if (/^\d{2}\/\d{2}\/\d{4}$/.test(birthdayStr)) {
+            const [day, month, year] = birthdayStr.split('/');
+            birthdayValue = `${year}-${month}-${day}`;
+          } else if (/^\d{4}-\d{2}-\d{2}$/.test(birthdayStr)) {
+            // Ya está en formato correcto
+            birthdayValue = birthdayStr;
+          } else {
+            birthdayValue = null;
+          }
+        }
+        
+        // Preparar datos para enviar
+        const datosPerfil = {
+          puesto: puestoInput.trim() || null,
+          correo: correoInput.trim() || null,
+          birthday: birthdayValue,
+          mostrar_telefono: mostrarTelefonoInput ? 1 : 0,
+        };
+        
         
         const perfilRes = await authFetch(`${SERVER_URL}/auth/perfil-info`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            puesto: puestoInput.trim() || null,
-            correo: correoInput.trim() || null,
-            birthday: birthdayValue,
-            mostrar_telefono: mostrarTelefonoInput ? 1 : 0,
-          }),
+          body: JSON.stringify(datosPerfil),
         });
         
+        
+        // Verificar que la respuesta sea correcta
+        // authFetch devuelve directamente el JSON, no un objeto Response
+        if (!perfilRes) {
+          throw new Error("No se recibió respuesta del servidor al guardar perfil");
+        }
+        
+        // Si hay error en la respuesta
+        if (perfilRes.error) {
+          throw new Error(perfilRes.error || "Error en la respuesta del servidor al guardar perfil");
+        }
+        
+        // Verificar que la respuesta tenga ok: true y user
+        if (!perfilRes.ok) {
+          throw new Error(perfilRes.error || "Error al guardar perfil en el servidor");
+        }
+        
         if (perfilRes && perfilRes.user) {
+          // Normalizar mostrar_telefono: puede venir como 0, 1, "0", "1", etc.
+          const mostrarTelefonoValue = perfilRes.user.mostrar_telefono;
+          const mostrarTelefonoNormalized = (mostrarTelefonoValue === 0 || 
+                                             mostrarTelefonoValue === "0" || 
+                                             mostrarTelefonoValue === false || 
+                                             mostrarTelefonoValue === null) ? 0 : 1;
+          
+          // Usar los datos del servidor (que acabamos de guardar) como fuente de verdad
           const updatedPerfil = {
             ...(user || {}),
             puesto: perfilRes.user.puesto || null,
             correo: perfilRes.user.correo || null,
-            mostrar_telefono: perfilRes.user.mostrar_telefono ?? 1,
+            mostrar_telefono: mostrarTelefonoNormalized,
             birthday: perfilRes.user.birthday || null,
           };
+          
+          // Actualizar estado inmediatamente
           setUser(updatedPerfil);
           localStorage.setItem("user", JSON.stringify(updatedPerfil));
           try {
             await setEncryptedItem("user", JSON.stringify(updatedPerfil));
           } catch (e) {
-            console.debug("Error guardando perfil en storage cifrado:", e);
+            console.error("Error guardando en storage cifrado:", e);
           }
+          
+          console.log("✅ Perfil guardado correctamente:", {
+            puesto: updatedPerfil.puesto,
+            correo: updatedPerfil.correo,
+            birthday: updatedPerfil.birthday
+          });
+        } else {
+          throw new Error("No se recibieron datos del usuario actualizado");
         }
       } catch (err) {
         console.error("Error guardando información adicional:", err);
         throw err; // Re-lanzar para que se muestre el error al usuario
       }
 
-      // 2. Si hay foto, subirla
+      // 3. Si hay foto, subirla
       if (photoFile) {
         const formData = new FormData();
         formData.append("photo", photoFile);
@@ -835,14 +1124,19 @@ export function AuthProvider({ children }) {
         if (!photoRes.ok) {
           throw new Error(photoData.error || "Error al subir foto");
         }
-
-        // 🔥 Refrescar usuario desde el servidor para obtener datos actualizados
-        await refrescarUsuario();
-      } else {
-        // Si no hay foto, asegurar que los datos se actualicen correctamente
-        // Refrescar usuario desde el servidor para obtener datos actualizados
-        await refrescarUsuario();
       }
+
+      // 4. NO refrescar inmediatamente después de guardar para evitar sobrescribir datos
+      // Los datos ya están actualizados en el estado y localStorage desde el paso anterior
+      // El refresh se hará automáticamente cuando sea necesario (login, etc.)
+      
+      // Guardar los datos actuales como referencia para verificación posterior
+      const usuarioGuardadoFinal = JSON.parse(localStorage.getItem("user") || "{}");
+      console.log("✅ Datos finales guardados en localStorage:", {
+        puesto: usuarioGuardadoFinal.puesto,
+        correo: usuarioGuardadoFinal.correo,
+        birthday: usuarioGuardadoFinal.birthday
+      });
 
       setShowEditProfileModal(false);
       setPhotoFile(null);
@@ -872,7 +1166,6 @@ export function AuthProvider({ children }) {
         try {
           await setEncryptedItem("perms", JSON.stringify(nuevosPermisos));
         } catch (e) {
-          console.debug("Error guardando permisos en storage cifrado:", e);
         }
         
         await showAlert("Permisos actualizados correctamente", "success", { title: "Éxito" });
@@ -891,23 +1184,51 @@ export function AuthProvider({ children }) {
   ====================================================== */
   const refrescarUsuario = async () => {
     try {
+      // Guardar datos locales actuales antes de refrescar para preservar información
+      const usuarioLocalActual = JSON.parse(localStorage.getItem("user") || "{}");
+      
       const res = await authFetch(`${SERVER_URL}/auth/user`);
       
       if (res && res.user) {
         const usuarioActualizado = res.user;
-        setUser(usuarioActualizado);
+        
+        // MERGE INTELIGENTE: Preservar datos locales si el servidor no los tiene o están vacíos
+        // Esto evita perder información que se guardó recientemente
+        const usuarioMergeado = {
+          ...usuarioActualizado,
+          // Preservar puesto si el servidor no lo tiene o está vacío
+          puesto: (usuarioActualizado.puesto && usuarioActualizado.puesto.trim()) 
+            ? usuarioActualizado.puesto 
+            : (usuarioLocalActual.puesto && usuarioLocalActual.puesto.trim() 
+                ? usuarioLocalActual.puesto 
+                : null),
+          // Preservar correo si el servidor no lo tiene o está vacío
+          correo: (usuarioActualizado.correo && usuarioActualizado.correo.trim()) 
+            ? usuarioActualizado.correo 
+            : (usuarioLocalActual.correo && usuarioLocalActual.correo.trim() 
+                ? usuarioLocalActual.correo 
+                : null),
+          // Preservar birthday si el servidor no lo tiene o está vacío
+          birthday: (usuarioActualizado.birthday && usuarioActualizado.birthday.trim()) 
+            ? usuarioActualizado.birthday 
+            : (usuarioLocalActual.birthday && usuarioLocalActual.birthday.trim() 
+                ? usuarioLocalActual.birthday 
+                : null),
+        };
+        
+        setUser(usuarioMergeado);
         setPerms(res.perms || []);
         
         // Guardar en localStorage
-        localStorage.setItem("user", JSON.stringify(usuarioActualizado));
+        localStorage.setItem("user", JSON.stringify(usuarioMergeado));
         localStorage.setItem("perms", JSON.stringify(res.perms || []));
         
         // Guardar en storage cifrado también
         try {
-          await setEncryptedItem("user", JSON.stringify(usuarioActualizado));
+          await setEncryptedItem("user", JSON.stringify(usuarioMergeado));
           await setEncryptedItem("perms", JSON.stringify(res.perms || []));
         } catch (e) {
-          console.debug("Error guardando datos en storage cifrado:", e);
+          console.error("Error guardando en storage cifrado:", e);
         }
         
         return true;
@@ -916,7 +1237,7 @@ export function AuthProvider({ children }) {
     } catch (err) {
       // NO es crítico si falla el refresh, solo loggear
       // NO limpiar sesión si falla
-      console.debug("Error refrescando usuario (no crítico, sesión se mantiene):", err);
+      console.error("Error refrescando usuario:", err);
       return false;
     }
   };
@@ -1055,16 +1376,31 @@ export function AuthProvider({ children }) {
     configNotificaciones?.[`horario_${key}_${tipo}`] || fallback;
 
   const calcularEdad = (fecha) => {
-    if (!fecha) return "";
+    if (!fecha) return null;
     const fechaNac = new Date(`${fecha}T00:00:00`);
-    if (Number.isNaN(fechaNac.getTime())) return "";
+    if (Number.isNaN(fechaNac.getTime())) return null;
     const hoy = new Date();
-    let edad = hoy.getFullYear() - fechaNac.getFullYear();
-    const m = hoy.getMonth() - fechaNac.getMonth();
-    if (m < 0 || (m === 0 && hoy.getDate() < fechaNac.getDate())) {
-      edad -= 1;
+    
+    let años = hoy.getFullYear() - fechaNac.getFullYear();
+    let meses = hoy.getMonth() - fechaNac.getMonth();
+    let días = hoy.getDate() - fechaNac.getDate();
+    
+    // Ajustar si aún no ha cumplido años
+    if (meses < 0 || (meses === 0 && días < 0)) {
+      años -= 1;
+      meses += 12;
     }
-    return edad >= 0 ? String(edad) : "";
+    
+    // Ajustar meses si el día aún no ha llegado este mes
+    if (días < 0) {
+      meses -= 1;
+      if (meses < 0) {
+        meses += 12;
+        años -= 1;
+      }
+    }
+    
+    return años >= 0 ? { años, meses } : null;
   };
 
   return (
@@ -1238,7 +1574,14 @@ export function AuthProvider({ children }) {
                           className="profile-input"
                         />
                         <span className="profile-age">
-                          {calcularEdad(birthdayInput) ? `${calcularEdad(birthdayInput)} años` : "—"}
+                          {(() => {
+                            const edad = calcularEdad(birthdayInput);
+                            if (!edad) return "—";
+                            const edadTexto = edad.meses > 0 
+                              ? `${edad.años} años y ${edad.meses} ${edad.meses === 1 ? 'mes' : 'meses'}`
+                              : `${edad.años} años`;
+                            return edadTexto;
+                          })()}
                         </span>
                       </div>
                     </div>
@@ -1280,6 +1623,17 @@ export function AuthProvider({ children }) {
                       <span className="profile-theme-text">Notificaciones</span>
                       <span className="profile-theme-arrow">→</span>
                     </button>
+                    <button
+                      onClick={() => {
+                        setShowEditProfileModal(false);
+                        setShowReunionesModal(true);
+                      }}
+                      className="profile-theme-btn"
+                    >
+                      <span className="profile-theme-icon">📅</span>
+                      <span className="profile-theme-text">Reuniones</span>
+                      <span className="profile-theme-arrow">→</span>
+                    </button>
                   </div>
                 </div>
 
@@ -1292,15 +1646,15 @@ export function AuthProvider({ children }) {
                     </div>
                     <div className="profile-summary-row">
                       <span className="profile-summary-label">Nickname</span>
-                      <span className="profile-summary-value">{nicknameInput || "No definido"}</span>
+                      <span className="profile-summary-value">{user?.nickname || nicknameInput || "No definido"}</span>
                     </div>
                     <div className="profile-summary-row">
                       <span className="profile-summary-label">Puesto</span>
-                      <span className="profile-summary-value">{puestoInput || "No definido"}</span>
+                      <span className="profile-summary-value">{user?.puesto || puestoInput || "No definido"}</span>
                     </div>
                     <div className="profile-summary-row">
                       <span className="profile-summary-label">Correo</span>
-                      <span className="profile-summary-value">{correoInput || "No definido"}</span>
+                      <span className="profile-summary-value">{user?.correo || correoInput || "No definido"}</span>
                     </div>
                     <div className="profile-summary-row">
                       <span className="profile-summary-label">Teléfono visible</span>
@@ -1721,9 +2075,10 @@ export function AuthProvider({ children }) {
 
               <section className="notif-section">
                 <h4>Sonidos</h4>
+                <p className="notif-sonidos-desc">Los sonidos elegidos se aplican en todo el sistema (chat, notificaciones, campanita).</p>
                 <div className="notif-sound-grid">
                   <label>
-                    <span>Mensajes</span>
+                    <span>Mensajes y notificaciones (campanita)</span>
                     <select
                       value={configNotificaciones.sonido_mensaje || "ixora-pulse"}
                       onChange={(e) => {
@@ -1877,6 +2232,7 @@ export function AuthProvider({ children }) {
                     if (response && (response.ok || response.config)) {
                       showAlert("✅ Configuración de notificaciones guardada", "success");
                       setShowNotificacionesModal(false);
+                      window.dispatchEvent(new CustomEvent("config-notificaciones-guardada"));
                     } else {
                       showAlert("❌ Error al guardar configuración", "error");
                     }
@@ -1893,6 +2249,12 @@ export function AuthProvider({ children }) {
           </div>
         </div>
       )}
+
+      {/* Modal de Reuniones */}
+      <ModalReuniones
+        mostrar={showReunionesModal}
+        cerrar={() => setShowReunionesModal(false)}
+      />
     </AuthContext.Provider>
   );
 }

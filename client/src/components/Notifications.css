@@ -2,6 +2,18 @@
    🎨 NOTIFICACIONES - DISEÑO PROFESIONAL
    ====================================================== */
 
+/* Animación para toast de notificaciones */
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
 /* OCULTAR notificaciones superiores - ahora están en el menú inferior */
 .notifications-container {
   display: none !important;
@@ -120,6 +132,56 @@
   font-size: 0.9rem;
   font-weight: 700;
   color: var(--texto-principal);
+}
+
+/* Pestañas de notificaciones */
+.notifications-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 2px solid var(--borde-sutil);
+  background: var(--fondo-secundario);
+  padding: 0 8px;
+}
+
+.notifications-tab {
+  flex: 1;
+  background: transparent;
+  border: none;
+  border-bottom: 3px solid transparent;
+  color: var(--texto-secundario);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 12px 16px;
+  transition: all var(--transicion-media);
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.notifications-tab:hover {
+  color: var(--texto-principal);
+  background: var(--fondo-input);
+}
+
+.notifications-tab.active {
+  color: var(--azul-primario);
+  border-bottom-color: var(--azul-primario);
+  background: var(--fondo-card);
+}
+
+.notifications-tab-badge {
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+  color: #ffffff;
+  border-radius: var(--radio-full);
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 2px 6px;
+  min-width: 18px;
+  text-align: center;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
 .notifications-clear {

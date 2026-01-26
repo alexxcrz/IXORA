@@ -1416,6 +1416,9 @@ router.get("/reportes", requierePermiso("tab:rep_reenvios"), (req, res) => {
         SELECT fechaCorte AS fecha,
                COUNT(*) AS total_envios,
                SUM(evidencia_count) AS total_fotos,
+               SUM(CASE WHEN LOWER(paqueteria) = 'fedex' OR LOWER(paqueteria) LIKE '%fedex%' THEN 1 ELSE 0 END) AS fedex,
+               SUM(CASE WHEN LOWER(paqueteria) = 'dhl' OR LOWER(paqueteria) LIKE '%dhl%' THEN 1 ELSE 0 END) AS dhl,
+               SUM(CASE WHEN LOWER(paqueteria) = 'estafeta' OR LOWER(paqueteria) LIKE '%estafeta%' THEN 1 ELSE 0 END) AS estafeta,
                strftime('%Y-%m', fechaCorte) AS mes
         FROM reenvios_historico
         GROUP BY fechaCorte
@@ -1431,6 +1434,9 @@ router.get("/reportes", requierePermiso("tab:rep_reenvios"), (req, res) => {
       fecha: r.fecha,
       total_envios: r.total_envios,
       total_fotos: r.total_fotos ?? 0,
+      fedex: r.fedex ?? 0,
+      dhl: r.dhl ?? 0,
+      estafeta: r.estafeta ?? 0,
     });
   });
 

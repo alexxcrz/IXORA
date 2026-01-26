@@ -25,6 +25,165 @@ select:focus {
 /* =============================== */
 /* CONTENEDOR GENERAL */
 /* =============================== */
+/* Estilos para contadores - texto siempre blanco */
+.dev-contador-badge,
+.dev-contador-badge *,
+.dev-contador-badge span {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+
+/* Máxima especificidad para contadores con clase */
+html body #root .app .dev-contador-badge,
+html body #root .dev-contador-badge,
+html body .app .dev-contador-badge,
+html body .dev-contador-badge,
+body #root .dev-contador-badge,
+body .dev-contador-badge,
+.dev-contador-badge {
+  color: #ffffff !important;
+}
+
+html body #root .app .dev-contador-badge *,
+html body #root .app .dev-contador-badge span,
+html body #root .dev-contador-badge *,
+html body #root .dev-contador-badge span,
+html body .app .dev-contador-badge *,
+html body .app .dev-contador-badge span,
+html body .dev-contador-badge *,
+html body .dev-contador-badge span,
+body #root .dev-contador-badge *,
+body #root .dev-contador-badge span,
+body .dev-contador-badge *,
+body .dev-contador-badge span,
+.dev-contador-badge *,
+.dev-contador-badge span {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+
+/* Asegurar que los contadores tengan texto blanco y se adapten a los temas */
+/* Máxima especificidad para sobrescribir estilos globales */
+html body #root .app .devProceso > div > div[style*="background"],
+html body #root .devProceso > div > div[style*="background"],
+html body .app .devProceso > div > div[style*="background"],
+html body .devProceso > div > div[style*="background"],
+body #root .devProceso > div > div[style*="background"],
+body .devProceso > div > div[style*="background"],
+.devProceso > div > div[style*="background"] {
+  color: #ffffff !important;
+}
+
+html body #root .app .devProceso > div > div[style*="background"] *,
+html body #root .app .devProceso > div > div[style*="background"] span,
+html body #root .devProceso > div > div[style*="background"] *,
+html body #root .devProceso > div > div[style*="background"] span,
+html body .app .devProceso > div > div[style*="background"] *,
+html body .app .devProceso > div > div[style*="background"] span,
+html body .devProceso > div > div[style*="background"] *,
+html body .devProceso > div > div[style*="background"] span,
+body #root .devProceso > div > div[style*="background"] *,
+body #root .devProceso > div > div[style*="background"] span,
+body .devProceso > div > div[style*="background"] *,
+body .devProceso > div > div[style*="background"] span,
+.devProceso > div > div[style*="background"] *,
+.devProceso > div > div[style*="background"] span {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+
+/* Estilos más específicos para los contadores de productos con variables CSS */
+html body #root .app .devProceso > div > div[style*="var(--error)"],
+html body #root .app .devProceso > div > div[style*="var(--exito)"],
+html body #root .app .devProceso > div > div[style*="var(--warning)"],
+html body #root .app .devProceso > div > div[style*="var(--azul-primario)"],
+html body #root .devProceso > div > div[style*="var(--error)"],
+html body #root .devProceso > div > div[style*="var(--exito)"],
+html body #root .devProceso > div > div[style*="var(--warning)"],
+html body #root .devProceso > div > div[style*="var(--azul-primario)"],
+html body .app .devProceso > div > div[style*="var(--error)"],
+html body .app .devProceso > div > div[style*="var(--exito)"],
+html body .app .devProceso > div > div[style*="var(--warning)"],
+html body .app .devProceso > div > div[style*="var(--azul-primario)"],
+html body .devProceso > div > div[style*="var(--error)"],
+html body .devProceso > div > div[style*="var(--exito)"],
+html body .devProceso > div > div[style*="var(--warning)"],
+html body .devProceso > div > div[style*="var(--azul-primario)"],
+body #root .devProceso > div > div[style*="var(--error)"],
+body #root .devProceso > div > div[style*="var(--exito)"],
+body #root .devProceso > div > div[style*="var(--warning)"],
+body #root .devProceso > div > div[style*="var(--azul-primario)"],
+body .devProceso > div > div[style*="var(--error)"],
+body .devProceso > div > div[style*="var(--exito)"],
+body .devProceso > div > div[style*="var(--warning)"],
+body .devProceso > div > div[style*="var(--azul-primario)"],
+.devProceso > div > div[style*="var(--error)"],
+.devProceso > div > div[style*="var(--exito)"],
+.devProceso > div > div[style*="var(--warning)"],
+.devProceso > div > div[style*="var(--azul-primario)"] {
+  color: #ffffff !important;
+}
+
+html body #root .app .devProceso > div > div[style*="var(--error)"] *,
+html body #root .app .devProceso > div > div[style*="var(--error)"] span,
+html body #root .app .devProceso > div > div[style*="var(--exito)"] *,
+html body #root .app .devProceso > div > div[style*="var(--exito)"] span,
+html body #root .app .devProceso > div > div[style*="var(--warning)"] *,
+html body #root .app .devProceso > div > div[style*="var(--warning)"] span,
+html body #root .app .devProceso > div > div[style*="var(--azul-primario)"] *,
+html body #root .app .devProceso > div > div[style*="var(--azul-primario)"] span,
+html body #root .devProceso > div > div[style*="var(--error)"] *,
+html body #root .devProceso > div > div[style*="var(--error)"] span,
+html body #root .devProceso > div > div[style*="var(--exito)"] *,
+html body #root .devProceso > div > div[style*="var(--exito)"] span,
+html body #root .devProceso > div > div[style*="var(--warning)"] *,
+html body #root .devProceso > div > div[style*="var(--warning)"] span,
+html body #root .devProceso > div > div[style*="var(--azul-primario)"] *,
+html body #root .devProceso > div > div[style*="var(--azul-primario)"] span,
+html body .app .devProceso > div > div[style*="var(--error)"] *,
+html body .app .devProceso > div > div[style*="var(--error)"] span,
+html body .app .devProceso > div > div[style*="var(--exito)"] *,
+html body .app .devProceso > div > div[style*="var(--exito)"] span,
+html body .app .devProceso > div > div[style*="var(--warning)"] *,
+html body .app .devProceso > div > div[style*="var(--warning)"] span,
+html body .app .devProceso > div > div[style*="var(--azul-primario)"] *,
+html body .app .devProceso > div > div[style*="var(--azul-primario)"] span,
+html body .devProceso > div > div[style*="var(--error)"] *,
+html body .devProceso > div > div[style*="var(--error)"] span,
+html body .devProceso > div > div[style*="var(--exito)"] *,
+html body .devProceso > div > div[style*="var(--exito)"] span,
+html body .devProceso > div > div[style*="var(--warning)"] *,
+html body .devProceso > div > div[style*="var(--warning)"] span,
+html body .devProceso > div > div[style*="var(--azul-primario)"] *,
+html body .devProceso > div > div[style*="var(--azul-primario)"] span,
+body #root .devProceso > div > div[style*="var(--error)"] *,
+body #root .devProceso > div > div[style*="var(--error)"] span,
+body #root .devProceso > div > div[style*="var(--exito)"] *,
+body #root .devProceso > div > div[style*="var(--exito)"] span,
+body #root .devProceso > div > div[style*="var(--warning)"] *,
+body #root .devProceso > div > div[style*="var(--warning)"] span,
+body #root .devProceso > div > div[style*="var(--azul-primario)"] *,
+body #root .devProceso > div > div[style*="var(--azul-primario)"] span,
+body .devProceso > div > div[style*="var(--error)"] *,
+body .devProceso > div > div[style*="var(--error)"] span,
+body .devProceso > div > div[style*="var(--exito)"] *,
+body .devProceso > div > div[style*="var(--exito)"] span,
+body .devProceso > div > div[style*="var(--warning)"] *,
+body .devProceso > div > div[style*="var(--warning)"] span,
+body .devProceso > div > div[style*="var(--azul-primario)"] *,
+body .devProceso > div > div[style*="var(--azul-primario)"] span,
+.devProceso > div > div[style*="var(--error)"] *,
+.devProceso > div > div[style*="var(--error)"] span,
+.devProceso > div > div[style*="var(--exito)"] *,
+.devProceso > div > div[style*="var(--exito)"] span,
+.devProceso > div > div[style*="var(--warning)"] *,
+.devProceso > div > div[style*="var(--warning)"] span,
+.devProceso > div > div[style*="var(--azul-primario)"] *,
+.devProceso > div > div[style*="var(--azul-primario)"] span {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+
 .devProceso {
   padding: 15px;
   width: 100%;

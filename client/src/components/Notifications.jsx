@@ -5,16 +5,41 @@ import { LocalNotifications } from "@capacitor/local-notifications";
 import "./Notifications.css";
 import { useAuth, authFetch } from "../AuthContext";
 import { getServerUrl, getServerUrlSync } from "../config/server";
+import { reproducirSonidoIxora } from "../utils/sonidoIxora";
+import { useAlert } from "./AlertModal";
 
 export const NotificationContext = React.createContext();
 
 export function NotificationProvider({ children }) {
   const { user, perms } = useAuth();
+  const { showAlert } = useAlert();
   const [serverUrl, setServerUrl] = useState(getServerUrlSync());
   const [notifications, setNotifications] = useState([]);
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [toastVisible, setToastVisible] = useState(null);
+  const [activeTab, setActiveTab] = useState('nuevas'); // 'nuevas' o 'historial'
   const isNative = Capacitor.isNativePlatform();
+  
+  // Solo administradores pueden ver notificaciones
+  const isAdmin = React.useMemo(() => perms?.includes("tab:admin"), [perms]);
+  // CEO/Desarrollador: tiene permisos senior o junior
+  const isDeveloper = React.useMemo(() => perms?.includes("admin.senior") || perms?.includes("admin.junior"), [perms]);
+  
+  // Resetear a pestaña "Nuevas" cuando se abre el panel si hay notificaciones nuevas
+  useEffect(() => {
+    if (isOpen) {
+      const hasUnread = notifications.some((n) => {
+        const isRead = n.read || n.leida === 1;
+        if (n.adminOnly && !isAdmin) return false;
+        if (n.codeError && !isDeveloper) return false;
+        return !isRead;
+      });
+      if (hasUnread) {
+        setActiveTab('nuevas');
+      }
+    }
+  }, [isOpen, notifications, isAdmin, isDeveloper]);
   
   useEffect(() => {
     let activo = true;
@@ -37,14 +62,36 @@ export function NotificationProvider({ children }) {
   }));
   // Mapa para guardar callbacks de notificaciones (no se pueden serializar)
   const callbacksRef = useRef(new Map());
+  const [configNotif, setConfigNotif] = useState(null);
 
-  // Solo administradores pueden ver notificaciones
-  const isAdmin = perms?.includes("tab:admin");
-  // CEO/Desarrollador: tiene permisos senior o junior
-  const isDeveloper = perms?.includes("admin.senior") || perms?.includes("admin.junior");
+  const cargarConfigNotif = React.useCallback(async () => {
+    if (!user || !serverUrl) return;
+    try {
+      const c = await authFetch(`${serverUrl}/chat/notificaciones/config`);
+      setConfigNotif(c || null);
+    } catch {
+      setConfigNotif(null);
+    }
+  }, [user, serverUrl]);
+
+  useEffect(() => {
+    if (user && serverUrl) cargarConfigNotif();
+  }, [user, serverUrl, cargarConfigNotif]);
+
+  useEffect(() => {
+    const handler = () => { cargarConfigNotif(); };
+    window.addEventListener("config-notificaciones-guardada", handler);
+    return () => window.removeEventListener("config-notificaciones-guardada", handler);
+  }, [cargarConfigNotif]);
+
+  const reproducirSonidoNotif = React.useCallback(() => {
+    if (!configNotif || configNotif.sonido_activo === 0) return;
+    const key = configNotif.sonido_mensaje || "ixora-pulse";
+    reproducirSonidoIxora(key);
+  }, [configNotif]);
 
   // Cargar notificaciones desde el servidor
-  const cargarNotificaciones = async () => {
+  const cargarNotificaciones = React.useCallback(async () => {
     if (!user || !serverUrl) return;
     try {
       setLoading(true);
@@ -56,7 +103,7 @@ export function NotificationProvider({ children }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user, serverUrl]);
 
   const mostrarNotificacionDispositivo = async ({ id, titulo, mensaje, data }) => {
     if (!isNative) return;
@@ -81,130 +128,6 @@ export function NotificationProvider({ children }) {
     }
   };
 
-  // ===== SONIDOS ÚNICOS DE PINA PARA NOTIFICACIONES =====
-  // Sonidos generados con Web Audio API (igual que en picking)
-  const audioContextRef = useRef(null);
-  
-  const crearSonidoNotificacion = (audioCtx) => {
-    try {
-      const now = audioCtx.currentTime;
-      
-      // Sonido único para notificaciones: doble beep distintivo y profesional
-      const osc1 = audioCtx.createOscillator();
-      const osc2 = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-      
-      osc1.type = "sine";
-      osc2.type = "sine";
-      
-      // Primer beep: 500Hz -> 700Hz (grave a medio)
-      osc1.frequency.setValueAtTime(500, now);
-      osc1.frequency.exponentialRampToValueAtTime(700, now + 0.15);
-      
-      // Segundo beep: 800Hz -> 1100Hz (medio a agudo, más distintivo)
-      osc2.frequency.setValueAtTime(800, now + 0.18);
-      osc2.frequency.exponentialRampToValueAtTime(1100, now + 0.35);
-      
-      // Envolvente profesional y distintiva (volumen aumentado para mejor audibilidad)
-      gain.gain.setValueAtTime(0.0001, now);
-      gain.gain.linearRampToValueAtTime(0.6, now + 0.08);
-      gain.gain.linearRampToValueAtTime(0.0001, now + 0.15);
-      gain.gain.linearRampToValueAtTime(0.7, now + 0.18);
-      gain.gain.linearRampToValueAtTime(0.0001, now + 0.35);
-      
-      osc1.connect(gain);
-      osc2.connect(gain);
-      gain.connect(audioCtx.destination);
-      
-      osc1.start(now);
-      osc1.stop(now + 0.15);
-      osc2.start(now + 0.18);
-      osc2.stop(now + 0.35);
-    } catch (err) {
-      console.warn("Error creando sonido Notificación:", err);
-    }
-  };
-
-  // Función para reproducir sonido único de PINA
-  const reproducirSonidoPINA = () => {
-    try {
-      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-      if (!AudioContextClass) {
-        return;
-      }
-      
-      let audioCtx = audioContextRef.current;
-      if (!audioCtx || audioCtx.state === 'closed') {
-        audioCtx = new AudioContextClass();
-        audioContextRef.current = audioCtx;
-      }
-      
-      // Si está suspendido, intentar resumirlo (puede fallar si no hay gesto del usuario)
-      if (audioCtx.state === 'suspended') {
-        audioCtx.resume().then(() => {
-          crearSonidoNotificacion(audioCtx);
-        }).catch(() => {
-          // Si falla, intentar crear el sonido de todas formas (puede funcionar en algunos casos)
-          try {
-            crearSonidoNotificacion(audioCtx);
-          } catch (e) {
-            // Si falla completamente, simplemente no reproducir (el usuario necesita interactuar primero)
-          }
-        });
-        return;
-      }
-      
-      crearSonidoNotificacion(audioCtx);
-    } catch (err) {
-      // Ignorar errores silenciosamente (el AudioContext puede no estar disponible aún)
-    }
-  };
-
-  // Función para activar el AudioContext (reutilizable)
-  const activarAudioContextFn = useRef(() => {
-    try {
-      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-      if (!AudioContextClass) return;
-      
-      if (!audioContextRef.current) {
-        const audioCtx = new AudioContextClass();
-        audioContextRef.current = audioCtx;
-      }
-      
-      // Si está suspendido, intentar resumirlo
-      if (audioContextRef.current.state === 'suspended') {
-        audioContextRef.current.resume().catch(() => {
-          // Ignorar errores silenciosamente
-        });
-      }
-    } catch (err) {
-      // Ignorar errores silenciosamente
-    }
-  }).current;
-
-  // Activar AudioContext en la primera interacción del usuario (requerido por navegadores)
-  useEffect(() => {
-    let activado = false;
-    
-    const activarEnInteraccion = () => {
-      if (activado) return;
-      activado = true;
-      activarAudioContextFn();
-    };
-
-    // Activar en cualquier interacción del usuario (solo una vez)
-    const eventos = ['click', 'touchstart', 'keydown', 'mousedown'];
-    eventos.forEach(evento => {
-      document.addEventListener(evento, activarEnInteraccion, { once: true, passive: true });
-    });
-
-    return () => {
-      eventos.forEach(evento => {
-        document.removeEventListener(evento, activarEnInteraccion);
-      });
-    };
-  }, [activarAudioContextFn]);
-
   // Cargar notificaciones al iniciar y cuando cambia el usuario
   useEffect(() => {
     if (user) {
@@ -213,6 +136,13 @@ export function NotificationProvider({ children }) {
       setNotifications([]);
     }
   }, [user, serverUrl]);
+
+  // Refrescar al abrir el panel para tener siempre datos en tiempo real
+  useEffect(() => {
+    if (isOpen && user && serverUrl) {
+      cargarNotificaciones();
+    }
+  }, [isOpen, user, serverUrl, cargarNotificaciones]);
 
   // Configurar Push + Local Notifications para app nativa
   useEffect(() => {
@@ -326,11 +256,26 @@ export function NotificationProvider({ children }) {
     }
 
     const handleNuevaNotificacion = (data) => {
-      // Solo procesar si es para este usuario
-      if (data.usuario_id === user.id) {
+      const uid = user?.id;
+      if (uid == null) return;
+      const a = Number(data.userId ?? data.usuario_id);
+      const b = Number(uid);
+      const esParaEsteUsuario = !Number.isNaN(a) && !Number.isNaN(b) && a === b;
+      if (esParaEsteUsuario) {
+        // Actualizar notificaciones inmediatamente
         cargarNotificaciones();
-        // Reproducir sonido único de PINA
-        reproducirSonidoPINA();
+        const esPrioritaria = (data?.data?.prioridad === 1) && (data?.data?.mensaje_id != null);
+        const esReunion = data?.tipo === 'reunion' || data?.data?.tipo === 'reunion';
+        
+        // Reproducir sonido para notificaciones prioritarias o de reuniones
+        if (esPrioritaria) {
+          reproducirSonidoIxora(configNotif?.sonido_mensaje || "ixora-pulse");
+        } else if (esReunion) {
+          // Reproducir sonido especial para reuniones (usar sonido de llamada)
+          reproducirSonidoIxora("ixora-call");
+        } else {
+          reproducirSonidoNotif();
+        }
         // Mostrar en barra del dispositivo (solo app nativa)
         mostrarNotificacionDispositivo({
           id: data.id,
@@ -338,6 +283,29 @@ export function NotificationProvider({ children }) {
           mensaje: data.mensaje,
           data: data.data || {},
         });
+        
+        // Agregar notificación al estado local inmediatamente para respuesta instantánea
+        const nuevaNotif = {
+          id: data.id,
+          titulo: data.titulo,
+          mensaje: data.mensaje,
+          tipo: data.tipo || "info",
+          read: false,
+          timestamp: data.timestamp || new Date().toISOString(),
+          data: data.data || {},
+        };
+        setNotifications((prev) => [nuevaNotif, ...prev].slice(0, 50));
+        
+        // Mostrar toast visual para todas las notificaciones (especialmente inventario)
+        setToastVisible({
+          titulo: data.titulo,
+          mensaje: data.mensaje,
+          tipo: data.tipo || "info"
+        });
+        // Ocultar toast después de 6 segundos
+        setTimeout(() => {
+          setToastVisible(null);
+        }, 6000);
       }
     };
 
@@ -348,7 +316,40 @@ export function NotificationProvider({ children }) {
         socket.off("nueva_notificacion", handleNuevaNotificacion);
       }
     };
+  }, [user, configNotif, reproducirSonidoNotif, cargarNotificaciones]);
+
+  // Sincronizar "leída" cuando se marca en otro dispositivo
+  useEffect(() => {
+    if (!user) return;
+    const socket = window.socket;
+    if (!socket) return;
+
+    const handleNotificacionLeida = (data) => {
+      const esParaEsteUsuario = data.userId === user.id;
+      if (!esParaEsteUsuario) return;
+      const id = data.id != null ? Number(data.id) : null;
+      if (id == null) return;
+      setNotifications((prev) =>
+        prev.map((n) =>
+          n.id === id ? { ...n, read: true, leida: 1 } : n
+        )
+      );
+    };
+
+    socket.on("notificacion_leida", handleNotificacionLeida);
+    return () => {
+      if (socket) socket.off("notificacion_leida", handleNotificacionLeida);
+    };
   }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    const socket = window.socket;
+    if (!socket) return;
+    const handler = () => { cargarNotificaciones(); };
+    socket.on("notificaciones_actualizadas", handler);
+    return () => { socket.off("notificaciones_actualizadas", handler); };
+  }, [user, cargarNotificaciones]);
 
   const addNotification = async (notification) => {
     // Si la notificación es de tipo "admin" (específica de administrador), solo agregar si es admin
@@ -409,8 +410,7 @@ export function NotificationProvider({ children }) {
       // Recargar notificaciones desde el servidor
       await cargarNotificaciones();
       
-      // Reproducir sonido único de PINA cuando se agrega una notificación
-      reproducirSonidoPINA();
+      reproducirSonidoNotif();
 
       mostrarNotificacionDispositivo({
         id: response.id,
@@ -446,30 +446,77 @@ export function NotificationProvider({ children }) {
       await authFetch(`${serverUrl}/notificaciones/${id}`, {
         method: "DELETE",
       });
-      // Actualizar estado local
       setNotifications((prev) => prev.filter((n) => n.id !== id));
     } catch (err) {
-      // Si la notificación no existe (404), es válido - ya fue eliminada
-      // Solo loguear si no es un 404
-      if (err.status !== 404 && !err.isNotFound) {
+      if (err?.status === 403) {
+        showAlert?.(err?.message || "No se puede eliminar hasta que se quite la prioridad al mensaje.", "warning");
+        return;
+      }
+      if (err?.status !== 404 && !err?.isNotFound) {
         console.error("Error eliminando notificación:", err);
       }
-      // En cualquier caso, eliminar del estado local (puede que ya no exista en el servidor)
       setNotifications((prev) => prev.filter((n) => n.id !== id));
     }
   };
 
   const clearAll = async () => {
     try {
-      await authFetch(`${serverUrl}/notificaciones`, {
-        method: "DELETE",
-      });
-      // Recargar para obtener solo confirmaciones activas
-      await cargarNotificaciones();
+      // Si estamos en la pestaña "Nuevas", marcar todas las no leídas como leídas
+      if (activeTab === 'nuevas') {
+        const unreadNotifications = notifications.filter((n) => {
+          const isRead = n.read || n.leida === 1;
+          if (n.adminOnly && !isAdmin) return false;
+          if (n.codeError && !isDeveloper) return false;
+          const prioritaria = (n.data?.prioridad === 1) && (n.data?.mensaje_id != null);
+          if (prioritaria) return false;
+          return !isRead;
+        });
+        
+        await Promise.all(
+          unreadNotifications.map((n) =>
+            authFetch(`${serverUrl}/notificaciones/${n.id}/leida`, {
+              method: "PUT",
+            }).catch(() => {})
+          )
+        );
+        
+        setNotifications((prev) =>
+          prev.map((n) => {
+            const isUnread = !(n.read || n.leida === 1);
+            const shouldMark = unreadNotifications.some((un) => un.id === n.id);
+            if (shouldMark && isUnread) {
+              return { ...n, read: true, leida: 1 };
+            }
+            return n;
+          })
+        );
+      } else {
+        // Si estamos en historial, eliminar todas las leídas
+        await authFetch(`${serverUrl}/notificaciones`, {
+          method: "DELETE",
+        });
+        // Recargar notificaciones
+        await cargarNotificaciones();
+      }
     } catch (err) {
       console.error("Error limpiando notificaciones:", err);
       // Si falla, limpiar solo en memoria
-      setNotifications([]);
+      if (activeTab === 'nuevas') {
+        setNotifications((prev) =>
+          prev.map((n) => {
+            const isRead = n.read || n.leida === 1;
+            if (!isRead) {
+              return { ...n, read: true, leida: 1 };
+            }
+            return n;
+          })
+        );
+      } else {
+        setNotifications((prev) => prev.filter((n) => {
+          const isRead = n.read || n.leida === 1;
+          return !isRead; // Mantener solo no leídas
+        }));
+      }
     }
   };
 
@@ -550,16 +597,47 @@ export function NotificationProvider({ children }) {
       value={{ addNotification, removeNotification, clearAll, notifications, setIsOpen, isOpen, unreadCount }}
     >
       {children}
+      
+      {/* Toast visual para notificaciones de inventario */}
+      {toastVisible && (
+        <div
+          style={{
+            position: 'fixed',
+            top: '20px',
+            right: '20px',
+            background: toastVisible.tipo === 'warning' 
+              ? 'linear-gradient(135deg, #f59e0b, #d97706)'
+              : toastVisible.tipo === 'success'
+              ? 'linear-gradient(135deg, #22c55e, #16a34a)'
+              : 'linear-gradient(135deg, #3b82f6, #2563eb)',
+            color: '#ffffff',
+            padding: '16px 20px',
+            borderRadius: '12px',
+            boxShadow: '0 8px 24px rgba(0, 0, 0, 0.4), 0 0 20px rgba(59, 130, 246, 0.5)',
+            zIndex: 100002,
+            minWidth: '300px',
+            maxWidth: '500px',
+            animation: 'slideInRight 0.3s ease-out',
+            border: '2px solid rgba(255, 255, 255, 0.3)'
+          }}
+          onClick={() => setToastVisible(null)}
+        >
+          <div style={{ fontWeight: '700', fontSize: '1.1rem', marginBottom: '6px' }}>
+            {toastVisible.titulo}
+          </div>
+          <div style={{ fontSize: '0.95rem', opacity: 0.95 }}>
+            {toastVisible.mensaje}
+          </div>
+        </div>
+      )}
+      
       {user && (
         <>
         {/* Botón superior oculto - ahora está en el menú inferior */}
         <div className="notifications-container" style={{ display: 'none' }}>
         <button
           className="notifications-bell"
-          onClick={() => {
-            activarAudioContextFn();
-            setIsOpen(!isOpen);
-          }}
+          onClick={() => setIsOpen(!isOpen)}
           title="Notificaciones"
         >
           🔔
@@ -576,37 +654,95 @@ export function NotificationProvider({ children }) {
             <div className="notifications-panel">
             <div className="notifications-header">
               <h3>Notificaciones</h3>
-              {notifications.filter((n) => {
+              {activeTab === 'nuevas' && notifications.filter((n) => {
+                const isRead = n.read || n.leida === 1;
                 if (n.adminOnly && !isAdmin) return false;
                 if (n.codeError && !isDeveloper) return false;
-                return true;
+                return !isRead;
               }).length > 0 && (
                 <button
                   className="notifications-clear"
                   onClick={clearAll}
-                  title="Limpiar todas"
+                  title="Marcar todas como leídas"
+                >
+                  🗑️
+                </button>
+              )}
+              {activeTab === 'historial' && notifications.filter((n) => {
+                const isRead = n.read || n.leida === 1;
+                if (n.adminOnly && !isAdmin) return false;
+                if (n.codeError && !isDeveloper) return false;
+                return isRead;
+              }).length > 0 && (
+                <button
+                  className="notifications-clear"
+                  onClick={clearAll}
+                  title="Eliminar historial"
                 >
                   🗑️
                 </button>
               )}
             </div>
+            
+            {/* Pestañas */}
+            <div className="notifications-tabs">
+              <button
+                className={`notifications-tab ${activeTab === 'nuevas' ? 'active' : ''}`}
+                onClick={() => setActiveTab('nuevas')}
+              >
+                Nuevas
+                {(() => {
+                  const unreadCount = notifications.filter((n) => {
+                    const isRead = n.read || n.leida === 1;
+                    if (n.adminOnly && !isAdmin) return false;
+                    if (n.codeError && !isDeveloper) return false;
+                    return !isRead;
+                  }).length;
+                  return unreadCount > 0 ? (
+                    <span className="notifications-tab-badge">{unreadCount}</span>
+                  ) : null;
+                })()}
+              </button>
+              <button
+                className={`notifications-tab ${activeTab === 'historial' ? 'active' : ''}`}
+                onClick={() => setActiveTab('historial')}
+              >
+                Historial
+              </button>
+            </div>
+            
             <div className="notifications-list">
               {loading ? (
                 <div className="notifications-empty">Cargando...</div>
               ) : (
                 (() => {
-                  const filteredNotifications = notifications.filter((notification) => {
-                  // Mostrar todas las notificaciones excepto:
-                  // - Las marcadas como adminOnly si no es admin
-                  // - Las marcadas como codeError si no es developer
-                  if (notification.adminOnly && !isAdmin) return false;
-                  if (notification.codeError && !isDeveloper) return false;
-                  return true;
-                });
+                  // Filtrar notificaciones según la pestaña activa
+                  let filteredNotifications = notifications.filter((notification) => {
+                    // Filtrar por permisos
+                    if (notification.adminOnly && !isAdmin) return false;
+                    if (notification.codeError && !isDeveloper) return false;
+                    
+                    // Filtrar por pestaña: nuevas (no leídas) o historial (leídas)
+                    const isRead = notification.read || notification.leida === 1;
+                    if (activeTab === 'nuevas') {
+                      return !isRead; // Solo no leídas en pestaña "Nuevas"
+                    } else {
+                      return isRead; // Solo leídas en pestaña "Historial"
+                    }
+                  });
+                  
+                  // Ordenar: más recientes primero
+                  filteredNotifications = filteredNotifications.sort((a, b) => {
+                    const timeA = new Date(a.timestamp || a.created_at || 0).getTime();
+                    const timeB = new Date(b.timestamp || b.created_at || 0).getTime();
+                    return timeB - timeA;
+                  });
 
                 return filteredNotifications.length === 0 ? (
                   <div className="notifications-empty">
-                    No hay notificaciones
+                    {activeTab === 'nuevas' 
+                      ? 'No hay notificaciones nuevas' 
+                      : 'No hay notificaciones en el historial'}
                   </div>
                 ) : (
                   filteredNotifications.map((notification) => {
@@ -627,24 +763,49 @@ export function NotificationProvider({ children }) {
                       if (notification.onClick) {
                         notification.onClick();
                       }
-                      // Marcar como leída en el servidor
-                      try {
-                        await authFetch(`${serverUrl}/notificaciones/${notification.id}/leida`, {
-                          method: "PUT",
-                        });
-                        setNotifications((prev) =>
-                          prev.map((n) =>
-                            n.id === notification.id ? { ...n, read: true } : n
-                          )
-                        );
-                      } catch (err) {
-                        console.error("Error marcando notificación como leída:", err);
-                        // Si falla, marcar solo en memoria
-                        setNotifications((prev) =>
-                          prev.map((n) =>
-                            n.id === notification.id ? { ...n, read: true } : n
-                          )
-                        );
+
+                      const d = notification.data || {};
+                      if (d.tipo === "solicitud_grupo" && d.grupo_id != null) {
+                        setIsOpen(false);
+                        window.dispatchEvent(new CustomEvent("ixora-abrir-chat-solicitud", {
+                          detail: {
+                            grupoId: d.grupo_id,
+                            solicitudId: d.solicitud_id,
+                            solicitanteNickname: d.solicitante_nickname,
+                            fecha: d.fecha,
+                            groupName: d.groupName,
+                          },
+                        }));
+                      } else if (d.prioridad === 1 && d.chatType && d.chatTarget != null && d.mensaje_id != null) {
+                        setIsOpen(false);
+                        window.dispatchEvent(new CustomEvent("ixora-abrir-chat-mensaje-prioritario", {
+                          detail: {
+                            chatType: d.chatType,
+                            chatTarget: d.chatTarget,
+                            mensaje_id: Number(d.mensaje_id),
+                          },
+                        }));
+                      }
+
+                      const esPrioritaria = (d.prioridad === 1) && (d.mensaje_id != null);
+                      if (activeTab === 'nuevas' && !isRead && !esPrioritaria) {
+                        try {
+                          await authFetch(`${serverUrl}/notificaciones/${notification.id}/leida`, {
+                            method: "PUT",
+                          });
+                          setNotifications((prev) =>
+                            prev.map((n) =>
+                              n.id === notification.id ? { ...n, read: true, leida: 1 } : n
+                            )
+                          );
+                        } catch (err) {
+                          console.error("Error marcando notificación como leída:", err);
+                          setNotifications((prev) =>
+                            prev.map((n) =>
+                              n.id === notification.id ? { ...n, read: true, leida: 1 } : n
+                            )
+                          );
+                        }
                       }
                     }}
                   >
@@ -786,6 +947,7 @@ export function NotificationProvider({ children }) {
                         </div>
                       )}
                     </div>
+                    {!((notification.data?.prioridad === 1) && (notification.data?.mensaje_id != null)) && (
                     <button
                       className="notification-close"
                       onClick={(e) => {
@@ -796,6 +958,7 @@ export function NotificationProvider({ children }) {
                     >
                       ✕
                     </button>
+                    )}
                   </div>
                   );
                   })

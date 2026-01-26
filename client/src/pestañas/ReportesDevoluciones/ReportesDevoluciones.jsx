@@ -4,7 +4,7 @@ import { useAuth } from "../../AuthContext";
 import { useAlert } from "../../components/AlertModal";
 import ReporteDetalladoDevoluciones from "./ReporteDetalladoDevoluciones";
 
-export default function ReportesDevoluciones({ serverUrl, pushToast }) {
+export default function ReportesDevoluciones({ serverUrl, pushToast, socket }) {
   const { authFetch } = useAuth();
   const { showAlert } = useAlert();
   // 🔹 Pestañas de categorías
@@ -122,13 +122,9 @@ export default function ReportesDevoluciones({ serverUrl, pushToast }) {
 
   // ──────────────── Escuchar eventos de socket para actualización automática ────────────────
   useEffect(() => {
-    // eslint-disable-next-line no-undef
-    if (!window.socket) return;
-    // eslint-disable-next-line no-undef
-    const socket = window.socket;
+    if (!socket) return;
 
     const handleReportesActualizados = () => {
-      console.log("📡 Evento reportes_actualizados recibido, recargando días...");
       // Recargar inmediatamente cuando se actualicen los reportes
       if (!cargandoDiasRef.current) {
         // Pequeño delay para asegurar que el servidor haya completado la transacción
@@ -141,7 +137,6 @@ export default function ReportesDevoluciones({ serverUrl, pushToast }) {
     };
 
     const handleDevolucionesActualizadas = () => {
-      console.log("📡 Evento devoluciones_actualizadas recibido, recargando días...");
       // Si se cierra el día de devoluciones, recargar inmediatamente
       if (!cargandoDiasRef.current) {
         // Pequeño delay para asegurar que el servidor haya completado la transacción
@@ -160,8 +155,7 @@ export default function ReportesDevoluciones({ serverUrl, pushToast }) {
       socket.off("reportes_actualizados", handleReportesActualizados);
       socket.off("devoluciones_actualizadas", handleDevolucionesActualizadas);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [serverUrl, cargarDias]);
+  }, [socket, serverUrl, cargarDias]);
 
   // ──────────────── Agrupar por mes ────────────────
   const diasPorMes = useMemo(() => {

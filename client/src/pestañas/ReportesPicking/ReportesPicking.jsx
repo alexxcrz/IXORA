@@ -493,8 +493,14 @@ export default function ReportesPicking({ diasPorMes, verDetalleDia, SERVER_URL 
                 <div className="mes-body">
                   <div className="dias-head">
                     <div className="col-fecha">Fecha</div>
-                    <div className="col-tp">Total productos</div>
-                    <div className="col-tz">Total piezas</div>
+                    <div className="col-tp">Prod. Picking</div>
+                    <div className="col-tz">Piezas Picking</div>
+                    <div className="col-tp">Prod. Import.</div>
+                    <div className="col-tz">Piezas Import.</div>
+                    <div className="col-tp">Prod. Devol.</div>
+                    <div className="col-tz">Piezas Devol.</div>
+                    <div className="col-tp">Total Prod.</div>
+                    <div className="col-tz">Total Piezas</div>
                     <div className="col-acc">Acciones</div>
                   </div>
 
@@ -509,6 +515,12 @@ export default function ReportesPicking({ diasPorMes, verDetalleDia, SERVER_URL 
                           <div className="col-fecha">
                             <span className="date-pill">{fechaFormateada || "Sin fecha"}</span>
                           </div>
+                          <div className="col-tp">{d.total_productos_picking ?? 0}</div>
+                          <div className="col-tz">{d.total_piezas_picking ?? 0}</div>
+                          <div className="col-tp">{d.total_productos_importacion ?? 0}</div>
+                          <div className="col-tz">{d.total_piezas_importacion ?? 0}</div>
+                          <div className="col-tp">{d.total_productos_devoluciones ?? 0}</div>
+                          <div className="col-tz">{d.total_piezas_devoluciones ?? 0}</div>
                           <div className="col-tp">{d.total_productos ?? 0}</div>
                           <div className="col-tz">{d.total_piezas ?? 0}</div>
 

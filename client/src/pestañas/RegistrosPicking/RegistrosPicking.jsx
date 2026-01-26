@@ -409,29 +409,30 @@ export default function RegistrosPicking({
   };
 
   const abrirModal = async (p) => {
+    // Actualizar estado inmediatamente para respuesta instantánea
     setProdModal(p);
     setMCajas(p.cajas > 0 ? p.cajas : "");
     setMPXC(p.piezas_por_caja > 0 ? p.piezas_por_caja : "");
     setMExtras("");
     setMNuevoLote("");
     setTieneLotesRegistrados(false);
-
     setModalAbierto(true);
 
-    try {
-      const lotes = await authFetch(
-        `${SERVER_URL}/inventario/lotes/${encodeURIComponent(p.codigo)}/completo`
-      );
+    // Cargar lotes en segundo plano sin bloquear la UI
+    authFetch(
+      `${SERVER_URL}/inventario/lotes/${encodeURIComponent(p.codigo)}/completo`
+    ).then((lotes) => {
       const tieneLotes = Array.isArray(lotes) && lotes.length > 0;
       setTieneLotesRegistrados(tieneLotes);
-    } catch (err) {
+    }).catch((err) => {
       console.error("Error verificando lotes del producto:", err);
       setTieneLotesRegistrados(false);
-    }
+    });
 
-    setTimeout(() => {
+    // Focus inmediato sin delay
+    requestAnimationFrame(() => {
       refPXC.current?.focus();
-    }, 30);
+    });
   };
 
   const surtirModal = async () => {
@@ -451,70 +452,14 @@ export default function RegistrosPicking({
 
     const codigoParaLoteModal = prodModal.codigo_principal || prodModal.codigo;
     
-    try {
-      const { existe } = await authFetch(
-        `${SERVER_URL}/inventario/lotes/${encodeURIComponent(codigoParaLoteModal)}/verificar/${encodeURIComponent(loteFinal)}`
-        );
-        
-        if (!existe) {
-          try {
-          // ⭐ Solo agregar el lote, sin cantidad_piezas ni activo
-          await authFetch(
-            `${SERVER_URL}/inventario/lotes/${encodeURIComponent(codigoParaLoteModal)}/nuevo`,
-            {
-              method: "POST",
-              body: JSON.stringify({
-                lote: loteFinal,
-                // No enviar cantidad_piezas ni activo - solo el lote
-              }),
-            }
-          );
-          pushToast(`✅ Lote "${loteFinal}" registrado automáticamente`, "ok");
-        } catch (err) {
-          console.error("Error creando lote automáticamente:", err);
-          beepError();
-          await showAlert(
-            `❌ Error al registrar el lote "${loteFinal}". Por favor, intenta nuevamente.`,
-            "error"
-          );
-          return;
-        }
-      }
-    } catch (err) {
-      console.error("Error verificando lote:", err);
-      beepError();
-      await showAlert("❌ Error al verificar el lote. Por favor, intenta nuevamente.", "error");
-        return;
-      }
-
-    try {
-      await authFetch(`${SERVER_URL}/inventario/lote-por-codigo`, {
-        method: "PUT",
-        body: JSON.stringify({
-          codigo: codigoParaLoteModal,
-          lote: loteFinal,
-        }),
-      });
-    } catch (err) {
-      console.error("Error guardando lote en inventario:", err);
-    }
-
-    await authFetch(`${SERVER_URL}/productos/${prodModal.id}`, {
-      method: "PUT",
-      body: JSON.stringify({
-        codigo: prodModal.codigo,
-        nombre: prodModal.nombre,
-        cajas,
-        piezas: total,
-        extras,
-        piezas_por_caja: pxc,
-        observaciones: prodModal.observaciones || "",
-        lote: loteFinal,
-        surtido: 1,
-        disponible: 1,
-      }),
-    });
-
+    // Cerrar modal INMEDIATAMENTE para respuesta instantánea
+    setModalAbierto(false);
+    
+    // Feedback visual inmediato
+    pushToast(`✔ ${prodModal.codigo} surtido correctamente`, "ok");
+    beepSuccess();
+    
+    // Actualizar estado local inmediatamente
     setProductos((prev) =>
       prev.map((x) =>
         x.id === prodModal.id
@@ -531,15 +476,83 @@ export default function RegistrosPicking({
           : x
       )
     );
-
-    setModalAbierto(false);
-    cargarProductos();
-    pushToast(`✔ ${prodModal.codigo} surtido correctamente`, "ok");
-    beepSuccess();
-
+    
     setScan("");
-    // Solo enfocar si no hay un input activo
-    setTimeout(() => {
+
+    // Operaciones del servidor en segundo plano (sin bloquear UI)
+    (async () => {
+      try {
+        const { existe } = await authFetch(
+          `${SERVER_URL}/inventario/lotes/${encodeURIComponent(codigoParaLoteModal)}/verificar/${encodeURIComponent(loteFinal)}`
+        );
+          
+        if (!existe) {
+          try {
+            // ⭐ Solo agregar el lote, sin cantidad_piezas ni activo
+            await authFetch(
+              `${SERVER_URL}/inventario/lotes/${encodeURIComponent(codigoParaLoteModal)}/nuevo`,
+              {
+                method: "POST",
+                body: JSON.stringify({
+                  lote: loteFinal,
+                  // No enviar cantidad_piezas ni activo - solo el lote
+                }),
+              }
+            );
+            pushToast(`✅ Lote "${loteFinal}" registrado automáticamente`, "ok");
+          } catch (err) {
+            console.error("Error creando lote automáticamente:", err);
+          }
+        }
+      } catch (err) {
+        console.error("Error verificando lote:", err);
+      }
+
+      try {
+        await authFetch(`${SERVER_URL}/inventario/lote-por-codigo`, {
+          method: "PUT",
+          body: JSON.stringify({
+            codigo: codigoParaLoteModal,
+            lote: loteFinal,
+          }),
+        });
+      } catch (err) {
+        console.error("Error guardando lote en inventario:", err);
+      }
+      
+      // Llamada al servidor para surtir
+      await authFetch(`${SERVER_URL}/productos/${prodModal.id}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          codigo: prodModal.codigo,
+          nombre: prodModal.nombre,
+          cajas,
+          piezas: total,
+          extras,
+          piezas_por_caja: pxc,
+          observaciones: prodModal.observaciones || "",
+          lote: loteFinal,
+          surtido: 1,
+          disponible: 1,
+        }),
+      });
+      
+      // Cargar productos después de surtir
+      cargarProductos();
+    })().catch((err) => {
+      console.error("Error al surtir:", err);
+      pushToast("❌ Error al surtir", "err");
+      beepError();
+      // Revertir cambio local si falla
+      setProductos((prev) =>
+        prev.map((x) =>
+          x.id === prodModal.id ? prodModal : x
+        )
+      );
+    });
+
+    // Focus inmediato sin delay
+    requestAnimationFrame(() => {
       const activeElement = document.activeElement;
       const isInputActive = activeElement && (
         activeElement.tagName === 'INPUT' ||
@@ -551,7 +564,7 @@ export default function RegistrosPicking({
       if (!isInputActive) {
         scanRef.current?.focus();
       }
-    }, 200);
+    });
   };
 
   const surtirFilaRef = useRef(null);
@@ -1267,7 +1280,40 @@ export default function RegistrosPicking({
                         })}
                     </td>
 
-                    <td>{p.codigo}</td>
+                    <td>
+                      {!p.surtido && p.disponible !== 0 ? (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            abrirModal(p);
+                          }}
+                          style={{ 
+                            background: 'transparent',
+                            border: 'none',
+                            color: 'var(--texto-principal)',
+                            cursor: 'pointer',
+                            padding: 0,
+                            fontSize: 'inherit',
+                            fontWeight: 'inherit',
+                            textDecoration: 'underline',
+                            textAlign: 'left'
+                          }}
+                          title="Click para surtir"
+                          onMouseEnter={(e) => {
+                            e.target.style.color = 'var(--azul-primario)';
+                            e.target.style.fontWeight = 'bold';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.target.style.color = 'var(--texto-principal)';
+                            e.target.style.fontWeight = 'inherit';
+                          }}
+                        >
+                          {p.codigo}
+                        </button>
+                      ) : (
+                        <span>{p.codigo}</span>
+                      )}
+                    </td>
 
                     <td>
                       <div className="nombre-reg">
@@ -1532,38 +1578,29 @@ export default function RegistrosPicking({
                           Corregir
                         </button>
                       ) : (
-                        <>
-                          <button
-                            className="btn-surtir"
-                            onClick={() => abrirModal(p)}
-                            style={{ marginRight: "8px" }}
-                          >
-                            Surtir
-                          </button>
-                          <button
-                            className="btn-borrar"
-                            onClick={async () => {
-                              const confirmado = await showConfirm("¿Borrar registro del día permanentemente?", "Confirmar eliminación");
-                              if (!confirmado) return;
+                        <button
+                          className="btn-borrar"
+                          onClick={async () => {
+                            const confirmado = await showConfirm("¿Borrar registro del día permanentemente?", "Confirmar eliminación");
+                            if (!confirmado) return;
 
-                              try {
-                                await authFetch(
-                                  `${SERVER_URL}/productos/${p.id}/borrar`,
-                                  { method: "DELETE" }
-                                );
+                            try {
+                              await authFetch(
+                                `${SERVER_URL}/productos/${p.id}/borrar`,
+                                { method: "DELETE" }
+                              );
 
-                                cargarProductos();
-                                await showAlert("✅ Registro eliminado permanentemente", "success");
-                                beepSuccess();
-                              } catch {
-                                showAlert("❌ Error al eliminar el registro", "error");
-                                beepError();
-                              }
-                            }}
-                          >
-                            Borrar
-                          </button>
-                        </>
+                              cargarProductos();
+                              await showAlert("✅ Registro eliminado permanentemente", "success");
+                              beepSuccess();
+                            } catch {
+                              showAlert("❌ Error al eliminar el registro", "error");
+                              beepError();
+                            }
+                          }}
+                        >
+                          Borrar
+                        </button>
                       )}
                     </td>
                   </tr>
@@ -1791,7 +1828,14 @@ export default function RegistrosPicking({
               <button
                 className="btn-surtir"
                 ref={refBtnSurtir}
-                onClick={surtirModal}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (!prodModal || (!mNuevoLote.trim() && !prodModal.lote?.trim())) {
+                    return;
+                  }
+                  surtirModal();
+                }}
                 disabled={
                   !prodModal ||
                   (!mNuevoLote.trim() && !prodModal.lote?.trim())
@@ -1807,6 +1851,11 @@ export default function RegistrosPicking({
                     (!mNuevoLote.trim() && !prodModal.lote?.trim())
                       ? "not-allowed"
                       : "pointer",
+                  pointerEvents: 
+                    !prodModal ||
+                    (!mNuevoLote.trim() && !prodModal.lote?.trim())
+                      ? "none"
+                      : "auto",
                 }}
                 title={
                   !prodModal ||

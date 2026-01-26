@@ -172,6 +172,11 @@ select:focus {
    ====================================================== */
 
 .tabla-container.registros-tabla {
+  overflow-x: auto !important;
+  overflow-y: visible !important;
+  -webkit-overflow-scrolling: touch !important;
+  width: 100% !important;
+  max-width: 100% !important;
   overflow-x: auto;
   width: 100%;
   border-radius: var(--radio-lg);
@@ -182,12 +187,14 @@ select:focus {
 }
 
 .tabla-registros {
-  width: 100%;
+  width: max-content !important;
+  min-width: 1500px !important;
   background: var(--fondo-card);
   color: var(--texto-principal);
-  border-collapse: collapse;
+  border-collapse: collapse !important;
   border-spacing: 0;
-  min-width: 1500px; /* Aumentado para acomodar columna de lote más ancha */
+  table-layout: fixed !important;
+  overflow: visible !important;
 }
 
 .tabla-registros th {
@@ -198,7 +205,9 @@ select:focus {
   padding: 8px 6px;
   font-size: 0.75rem;
   text-align: left;
-  white-space: nowrap;
+  white-space: nowrap !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
   position: sticky;
   top: 0;
   z-index: 10;
@@ -230,8 +239,11 @@ select:focus {
   background: var(--fondo-card);
   color: var(--texto-principal);
   font-size: 0.8rem;
-  vertical-align: middle;
+  vertical-align: middle !important;
   line-height: 1.3;
+  white-space: nowrap !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
 }
 
 /* Asegurar que la columna de Lote muestre el contenido completo */
@@ -336,7 +348,14 @@ select:focus {
   font-weight: 600;
   cursor: pointer;
   box-shadow: var(--sombra-sm);
-  transition: all var(--transicion-media);
+  transition: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.btn-surtir:active {
+  transform: scale(0.98);
+  box-shadow: var(--sombra-sm);
 }
 
 .btn-borrar,
@@ -676,17 +695,25 @@ input[type="number"].reg-modal::-moz-appearance {
   background: linear-gradient(135deg, var(--azul-primario), var(--azul-secundario));
   color: white;
   box-shadow: 0 4px 16px rgba(59, 130, 246, 0.3);
+  transition: none !important;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .modal-buttons .btn-surtir:hover {
   box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4);
-  transform: translateY(-2px);
   filter: brightness(1.1);
 }
 
 .modal-buttons .btn-surtir:active {
-  transform: translateY(0) scale(0.98);
+  transform: scale(0.97);
   box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+}
+
+.modal-buttons .btn-surtir:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
 }
 
 .btn-corregir {

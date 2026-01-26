@@ -344,10 +344,15 @@ export default function DevolucionesProceso({ serverUrl, pushToast, user, onProd
       return activo === 1 || activo === true || activo === '1';
     }).length;
     
-    // NO ACTIVOS: productos que NO están activos (activo !== 1, true, '1')
+    // NO ACTIVOS: productos que NO están activos PERO SÍ son aptos (pueden activarse)
+    // Excluir los productos no aptos de este contador
     const noActivos = listaProductosGeneral.filter(p => {
       const activo = p.activo;
-      return activo !== 1 && activo !== true && activo !== '1';
+      const apto = p.apto;
+      const esApto = apto === 1 || apto === true || apto === '1';
+      const noEstaActivo = activo !== 1 && activo !== true && activo !== '1';
+      // Solo contar los que son aptos Y no están activos (pueden activarse)
+      return esApto && noEstaActivo;
     }).length;
     
     return { noAptos, activos, noActivos };
@@ -358,7 +363,6 @@ export default function DevolucionesProceso({ serverUrl, pushToast, user, onProd
     if (!socket) return;
 
     const handleProductosGeneralActualizados = () => {
-      console.log('📡 Evento productos_general_actualizados recibido, recargando productos...');
       cargarProductosGeneral();
     };
 
@@ -379,7 +383,6 @@ export default function DevolucionesProceso({ serverUrl, pushToast, user, onProd
     socket.off('pedido_agregado');
 
     const handlePedidoEliminado = (data) => {
-      console.log('📡 Evento pedido_eliminado recibido, recargando pedidos...');
       cargarPedidos();
     };
     
@@ -389,7 +392,6 @@ export default function DevolucionesProceso({ serverUrl, pushToast, user, onProd
     };
 
     const handlePedidoAgregado = (data) => {
-      console.log('📡 Evento pedido_agregado recibido, recargando pedidos...', data);
       cargarPedidos();
       // También recargar productos general cuando se agrega un pedido
       cargarProductosGeneral();
@@ -1008,7 +1010,7 @@ export default function DevolucionesProceso({ serverUrl, pushToast, user, onProd
             alignItems: 'center',
             marginLeft: 'auto'
           }}>
-            <div style={{ 
+            <div className="dev-contador-badge" style={{ 
               display: 'flex', 
               flexDirection: 'row',
               alignItems: 'center',
@@ -1016,12 +1018,12 @@ export default function DevolucionesProceso({ serverUrl, pushToast, user, onProd
               padding: '4px 10px',
               background: 'var(--error)',
               borderRadius: 'var(--radio-sm)',
-              color: 'white'
+              color: '#ffffff'
             }}>
-              <span style={{ fontSize: '0.7rem', opacity: 0.9 }}>No Aptos:</span>
-              <span style={{ fontSize: '0.95rem', fontWeight: '700' }}>{contadores.noAptos}</span>
+              <span className="dev-contador-badge" style={{ fontSize: '0.7rem', opacity: 0.9, color: '#ffffff' }}>No Aptos:</span>
+              <span className="dev-contador-badge" style={{ fontSize: '0.95rem', fontWeight: '700', color: '#ffffff' }}>{contadores.noAptos}</span>
             </div>
-            <div style={{ 
+            <div className="dev-contador-badge" style={{ 
               display: 'flex', 
               flexDirection: 'row',
               alignItems: 'center',
@@ -1029,25 +1031,25 @@ export default function DevolucionesProceso({ serverUrl, pushToast, user, onProd
               padding: '4px 10px',
               background: 'var(--exito)',
               borderRadius: 'var(--radio-sm)',
-              color: 'white'
+              color: '#ffffff'
             }}>
-              <span style={{ fontSize: '0.7rem', opacity: 0.9 }}>Activos:</span>
-              <span style={{ fontSize: '0.95rem', fontWeight: '700' }}>{contadores.activos}</span>
+              <span className="dev-contador-badge" style={{ fontSize: '0.7rem', opacity: 0.9, color: '#ffffff' }}>Activos:</span>
+              <span className="dev-contador-badge" style={{ fontSize: '0.95rem', fontWeight: '700', color: '#ffffff' }}>{contadores.activos}</span>
             </div>
-            <div style={{ 
+            <div className="dev-contador-badge" style={{ 
               display: 'flex', 
               flexDirection: 'row',
               alignItems: 'center',
               gap: '6px',
               padding: '4px 10px',
-              background: 'var(--warning)',
+              background: '#1a1a1a',
               borderRadius: 'var(--radio-sm)',
-              color: 'white'
+              color: '#ffffff'
             }}>
-              <span style={{ fontSize: '0.7rem', opacity: 0.9 }}>No Activados:</span>
-              <span style={{ fontSize: '0.95rem', fontWeight: '700' }}>{contadores.noActivos}</span>
+              <span className="dev-contador-badge" style={{ fontSize: '0.7rem', opacity: 0.9, color: '#ffffff' }}>No Activados:</span>
+              <span className="dev-contador-badge" style={{ fontSize: '0.95rem', fontWeight: '700', color: '#ffffff' }}>{contadores.noActivos}</span>
             </div>
-            <div style={{ 
+            <div className="dev-contador-badge" style={{ 
               display: 'flex', 
               flexDirection: 'row',
               alignItems: 'center',
@@ -1055,10 +1057,10 @@ export default function DevolucionesProceso({ serverUrl, pushToast, user, onProd
               padding: '4px 10px',
               background: 'var(--azul-primario)',
               borderRadius: 'var(--radio-sm)',
-              color: 'white'
+              color: '#ffffff'
             }}>
-              <span style={{ fontSize: '0.7rem', opacity: 0.9 }}>Total:</span>
-              <span style={{ fontSize: '0.95rem', fontWeight: '700' }}>{listaProductosGeneral.length}</span>
+              <span className="dev-contador-badge" style={{ fontSize: '0.7rem', opacity: 0.9, color: '#ffffff' }}>Total:</span>
+              <span className="dev-contador-badge" style={{ fontSize: '0.95rem', fontWeight: '700', color: '#ffffff' }}>{listaProductosGeneral.length}</span>
             </div>
           </div>
         )}
@@ -1261,26 +1263,65 @@ export default function DevolucionesProceso({ serverUrl, pushToast, user, onProd
                   <td>{p.cantidad}</td>
                   <td>{p.apto ? "Apto" : "No apto"}</td>
                   <td style={{ textAlign: 'center' }}>
-                    <label className="switch" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-                      <input
-                        type="checkbox"
-                        checked={p.activo === 1}
-                        onChange={async (e) => {
-                          try {
-                            await authFetch(`${serverUrl}/devoluciones/clientes/productos-general/${p.id}/activo`, {
-                              method: 'PUT',
-                              body: JSON.stringify({ activo: e.target.checked ? 1 : 0 })
-                            });
-                            cargarProductosGeneral();
-                            pushToast?.("✅ Estado actualizado", "success");
-                          } catch (err) {
-                            console.error(err);
-                            pushToast?.("❌ Error actualizando estado", "error");
-                          }
-                        }}
-                      />
-                      <span className="slider"></span>
-                    </label>
+                    {(() => {
+                      // Verificar si el producto es "no apto"
+                      const esNoApto = p.apto !== 1 && p.apto !== true && p.apto !== '1';
+                      const puedeActivar = !esNoApto; // Solo se puede activar si NO es no apto
+                      
+                      return (
+                        <label 
+                          className="switch" 
+                          style={{ 
+                            display: 'inline-flex', 
+                            alignItems: 'center', 
+                            justifyContent: 'center', 
+                            cursor: puedeActivar ? 'pointer' : 'not-allowed',
+                            opacity: puedeActivar ? 1 : 0.5
+                          }}
+                          title={esNoApto ? "Los productos no aptos no se pueden activar" : ""}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={p.activo === 1}
+                            disabled={!puedeActivar}
+                            onChange={async (e) => {
+                              // Doble verificación por seguridad
+                              if (esNoApto && e.target.checked) {
+                                pushToast?.("⚠️ Los productos no aptos no se pueden activar", "warning");
+                                // Revertir el checkbox
+                                e.target.checked = false;
+                                return;
+                              }
+                              
+                              try {
+                                const response = await authFetch(`${serverUrl}/devoluciones/clientes/productos-general/${p.id}/activo`, {
+                                  method: 'PUT',
+                                  body: JSON.stringify({ activo: e.target.checked ? 1 : 0 })
+                                });
+                                
+                                // Si hay error en la respuesta
+                                if (response && response.error) {
+                                  pushToast?.(response.error, "error");
+                                  // Revertir el checkbox
+                                  e.target.checked = !e.target.checked;
+                                  return;
+                                }
+                                
+                                cargarProductosGeneral();
+                                pushToast?.("✅ Estado actualizado", "success");
+                              } catch (err) {
+                                console.error(err);
+                                const errorMessage = err?.message || err?.error || "Error actualizando estado";
+                                pushToast?.(`❌ ${errorMessage}`, "error");
+                                // Revertir el checkbox en caso de error
+                                e.target.checked = !e.target.checked;
+                              }
+                            }}
+                          />
+                          <span className="slider"></span>
+                        </label>
+                      );
+                    })()}
                   </td>
                   <td style={{ textAlign: 'center' }}>
                     <button
@@ -2265,13 +2306,22 @@ export default function DevolucionesProceso({ serverUrl, pushToast, user, onProd
                               checked={grupo.todosActivos}
                               onChange={async (e) => {
                                 try {
-                                  await authFetch(`${serverUrl}/devoluciones/clientes/productos/estado`, {
+                                  const response = await authFetch(`${serverUrl}/devoluciones/clientes/productos/estado`, {
                                     method: 'PUT',
                                     body: JSON.stringify({
                                       nombre: grupo.nombre,
                                       activo: e.target.checked ? 1 : 0
                                     })
                                   });
+                                  
+                                  // Si hay error en la respuesta
+                                  if (response && response.error) {
+                                    pushToast?.(response.error, "error");
+                                    // Revertir el checkbox
+                                    e.target.checked = !e.target.checked;
+                                    return;
+                                  }
+                                  
                                   setResumenModal(prev => ({
                                     ...prev,
                                     data: prev.data.map(g =>
@@ -2283,7 +2333,10 @@ export default function DevolucionesProceso({ serverUrl, pushToast, user, onProd
                                   pushToast?.("✅ Grupo actualizado", "success");
                                 } catch (err) {
                                   console.error(err);
-                                  pushToast?.("❌ Error actualizando grupo", "error");
+                                  const errorMessage = err?.message || err?.error || "Error actualizando grupo";
+                                  pushToast?.(`❌ ${errorMessage}`, "error");
+                                  // Revertir el checkbox en caso de error
+                                  e.target.checked = !e.target.checked;
                                 }
                               }}
                             />

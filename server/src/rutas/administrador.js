@@ -78,8 +78,6 @@ const storagePersonalizacion = multer.diskStorage({
       destino = path.join(process.cwd(), "uploads/personalizacion", "fondos-login-branding");
     }
     
-    console.log(`📁 [storagePersonalizacion] Tipo detectado: ${tipo}, Path: ${pathUrl}, Destino: ${destino}`);
-    
     if (!fs.existsSync(destino)) {
       fs.mkdirSync(destino, { recursive: true });
     }
@@ -167,10 +165,7 @@ const storagePersonalizacion = multer.diskStorage({
       // Si no se detectó tipo, usar timestamp (no debería pasar)
       const timestamp = Date.now();
       nombre = `${timestamp}_${file.originalname}`;
-      console.warn(`⚠️ [storagePersonalizacion] Tipo no detectado, usando timestamp. Path: ${pathUrl}`);
     }
-    
-    console.log(`📝 [storagePersonalizacion] Tipo: ${tipo}, Nombre final: ${nombre}, MIME: ${file.mimetype}, Path: ${pathUrl}`);
     
     cb(null, nombre);
   },
@@ -287,6 +282,10 @@ router.post(
           }
         }
       }
+
+      // Emitir evento de actualización
+      getIO().emit("usuarios_actualizados");
+      getIO().emit("usuario_foto_actualizada", { id, photo: filename });
 
       res.json({ ok: true, photo: filename });
     } catch (err) {
@@ -469,6 +468,10 @@ router.post(
       
       const nuevo = dbUsers.prepare(selectQuery).get(userId);
 
+      // Emitir evento de actualización
+      getIO().emit("usuarios_actualizados");
+      getIO().emit("usuario_creado", nuevo);
+
       res.json(nuevo);
     } catch (e) {
       if (String(e.message).includes("UNIQUE"))
@@ -568,6 +571,10 @@ router.put(
         )
         .get(id);
 
+      // Emitir evento de actualización
+      getIO().emit("usuarios_actualizados");
+      getIO().emit("usuario_actualizado", updated);
+
       res.json({ ok: true, user: updated });
     } catch (e) {
       console.error(e);
@@ -613,6 +620,10 @@ router.delete(
         tabla: "users",
         registroId: id,
       });
+      
+      // Emitir evento de actualización
+      getIO().emit("usuarios_actualizados");
+      getIO().emit("usuario_eliminado", { id });
       
       res.json({ ok: true });
     } catch (err) {
@@ -762,6 +773,10 @@ router.put(
       dbUsers.prepare("DELETE FROM user_sessions WHERE user_id=?").run(u.id);
     }
 
+    // Emitir evento de actualización
+    getIO().emit("usuarios_actualizados");
+    getIO().emit("usuario_roles_actualizados", { userId: u.id });
+
     res.json({ ok: true });
   }
 );
@@ -801,6 +816,10 @@ router.put(
     if (currentUserId && u.id !== currentUserId) {
       dbUsers.prepare("DELETE FROM user_sessions WHERE user_id=?").run(u.id);
     }
+
+    // Emitir evento de actualización
+    getIO().emit("usuarios_actualizados");
+    getIO().emit("usuario_permisos_actualizados", { userId: u.id });
 
     res.json({ ok: true });
   }
@@ -904,6 +923,10 @@ router.post(
         registroId: nuevoRol.id,
       });
 
+      // Emitir evento de actualización
+      getIO().emit("roles_actualizados");
+      getIO().emit("rol_creado", nuevoRol);
+
       res.json(nuevoRol);
     } catch (err) {
       console.error("Error creando rol:", err);
@@ -994,6 +1017,11 @@ router.put(
         .prepare("SELECT id, name FROM roles WHERE id = ?")
         .get(id);
 
+      // Emitir evento de actualización
+      getIO().emit("roles_actualizados");
+      getIO().emit("rol_actualizado", rolActualizado);
+      getIO().emit("usuarios_actualizados"); // También actualizar usuarios porque pueden tener este rol
+
       res.json(rolActualizado);
     } catch (err) {
       console.error("Error editando rol:", err);
@@ -1063,6 +1091,11 @@ router.delete(
         tabla: "roles",
         registroId: id,
       });
+
+      // Emitir evento de actualización
+      getIO().emit("roles_actualizados");
+      getIO().emit("rol_eliminado", { id });
+      getIO().emit("usuarios_actualizados"); // También actualizar usuarios porque pueden tener este rol
 
       res.json({ ok: true });
     } catch (err) {
@@ -1905,8 +1938,6 @@ const establecerTipoDesdeRuta = (req, res, next) => {
   }
   req.customTipo = tipo;
   
-  console.log(`🔍 [establecerTipoDesdeRuta] Path: ${pathUrl}, Tipo establecido: ${tipo}`);
-  
   next();
 };
 
@@ -1924,7 +1955,6 @@ router.post("/admin/personalizacion/logo", checkAdmin, establecerTipoDesdeRuta, 
                     req.file.filename.includes(".jpg") ? "imagen" : "imagen";
     
     // El archivo ya está guardado en uploads/personalizacion/logos/logo.{ext}
-    console.log(`✅ Logo guardado en: ${req.file.path}`);
     
     // Guardar tipo en configuración y marcar logo como existente
     dbUsers
@@ -2034,13 +2064,8 @@ router.post("/admin/personalizacion/favicon", checkAdmin, establecerTipoDesdeRut
           
           // Verificar que el archivo se haya creado correctamente
           if (fs.existsSync(outputPath)) {
-            const stats = fs.statSync(outputPath);
-            console.log(`✅ Favicon procesado y guardado como circular (${targetSize}x${targetSize}) en: ${outputPath}`);
-            console.log(`   Tamaño del archivo: ${(stats.size / 1024).toFixed(2)} KB`);
-            
             // Verificar las dimensiones del archivo resultante
-            const resultMetadata = await sharp(outputPath).metadata();
-            console.log(`   Dimensiones resultantes: ${resultMetadata.width}x${resultMetadata.height}`);
+            await sharp(outputPath).metadata();
           } else {
             console.error(`❌ Error: El archivo ${outputPath} no se creó correctamente`);
           }
@@ -2052,8 +2077,6 @@ router.post("/admin/personalizacion/favicon", checkAdmin, establecerTipoDesdeRut
           console.error("Stack:", processError.stack);
           // Continuar con el archivo original si falla el procesamiento
         }
-      } else {
-        console.log(`✅ Favicon guardado (${tipoFavicon}) en: ${req.file.path}`);
       }
       
       // Guardar tipo en configuración y marcar favicon como existente
@@ -2145,7 +2168,6 @@ router.post("/admin/personalizacion/fondo-login", checkAdmin, establecerTipoDesd
     else if (req.file.mimetype === "image/gif") fondoLoginTipo = "gif";
 
     // El archivo ya está guardado en uploads/personalizacion/fondos-login/fondo-login.{ext}
-    console.log(`✅ Fondo login guardado en: ${req.file.path}`);
 
     dbUsers
       .prepare(
@@ -2183,7 +2205,6 @@ router.post("/admin/personalizacion/fondo-login-branding", checkAdmin, establece
     else if (req.file.mimetype === "image/gif") fondoLoginBrandingTipo = "gif";
 
     // El archivo ya está guardado en uploads/personalizacion/fondos-login-branding/fondo-login-branding.{ext}
-    console.log(`✅ Fondo login branding guardado en: ${req.file.path}`);
 
     dbUsers
       .prepare(
@@ -2288,7 +2309,6 @@ router.post("/admin/personalizacion/fondo", checkAdmin, establecerTipoDesdeRuta,
     else if (req.file.mimetype === "image/gif") fondoTipo = "gif";
 
     // El archivo ya está guardado en uploads/personalizacion/fondos/fondo.{ext}
-    console.log(`✅ Fondo guardado en: ${req.file.path}`);
 
     // Guardar tipo en configuración
     dbUsers

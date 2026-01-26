@@ -38,19 +38,57 @@ function BotonActivacionClientes({ serverUrl, pushToast, socket }) {
     }
   }, [resumenModal.open, serverUrl, authFetch]);
 
+  // Estado para almacenar productos activos en tiempo real
+  const [productosActivosCache, setProductosActivosCache] = useState([]);
+  const [cacheTimestamp, setCacheTimestamp] = useState(0);
+
+  // Función para recargar productos activos desde el servidor
+  const recargarProductosActivos = useCallback(async () => {
+    try {
+      const productosActivos = await authFetch(
+        `${serverUrl}/devoluciones/clientes/productos/resumen?area=Clientes&soloActivos=true`
+      );
+      if (Array.isArray(productosActivos)) {
+        setProductosActivosCache(productosActivos);
+        setCacheTimestamp(Date.now());
+      }
+    } catch (err) {
+      console.error("Error recargando productos activos:", err);
+    }
+  }, [serverUrl, authFetch]);
+
+  // Cargar productos activos inicialmente
+  useEffect(() => {
+    recargarProductosActivos();
+  }, [recargarProductosActivos]);
+
   // Escuchar eventos de socket para actualización en tiempo real
   useEffect(() => {
     if (!socket) return;
 
     const handleDevolucionesActualizadas = () => {
-      // Si el modal está abierto, recargar los datos
+      // Recargar productos activos siempre, no solo si el modal está abierto
+      recargarProductosActivos();
+      // Si el modal está abierto, también recargar los datos del modal
       if (resumenModal.open) {
         recargarResumenModal();
       }
     };
 
     const handleProductosActualizados = () => {
-      // Si el modal está abierto, recargar los datos
+      // Recargar productos activos siempre
+      recargarProductosActivos();
+      // Si el modal está abierto, también recargar los datos del modal
+      if (resumenModal.open) {
+        recargarResumenModal();
+      }
+    };
+
+    const handleProductosGeneralActualizados = () => {
+      // Este evento se emite cuando se actualiza un producto en productos general
+      // Recargar productos activos inmediatamente
+      recargarProductosActivos();
+      // Si el modal está abierto, también recargar los datos del modal
       if (resumenModal.open) {
         recargarResumenModal();
       }
@@ -58,12 +96,14 @@ function BotonActivacionClientes({ serverUrl, pushToast, socket }) {
 
     socket.on("devoluciones_actualizadas", handleDevolucionesActualizadas);
     socket.on("productos_actualizados", handleProductosActualizados);
+    socket.on("productos_general_actualizados", handleProductosGeneralActualizados);
 
     return () => {
       socket.off("devoluciones_actualizadas", handleDevolucionesActualizadas);
       socket.off("productos_actualizados", handleProductosActualizados);
+      socket.off("productos_general_actualizados", handleProductosGeneralActualizados);
     };
-  }, [socket, resumenModal.open, recargarResumenModal]); // Usar recargarResumenModal como dependencia
+  }, [socket, resumenModal.open, recargarResumenModal, recargarProductosActivos]);
 
   const abrirResumen = async () => {
         // Abrir el modal inmediatamente
@@ -271,16 +311,42 @@ function BotonActivacionClientes({ serverUrl, pushToast, socket }) {
       return;
     }
 
-    try {
-      // Obtener todos los productos activos individuales (no agrupados)
-      const productosActivos = await authFetch(
-        `${serverUrl}/devoluciones/clientes/productos/resumen?area=Clientes&soloActivos=true`
-      );
-      
-      if (!Array.isArray(productosActivos) || productosActivos.length === 0) {
-        pushToast("ℹ️ No hay productos activos para importar", "info");
+    // Recargar productos activos antes de verificar (para asegurar datos actualizados)
+    await recargarProductosActivos();
+    
+    // Usar productos del cache si están disponibles y son recientes (menos de 2 segundos)
+    // Si no, hacer una nueva petición
+    let productosActivos = productosActivosCache;
+    const cacheAge = Date.now() - cacheTimestamp;
+    
+    if (!productosActivos || productosActivos.length === 0 || cacheAge > 2000) {
+      try {
+        productosActivos = await authFetch(
+          `${serverUrl}/devoluciones/clientes/productos/resumen?area=Clientes&soloActivos=true`
+        );
+        if (Array.isArray(productosActivos)) {
+          setProductosActivosCache(productosActivos);
+          setCacheTimestamp(Date.now());
+        }
+      } catch (err) {
+        console.error("Error obteniendo productos activos:", err);
+        pushToast("❌ Error al obtener productos activos", "err");
         return;
       }
+    }
+    
+    if (!Array.isArray(productosActivos) || productosActivos.length === 0) {
+      pushToast("ℹ️ No hay productos activos para importar", "info");
+      return;
+    }
+
+    // Pedir confirmación antes de importar
+    const confirmado = await showConfirm("¿Importar todos los productos activos a Picking?");
+    if (!confirmado) {
+      return;
+    }
+
+    try {
 
       // Agrupar por código + presentación + lote para enviar (igual que otras áreas)
       const gruposMap = new Map();
@@ -365,6 +431,7 @@ function BotonActivacionClientes({ serverUrl, pushToast, socket }) {
       return;
     }
 
+    // Pedir confirmación antes de importar
     const confirmado = await showConfirm("¿Importar todos los productos NO APTOS a Control de Calidad? Los productos se eliminarán de Clientes.");
     if (!confirmado) {
       return;
@@ -740,7 +807,6 @@ export default function Devoluciones({
 
     const handleReportesActualizados = () => {
       // Los reportes se actualizarán automáticamente cuando se consulten
-      console.log("📊 Reportes actualizados");
     };
 
     socket.on("devoluciones_actualizadas", handleDevolucionesActualizadas);
@@ -1286,7 +1352,6 @@ function GestionDevolucionesTab({
     const tienePermiso = perms?.includes(perm);
     // Debug: solo mostrar si no tiene el permiso y es action:activar-productos
     if (!tienePermiso && perm === "action:activar-productos") {
-      console.log("🔍 [Devoluciones] Permiso action:activar-productos no encontrado. Permisos actuales:", perms);
     }
     return tienePermiso;
   };
@@ -1294,7 +1359,6 @@ function GestionDevolucionesTab({
   // Escuchar eventos de actualización de permisos
   useEffect(() => {
     const handlePermisosActualizados = () => {
-      console.log("🔄 [Devoluciones] Evento de permisos actualizados recibido, refrescando...");
       refrescarPermisos();
     };
     
@@ -2023,6 +2087,13 @@ function GestionDevolucionesTab({
       return;
     }
 
+    // Pedir confirmación antes de importar
+    const areaLabel = TAB_LABEL_MAP[tipo] || tipo;
+    const confirmado = await showConfirm(`¿Importar todos los productos activos desde ${areaLabel} a Picking?`);
+    if (!confirmado) {
+      return;
+    }
+
     try {
       // Obtener todos los productos activos de la tabla actual
       // Aceptar diferentes formatos: número 1, string "1", booleano true, o cualquier valor truthy
@@ -2058,7 +2129,6 @@ function GestionDevolucionesTab({
         gruposMap.get(key).cantidad += Number(item.cantidad || 0);
       });
       const grupos = Array.from(gruposMap.values());
-      const areaLabel = TAB_LABEL_MAP[tipo] || tipo;
 
       // Enviar notificación con botones de aceptar/rechazar
       addNotification({
@@ -2125,6 +2195,7 @@ function GestionDevolucionesTab({
       return;
     }
 
+    // Pedir confirmación antes de importar
     const confirmado = await showConfirm("¿Importar todos los productos NO APTOS a Control de Calidad? Los productos se eliminarán de Clientes.");
     if (!confirmado) {
       return;
@@ -2391,7 +2462,6 @@ function GestionDevolucionesTab({
                   e.stopPropagation();
                   const codigoLimpio = form.codigo.trim();
                   if (codigoLimpio.length > 3) {
-                    console.log("📱 [DataWedge] Enter detectado en Devoluciones, procesando código:", codigoLimpio);
                     buscarProductoPorCodigo(codigoLimpio);
                   }
                 }
@@ -2489,17 +2559,27 @@ function GestionDevolucionesTab({
         ) : items.length === 0 ? (
           <p className="gestion-empty">Sin devoluciones registradas.</p>
         ) : (
-          <table className="gestion-table" style={{ tableLayout: 'auto', width: '100%', borderCollapse: 'separate', borderSpacing: '0' }}>
+          <table className="gestion-table">
+            <colgroup>
+              {tipo === "calidad" && <col className="col-area" />}
+              <col className="col-codigo" />
+              <col className="col-nombre" />
+              <col className="col-presentacion" />
+              <col className="col-lote" />
+              <col className="col-cantidad" />
+              <col className="col-activo" />
+              <col className="col-accion" />
+            </colgroup>
             <thead>
               <tr>
-                {tipo === "calidad" && <th>Área</th>}
-                <th>Código</th>
-                <th>Nombre</th>
-                <th>Presentación</th>
-                <th>Lote</th>
-                <th>Cantidad</th>
-                <th>Activo</th>
-                <th>Acción</th>
+                {tipo === "calidad" && <th className="col-area">Área</th>}
+                <th className="col-codigo">Código</th>
+                <th className="col-nombre">Nombre</th>
+                <th className="col-presentacion">Presentación</th>
+                <th className="col-lote">Lote</th>
+                <th className="col-cantidad">Cantidad</th>
+                <th className="col-activo">Activo</th>
+                <th className="col-accion">Acción</th>
               </tr>
             </thead>
             <tbody>
@@ -2525,11 +2605,11 @@ function GestionDevolucionesTab({
                       }
                     }}
                   >
-                    {tipo === "calidad" && <td style={{ overflow: 'visible', position: 'relative', padding: esTablaReducida ? '4px 3px' : '10px', fontSize: esTablaReducida ? '0.7rem' : 'inherit' }}>{row.area || "—"}</td>}
-                    <td style={{ overflow: 'visible', position: 'relative', padding: esTablaReducida ? '4px 3px' : '10px', fontSize: esTablaReducida ? '0.7rem' : 'inherit' }}>{row.codigo || "—"}</td>
-                    <td style={{ overflow: 'visible', position: 'relative', padding: esTablaReducida ? '4px 3px' : '10px', fontSize: esTablaReducida ? '0.7rem' : 'inherit' }}>{row.nombre || "—"}</td>
-                    <td style={{ overflow: 'visible', position: 'relative', padding: esTablaReducida ? '4px 3px' : '10px', fontSize: esTablaReducida ? '0.7rem' : 'inherit' }}>{row.presentacion || "—"}</td>
-                    <td style={{ overflow: 'visible', position: 'relative', padding: esTablaReducida ? '4px 3px' : '10px', minWidth: esTablaReducida ? '100px' : '180px', width: esTablaReducida ? '100px' : '180px' }}>
+                    {tipo === "calidad" && <td className="col-area">{row.area || "—"}</td>}
+                    <td className="col-codigo">{row.codigo || "—"}</td>
+                    <td className="col-nombre">{row.nombre || "—"}</td>
+                    <td className="col-presentacion">{row.presentacion || "—"}</td>
+                    <td className="col-lote" style={{ minWidth: esTablaReducida ? '100px' : '180px', width: esTablaReducida ? '100px' : '180px' }}>
                       <input
                         type="text"
                         value={edit.lote}
@@ -2566,7 +2646,7 @@ function GestionDevolucionesTab({
                         }}
                       />
                     </td>
-                    <td style={{ overflow: 'visible', position: 'relative', padding: esTablaReducida ? '4px 3px' : '10px', minWidth: esTablaReducida ? '100px' : '180px', width: esTablaReducida ? '100px' : '180px' }}>
+                    <td className="col-cantidad" style={{ minWidth: esTablaReducida ? '100px' : '180px', width: esTablaReducida ? '100px' : '180px' }}>
                       <input
                         type="number"
                         min="0"
@@ -2604,7 +2684,7 @@ function GestionDevolucionesTab({
                         }}
                       />
                     </td>
-                    <td>
+                    <td className="col-activo">
                       <label className="switch" style={{ opacity: tipo === "clientes" && row.activo === 0 ? 0.5 : (!can("action:activar-productos") ? 0.5 : 1) }}>
                         <input
                           type="checkbox"
@@ -2621,7 +2701,7 @@ function GestionDevolucionesTab({
                         </span>
                       )}
                     </td>
-                    <td>
+                    <td className="col-accion">
                       <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
                         <button
                           type="button"
@@ -2657,9 +2737,8 @@ function GestionDevolucionesTab({
       {compartirOpen && (
         <div className="modal-overlay" onClick={() => setCompartirOpen(false)}>
           <div
-            className="modal"
+            className="modal modal-md"
             onClick={(e) => e.stopPropagation()}
-            style={{ maxWidth: "520px", width: "92%" }}
           >
             <div className="modal-header">
               <h3>📤 Compartir devolución por chat</h3>

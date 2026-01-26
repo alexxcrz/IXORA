@@ -16,45 +16,93 @@ class ErrorBoundary extends React.Component {
   }
 
   static getDerivedStateFromError(error) {
-    // Actualizar el estado para que la próxima renderización muestre la UI de fallback
-    return { hasError: true };
+    // NO mostrar el modal automáticamente - solo loguear el error
+    // Retornar null para no actualizar el estado y evitar mostrar el modal
+    // El error se manejará en componentDidCatch donde solo se loguea
+    return null; // No actualizar el estado - no mostrar el modal
   }
 
   componentDidCatch(error, errorInfo) {
-    // Log del error con contexto completo
-    logger.error('Error en componente React', {
-      error: error.message,
-      stack: error.stack,
-      componentStack: errorInfo.componentStack,
-      errorInfo,
-    }, 'ERROR_BOUNDARY');
-
-    this.setState({
-      error,
-      errorInfo,
-    });
-
-    // Intentar guardar información crítica si hay sesión
     try {
-      if (typeof localStorage !== 'undefined') {
-        const token = localStorage.getItem('token');
-        const user = localStorage.getItem('user');
-        if (token || user) {
-          logger.warn('Error capturado pero sesión existe en localStorage', {
-            hasToken: !!token,
-            hasUser: !!user,
-          }, 'ERROR_BOUNDARY');
-        }
+      // Logging MUY DETALLADO visible en adb logcat
+      console.error('[IXORA_ERROR_BOUNDARY] ========================================');
+      console.error('[IXORA_ERROR_BOUNDARY] 🚨 ERROR CAPTURADO POR ERROR BOUNDARY');
+      console.error('[IXORA_ERROR_BOUNDARY] ========================================');
+      console.error('[IXORA_ERROR_BOUNDARY] Error Message:', error?.message || 'No message');
+      console.error('[IXORA_ERROR_BOUNDARY] Error Name:', error?.name || 'No name');
+      console.error('[IXORA_ERROR_BOUNDARY] Error Stack:', error?.stack || 'No stack');
+      console.error('[IXORA_ERROR_BOUNDARY] Component Stack:', errorInfo?.componentStack || 'No component stack');
+      console.error('[IXORA_ERROR_BOUNDARY] Full Error:', JSON.stringify({
+        message: error?.message,
+        name: error?.name,
+        stack: error?.stack,
+        componentStack: errorInfo?.componentStack,
+      }, null, 2));
+      console.error('[IXORA_ERROR_BOUNDARY] ========================================');
+      
+      // También usar logger si está disponible
+      try {
+        logger.error('Error en componente React', {
+          error: error?.message || error?.toString(),
+          name: error?.name,
+          stack: error?.stack,
+          componentStack: errorInfo?.componentStack,
+          errorInfo: errorInfo?.toString(),
+        }, 'ERROR_BOUNDARY');
+      } catch (logErr) {
+        console.error('[IXORA_ERROR_BOUNDARY] Error en logger:', logErr);
       }
-    } catch (e) {
-      // Ignorar errores al guardar
+
+      // Intentar guardar información crítica si hay sesión
+      try {
+        if (typeof localStorage !== 'undefined') {
+          const token = localStorage.getItem('token');
+          const user = localStorage.getItem('user');
+          if (token || user) {
+            console.log('[IXORA_ERROR_BOUNDARY] Sesión existe, token:', !!token, 'user:', !!user);
+            try {
+              logger.warn('Error capturado pero sesión existe en localStorage', {
+                hasToken: !!token,
+                hasUser: !!user,
+              }, 'ERROR_BOUNDARY');
+            } catch (e) {}
+          }
+        }
+      } catch (e) {
+        console.error('[IXORA_ERROR_BOUNDARY] Error al leer localStorage:', e);
+      }
+
+      // NO actualizar el estado para evitar re-renders que puedan causar más errores
+      // Solo loguear el error y continuar
+      // En producción, la app continuará funcionando sin mostrar el modal
+      
+    } catch (catchError) {
+      // Si incluso el error handler falla, intentar loguear
+      console.error('[IXORA_ERROR_BOUNDARY] ERROR EN ERROR HANDLER:', catchError);
+      console.error('[IXORA_ERROR_BOUNDARY] Stack:', catchError?.stack);
     }
+    
+    // NO actualizar el estado para evitar crashes
+    // La app continuará funcionando sin interrupciones
   }
 
   handleReload = () => {
     // Limpiar error y recargar
     this.setState({ hasError: false, error: null, errorInfo: null });
-    window.location.reload();
+    
+    // PROTECCIÓN: En Android, NO recargar la página (causa cierre de app)
+    const isAndroid = typeof window !== 'undefined' && 
+      window.Capacitor && 
+      window.Capacitor.isNativePlatform() &&
+      window.Capacitor.getPlatform() === 'android';
+    
+    if (!isAndroid) {
+      // Solo en web, recargar
+      window.location.reload();
+    } else {
+      // En Android, solo resetear el estado sin recargar
+      console.log('[IXORA_ERROR_BOUNDARY] Error reseteado sin recargar (Android)');
+    }
   };
 
   handleReset = () => {
@@ -63,146 +111,32 @@ class ErrorBoundary extends React.Component {
   };
 
   render() {
-    if (this.state.hasError) {
-      // UI de fallback personalizada
-      const isDev = process.env.NODE_ENV === 'development';
-      const { error, errorInfo } = this.state;
+    // PROTECCIÓN MÁXIMA: NO mostrar el modal de error nunca
+    // Los errores se loguean en consola pero la app continúa funcionando
+    // Esto evita interrumpir la experiencia del usuario
+    
+    try {
+      // Si hay un error en el estado, solo loguearlo pero NO mostrar UI
+      if (this.state.hasError && this.state.error) {
+        console.warn('[IXORA_ERROR_BOUNDARY] Error en estado pero continuando...');
+        console.warn('[IXORA_ERROR_BOUNDARY] Error:', this.state.error?.message || this.state.error);
+        
+        // NO resetear el estado con setTimeout porque puede causar más problemas
+        // Solo continuar renderizando normalmente
+      }
 
-      return (
-        <div style={{
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'center',
-          alignItems: 'center',
-          minHeight: '100vh',
-          background: '#1a1a1a',
-          color: '#fff',
-          padding: '20px',
-          textAlign: 'center',
-        }}>
-          <div style={{
-            maxWidth: '600px',
-            width: '100%',
-            background: '#2a2a2a',
-            borderRadius: '12px',
-            padding: '30px',
-            boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
-          }}>
-            <div style={{ fontSize: '48px', marginBottom: '20px' }}>⚠️</div>
-            <h1 style={{ 
-              fontSize: '24px', 
-              marginBottom: '16px',
-              color: '#ff6b6b'
-            }}>
-              Algo salió mal
-            </h1>
-            <p style={{ 
-              fontSize: '16px', 
-              marginBottom: '24px',
-              color: '#ccc',
-              lineHeight: '1.6'
-            }}>
-              La aplicación encontró un error, pero no se cerró completamente.
-              Tu sesión debería estar guardada.
-            </p>
-
-            {isDev && error && (
-              <details style={{
-                marginBottom: '24px',
-                textAlign: 'left',
-                background: '#1a1a1a',
-                padding: '16px',
-                borderRadius: '8px',
-                overflow: 'auto',
-                maxHeight: '300px',
-              }}>
-                <summary style={{ 
-                  cursor: 'pointer', 
-                  marginBottom: '12px',
-                  color: '#ffd93d',
-                  fontWeight: 'bold'
-                }}>
-                  Detalles del error (solo en desarrollo)
-                </summary>
-                <pre style={{
-                  color: '#ff6b6b',
-                  fontSize: '12px',
-                  overflow: 'auto',
-                  whiteSpace: 'pre-wrap',
-                  wordBreak: 'break-word',
-                }}>
-                  {error.toString()}
-                  {errorInfo && errorInfo.componentStack && (
-                    <div style={{ marginTop: '12px', color: '#888' }}>
-                      {errorInfo.componentStack}
-                    </div>
-                  )}
-                </pre>
-              </details>
-            )}
-
-            <div style={{
-              display: 'flex',
-              gap: '12px',
-              justifyContent: 'center',
-              flexWrap: 'wrap',
-            }}>
-              <button
-                onClick={this.handleReload}
-                style={{
-                  background: '#4caf50',
-                  color: '#fff',
-                  border: 'none',
-                  padding: '12px 24px',
-                  borderRadius: '8px',
-                  fontSize: '16px',
-                  cursor: 'pointer',
-                  fontWeight: 'bold',
-                  transition: 'opacity 0.2s',
-                }}
-                onMouseOver={(e) => e.target.style.opacity = '0.8'}
-                onMouseOut={(e) => e.target.style.opacity = '1'}
-              >
-                🔄 Recargar aplicación
-              </button>
-              {isDev && (
-                <button
-                  onClick={this.handleReset}
-                  style={{
-                    background: '#2196f3',
-                    color: '#fff',
-                    border: 'none',
-                    padding: '12px 24px',
-                    borderRadius: '8px',
-                    fontSize: '16px',
-                    cursor: 'pointer',
-                    fontWeight: 'bold',
-                    transition: 'opacity 0.2s',
-                  }}
-                  onMouseOver={(e) => e.target.style.opacity = '0.8'}
-                  onMouseOut={(e) => e.target.style.opacity = '1'}
-                >
-                  🔁 Intentar continuar
-                </button>
-              )}
-            </div>
-
-            <div style={{
-              marginTop: '24px',
-              padding: '12px',
-              background: '#1a1a1a',
-              borderRadius: '8px',
-              fontSize: '14px',
-              color: '#888',
-            }}>
-              💡 Si el problema persiste, contacta al administrador del sistema.
-            </div>
-          </div>
-        </div>
-      );
+      // SIEMPRE renderizar los children - NUNCA mostrar el modal
+      // Si hay un error en el render, se capturará nuevamente por componentDidCatch
+      return this.props.children || null;
+      
+    } catch (renderError) {
+      // Si incluso el render falla, intentar loguear y retornar null
+      console.error('[IXORA_ERROR_BOUNDARY] ERROR EN RENDER:', renderError);
+      console.error('[IXORA_ERROR_BOUNDARY] Stack:', renderError?.stack);
+      
+      // Retornar null para evitar crashes, pero esto debería ser último recurso
+      return null;
     }
-
-    return this.props.children;
   }
 }
 

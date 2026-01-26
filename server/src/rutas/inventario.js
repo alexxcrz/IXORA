@@ -1,14 +1,21 @@
 import express from "express";
-import { dbInv, dbHist, dbAud } from "../config/baseDeDatos.js";
+import { dbInv, dbHist, dbAud, dbUsers, dbChat } from "../config/baseDeDatos.js";
 import { getIO } from "../config/socket.js";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
 import { generarQRConLogo } from "../utilidades/generarQR.js";
+import bcrypt from "bcrypt";
+import crypto from "crypto";
+import { sendPushToTokens } from "../utilidades/pushNotifications.js";
 
-import { requierePermiso, verificarPermisos } from "../middleware/permisos.js";
+import { requierePermiso, tienePermiso } from "../middleware/permisos.js";
 import { permit, authRequired } from "../middleware/autenticacion.js";
 import { registrarAccion } from "../utilidades/auditoria.js";
+
+const verifyPassword = async (password, hash) => {
+  return await bcrypt.compare(password, hash);
+};
 
 const uploadDir = "uploads/inventario";
 if (!fs.existsSync(uploadDir)) {
@@ -118,10 +125,11 @@ router.get("/producto/:codigo", (req, res) => {
   const raw = (req.params.codigo || "").trim();
   if (!raw) return res.status(400).json({ error: "Falta código" });
 
+  // Buscar SOLO en CEDIS (inventario_id = 1)
   let prod = dbInv.prepare(`
-        SELECT codigo,nombre,presentacion,categoria,subcategoria,piezas_por_caja,COALESCE(activo,1) AS activo
+        SELECT codigo,nombre,presentacion,categoria,subcategoria,piezas_por_caja,COALESCE(activo,1) AS activo,COALESCE(inventario_id,1) AS inventario_id
         FROM productos_ref
-        WHERE codigo=?
+        WHERE codigo=? AND COALESCE(inventario_id,1) = 1
       `).get(raw);
 
   if (!prod) {
@@ -133,9 +141,9 @@ router.get("/producto/:codigo", (req, res) => {
 
     if (alias?.codigo_principal) {
       prod = dbInv.prepare(`
-              SELECT codigo,nombre,presentacion,categoria,subcategoria,piezas_por_caja,COALESCE(activo,1) AS activo
+              SELECT codigo,nombre,presentacion,categoria,subcategoria,piezas_por_caja,COALESCE(activo,1) AS activo,COALESCE(inventario_id,1) AS inventario_id
               FROM productos_ref
-              WHERE codigo=?
+              WHERE codigo=? AND COALESCE(inventario_id,1) = 1
             `).get(alias.codigo_principal);
 
       if (prod) prod.alias_de = raw;
@@ -144,11 +152,11 @@ router.get("/producto/:codigo", (req, res) => {
 
   if (!prod) return res.status(404).json({ error: "No existe en inventario" });
   
-  // Obtener el lote activo desde productos_lotes
+  // Obtener el lote activo desde productos_lotes (solo de CEDIS)
   const loteActivo = dbInv
     .prepare(`
       SELECT lote FROM productos_lotes 
-      WHERE codigo_producto = ? AND activo = 1 
+      WHERE codigo_producto = ? AND activo = 1 AND COALESCE(inventario_id,1) = 1
       LIMIT 1
     `)
     .get(prod.codigo);
@@ -179,9 +187,9 @@ router.get("/buscar-por-nombre/:nombre", (req, res) => {
   const nombreNormalizado = normalizarTexto(nombreBuscado);
   if (!nombreNormalizado) return res.status(400).json({ error: "Nombre inválido" });
 
-  // Traer todo el inventario
+  // Traer SOLO productos de CEDIS (inventario_id = 1)
   const productos = dbInv
-    .prepare(`SELECT codigo, nombre, presentacion, categoria, subcategoria, piezas_por_caja, COALESCE(activo,1) AS activo FROM productos_ref`)
+    .prepare(`SELECT codigo, nombre, presentacion, categoria, subcategoria, piezas_por_caja, COALESCE(activo,1) AS activo, COALESCE(inventario_id,1) AS inventario_id FROM productos_ref WHERE COALESCE(inventario_id,1) = 1`)
     .all();
 
   if (!productos || productos.length === 0) {
@@ -257,35 +265,95 @@ router.get("/", (_req, res) => {
             COALESCE(subcategoria,'') AS subcategoria,
             COALESCE(piezas_por_caja,0) AS piezas_por_caja,
             COALESCE(mostrar_en_pagina,0) AS mostrar_en_pagina,
-            COALESCE(activo,1) AS activo
+            COALESCE(activo,1) AS activo,
+            COALESCE(inventario_id, 1) AS inventario_id
           FROM productos_ref
           ORDER BY nombre ASC, presentacion ASC
         `
       )
       .all();
     
-    // Para cada producto, obtener el lote activo de productos_lotes
-    const productosConLoteActivo = rows.map(producto => {
+    // Para cada producto, obtener información de lotes filtrando por inventario_id
+    const productosConLotes = rows.map(producto => {
+      const inventarioIdProducto = producto.inventario_id || 1;
+      
+      // Obtener lote activo con su cantidad del inventario del producto
       const loteActivo = dbInv
         .prepare(`
-          SELECT lote FROM productos_lotes 
-          WHERE codigo_producto = ? AND activo = 1 
+          SELECT lote, cantidad_piezas 
+          FROM productos_lotes 
+          WHERE codigo_producto = ? AND inventario_id = ? AND activo = 1 
           LIMIT 1
         `)
-        .get(producto.codigo);
+        .get(producto.codigo, inventarioIdProducto);
+      
+      // Obtener total de piezas del lote activo
+      const piezasLoteActivo = loteActivo?.cantidad_piezas || 0;
+      
+      // Obtener total de piezas de todos los lotes activos del producto en este inventario
+      const totalPiezasActivas = dbInv
+        .prepare(`
+          SELECT COALESCE(SUM(cantidad_piezas), 0) as total 
+          FROM productos_lotes 
+          WHERE codigo_producto = ? AND inventario_id = ? AND activo = 1
+        `)
+        .get(producto.codigo, inventarioIdProducto);
+      
+      // Obtener total de piezas de todos los lotes (activos e inactivos) del producto en este inventario
+      const totalPiezasGeneral = dbInv
+        .prepare(`
+          SELECT COALESCE(SUM(cantidad_piezas), 0) as total 
+          FROM productos_lotes 
+          WHERE codigo_producto = ? AND inventario_id = ?
+        `)
+        .get(producto.codigo, inventarioIdProducto);
       
       return {
         ...producto,
-        lote: loteActivo?.lote || ''
+        lote: loteActivo?.lote || '',
+        piezas_lote_activo: piezasLoteActivo,
+        total_piezas_activas: totalPiezasActivas?.total || 0,
+        total_piezas_general: totalPiezasGeneral?.total || 0
       };
     });
     
-    res.json(productosConLoteActivo);
+    res.json(productosConLotes);
   } catch (error) {
     console.error("❌ Error obteniendo inventario:", error);
     console.error("   Detalles:", error.message);
     console.error("   Stack:", error.stack);
     res.status(500).json({ error: "Error obteniendo inventario", detalles: error.message });
+  }
+});
+
+/* ============================================================
+   PRODUCTOS AGOTADOS (activo = 0)
+   ============================================================ */
+router.get("/agotados", (req, res) => {
+  try {
+    const rows = dbInv
+      .prepare(
+        `
+          SELECT
+            id, codigo, nombre,
+            COALESCE(presentacion,'') AS presentacion,
+            COALESCE(categoria,'') AS categoria,
+            COALESCE(subcategoria,'') AS subcategoria,
+            COALESCE(piezas_por_caja,0) AS piezas_por_caja,
+            COALESCE(mostrar_en_pagina,0) AS mostrar_en_pagina,
+            COALESCE(activo,1) AS activo,
+            COALESCE(inventario_id, 1) AS inventario_id
+          FROM productos_ref
+          WHERE COALESCE(activo,1) = 0
+          ORDER BY nombre ASC, presentacion ASC
+        `
+      )
+      .all();
+    
+    res.json(rows);
+  } catch (error) {
+    console.error("❌ Error obteniendo productos agotados:", error);
+    res.status(500).json({ error: "Error obteniendo productos agotados", detalles: error.message });
   }
 });
 
@@ -301,11 +369,15 @@ router.post(
       subcategoria,
       lote,
       piezas_por_caja,
+      inventario_id,
     } = req.body || {};
 
     if (!codigo || !nombre) {
       return res.status(400).json({ error: "Faltan datos" });
     }
+
+    // Usar inventario_id si viene, sino usar 1 (inventario por defecto)
+    const inventarioIdFinal = inventario_id || 1;
 
     // ⚠️ IMPORTANTE: NO guardar lote en productos_ref.lote
     // El lote se guarda SOLO en productos_lotes (pestaña de lotes)
@@ -313,8 +385,8 @@ router.post(
       .prepare(
         `
          INSERT INTO productos_ref
-         (codigo, nombre, presentacion, categoria, subcategoria, piezas_por_caja)
-         VALUES (?,?,?,?,?,?)
+         (codigo, nombre, presentacion, categoria, subcategoria, piezas_por_caja, inventario_id)
+         VALUES (?,?,?,?,?,?,?)
       `
       )
       .run(
@@ -325,7 +397,8 @@ router.post(
         // NO validar ni transformar, solo guardar el valor tal cual (puede ser null si no viene)
         categoria !== undefined ? (categoria || null) : null,
         subcategoria !== undefined ? (subcategoria || null) : null,
-        piezas_por_caja ?? 0
+        piezas_por_caja ?? 0,
+        inventarioIdFinal
       );
 
     // Si viene un lote, guardarlo automáticamente en productos_lotes
@@ -333,6 +406,7 @@ router.post(
       try {
         const loteTrim = lote.trim();
         const cantidad = 0; // Cantidad por defecto
+        const caducidad = req.body.caducidad || null; // Caducidad si viene en el body
         const esActivo = true; // Marcar como activo al crear producto nuevo
         
         // Desactivar otros lotes si este será activo
@@ -346,20 +420,20 @@ router.post(
         try {
           dbInv
             .prepare(`
-              INSERT INTO productos_lotes (codigo_producto, lote, cantidad_piezas, laboratorio, activo, fecha_ingreso)
-              VALUES (?, ?, ?, ?, ?, datetime('now', 'localtime'))
+              INSERT INTO productos_lotes (codigo_producto, lote, cantidad_piezas, caducidad, laboratorio, activo, fecha_ingreso)
+              VALUES (?, ?, ?, ?, ?, ?, datetime('now', 'localtime'))
             `)
-            .run(codigo, loteTrim, cantidad, null, esActivo ? 1 : 0);
+            .run(codigo, loteTrim, cantidad, caducidad, null, esActivo ? 1 : 0);
         } catch (e) {
           // Si ya existe, actualizarlo
           if (String(e.message).includes("UNIQUE")) {
             dbInv
               .prepare(`
                 UPDATE productos_lotes
-                SET cantidad_piezas = ?, activo = ?, fecha_ingreso = datetime('now', 'localtime')
+                SET cantidad_piezas = ?, caducidad = ?, activo = ?, fecha_ingreso = datetime('now', 'localtime')
                 WHERE codigo_producto = ? AND lote = ?
               `)
-              .run(cantidad, esActivo ? 1 : 0, codigo, loteTrim);
+              .run(cantidad, caducidad, esActivo ? 1 : 0, codigo, loteTrim);
           } else {
             console.error(`❌ Error guardando lote en productos_lotes:`, e);
           }
@@ -370,11 +444,73 @@ router.post(
       }
     }
 
-    getIO().emit("inventario_actualizado");
+    // 🔄 Sincronizar con TODOS los inventarios copia SOLO cuando se agrega un producto a CEDIS (ID 1)
+    // BARRERA: Solo sincronizar si el producto se está agregando a CEDIS
+    if (inventarioIdFinal === 1) {
+      // Buscar TODOS los inventarios que sean copias (tengan sincronizar_productos = 1)
+      // y que NO sean CEDIS
+      const todosInventariosCopia = dbInv
+        .prepare(`
+          SELECT id, nombre 
+          FROM inventarios 
+          WHERE sincronizar_productos = 1 
+            AND id != 1
+        `)
+        .all();
+
+      // Sincronizar el producto en todos los inventarios copia
+      for (const invCopia of todosInventariosCopia) {
+        try {
+          // Verificar si el producto ya existe en el inventario copia
+          const productoExistente = dbInv
+            .prepare("SELECT id FROM productos_ref WHERE codigo = ? AND inventario_id = ?")
+            .get(codigo, invCopia.id);
+
+          if (!productoExistente) {
+            // Insertar producto en el inventario copia
+            const infoCopia = dbInv
+              .prepare(`
+                INSERT INTO productos_ref
+                (codigo, nombre, presentacion, categoria, subcategoria, piezas_por_caja, inventario_id)
+                VALUES (?,?,?,?,?,?,?)
+              `)
+              .run(
+                codigo,
+                nombre,
+                presentacion ?? null,
+                categoria !== undefined ? (categoria || null) : null,
+                subcategoria !== undefined ? (subcategoria || null) : null,
+                piezas_por_caja ?? 0,
+                invCopia.id
+              );
+
+            // Obtener el producto insertado y emitir evento
+            const productoCopia = dbInv
+              .prepare("SELECT * FROM productos_ref WHERE id=?")
+              .get(infoCopia.lastInsertRowid);
+
+            // Emitir evento para el inventario copia
+            getIO().emit("producto_agregado_inventario", {
+              producto: productoCopia,
+              inventario_id: invCopia.id
+            });
+          }
+        } catch (e) {
+          console.error(`❌ Error sincronizando producto ${codigo} con inventario copia ${invCopia.id}:`, e);
+        }
+      }
+    }
 
     const nuevo = dbInv
       .prepare("SELECT * FROM productos_ref WHERE id=?")
       .get(info.lastInsertRowid);
+
+    // Emitir evento con información del inventario afectado
+    getIO().emit("inventario_actualizado");
+    getIO().emit("producto_agregado_inventario", {
+      producto: nuevo,
+      inventario_id: inventarioIdFinal
+    });
 
     // ⭐️ AUDITORÍA - Registrar TODA la información del producto
     registrarAccion({
@@ -394,10 +530,24 @@ router.post(
    ⚠️ CRÍTICO: Esta ruta DEBE estar ANTES de router.put("/:id") para evitar conflictos
    Los lotes se guardan SOLO en productos_lotes, NO en productos_ref.lote
    ============================================================ */
+// Middleware simple para validar al menos uno de dos permisos
+const requiereInventarioORegistros = (req, res, next) => {
+  const userId = req.user?.id;
+  if (!userId) {
+    return res.status(401).json({ error: "Usuario no autenticado" });
+  }
+  const tieneAcceso =
+    tienePermiso(userId, "tab:inventario") || tienePermiso(userId, "tab:registros");
+  if (!tieneAcceso) {
+    return res.status(403).json({ error: "No tienes permiso para esta acción" });
+  }
+  next();
+};
+
 router.put(
   "/lote-por-codigo",
   authRequired,
-  verificarPermisos(["tab:inventario", "tab:registros"]),
+  requiereInventarioORegistros,
   (req, res) => {
     try {
       const { codigo, lote, cantidad_piezas } = req.body || {};
@@ -698,10 +848,16 @@ router.put(
           );
       }
 
-      getIO().emit("inventario_actualizado");
-
       // Obtener producto actualizado para auditoría
       const productoActualizado = dbInv.prepare("SELECT * FROM productos_ref WHERE id=?").get(id);
+      const inventarioIdActualizado = productoActualizado?.inventario_id || null;
+
+      // Emitir eventos
+      getIO().emit("inventario_actualizado");
+      getIO().emit("producto_actualizado_inventario", {
+        producto: productoActualizado,
+        inventario_id: inventarioIdActualizado
+      });
 
       // ⭐️ AUDITORÍA - Detectar cambios específicos
       const cambios = [];
@@ -756,6 +912,121 @@ router.put(
         console.error("⚠️ Error en auditoría (no crítico):", auditError);
       }
 
+      // ⭐️ NOTIFICACIONES - Notificar cuando se cambia el estado de activo (agotado/disponible)
+      try {
+        const activoAnterior = actual.activo ?? 1;
+        const activoNuevo = activo !== undefined ? activo : activoAnterior;
+        
+        // Solo notificar si el estado de activo cambió
+        if (activo !== undefined && activoAnterior !== activoNuevo) {
+          const serverUrl = process.env.SERVER_PUBLIC_URL || `${req.protocol}://${req.get("host")}`;
+          const usuarioActual = req.user?.name || req.user?.nickname || "Usuario";
+          
+          // Obtener todos los usuarios activos
+          const usuarios = dbUsers
+            .prepare(
+              "SELECT id, nickname, name FROM users WHERE (es_sistema IS NULL OR es_sistema = 0) AND active = 1"
+            )
+            .all();
+
+          const nombreProducto = productoActualizado?.nombre || productoActualizado?.codigo || "Producto";
+          const codigoProducto = productoActualizado?.codigo || "N/A";
+          
+          let titulo, mensaje, tipo;
+          
+          if (activoNuevo === 0) {
+            // Producto marcado como agotado
+            titulo = "⚠️ Producto Agotado";
+            mensaje = `${nombreProducto} (${codigoProducto}) ha sido marcado como agotado por ${usuarioActual}`;
+            tipo = "warning";
+          } else {
+            // Producto marcado como disponible
+            titulo = "✅ Producto Disponible";
+            mensaje = `${nombreProducto} (${codigoProducto}) ha sido marcado como disponible por ${usuarioActual}`;
+            tipo = "success";
+          }
+
+          // Notificar a todos los usuarios
+          usuarios.forEach((u) => {
+            try {
+              const replyToken = crypto.randomBytes(16).toString("hex");
+              const dataJson = JSON.stringify({
+                tipo: "inventario",
+                producto_id: id,
+                codigo: codigoProducto,
+                activo: activoNuevo
+              });
+
+              // Guardar notificación en BD
+              const result = dbUsers.prepare(`
+                INSERT INTO notificaciones 
+                (usuario_id, titulo, mensaje, tipo, es_confirmacion, admin_only, reply_token, data)
+                VALUES (?, ?, ?, ?, 0, 0, ?, ?)
+              `).run(
+                u.id,
+                titulo,
+                mensaje,
+                tipo,
+                replyToken,
+                dataJson
+              );
+
+              // Enviar notificación en tiempo real vía Socket.IO
+              // Emitir a todos los clientes, cada uno filtrará por su userId
+              try {
+                const io = getIO();
+                if (io && typeof io.emit === "function") {
+                  io.emit("nueva_notificacion", {
+                    userId: u.id,
+                    usuario_id: u.id, // Compatibilidad con ambos campos
+                    id: result.lastInsertRowid,
+                    titulo: titulo,
+                    mensaje: mensaje,
+                    tipo: tipo,
+                    admin_only: false,
+                    data: JSON.parse(dataJson),
+                    timestamp: new Date().toISOString()
+                  });
+                }
+              } catch (socketErr) {
+                // Silenciar errores de socket
+                console.error("Error emitiendo notificación por socket:", socketErr);
+              }
+
+              // Enviar push notification
+              try {
+                const tokens = dbUsers
+                  .prepare("SELECT token FROM push_tokens WHERE usuario_id = ?")
+                  .all(u.id)
+                  .map((row) => row.token);
+                
+                if (tokens.length) {
+                  sendPushToTokens(tokens, {
+                    title: titulo,
+                    body: mensaje,
+                    data: {
+                      notificationId: String(result.lastInsertRowid),
+                      tipo: tipo || "info",
+                      es_confirmacion: "0",
+                      replyToken: replyToken,
+                      serverUrl: serverUrl,
+                    },
+                  }).catch(() => {});
+                }
+              } catch (pushErr) {
+                // Ignorar errores de push
+              }
+            } catch (err) {
+              // Ignorar errores individuales de notificación
+              console.error(`Error notificando a usuario ${u.id}:`, err);
+            }
+          });
+        }
+      } catch (notifError) {
+        // No fallar la actualización si las notificaciones fallan
+        console.error("⚠️ Error enviando notificaciones (no crítico):", notifError);
+      }
+
       res.json({ success: true });
     } catch (error) {
       console.error("❌ Error actualizando producto en inventario:", error);
@@ -776,9 +1047,16 @@ router.delete(
   (req, res) => {
     // Obtener producto antes de borrarlo para auditoría
     const producto = dbInv.prepare("SELECT * FROM productos_ref WHERE id=?").get(req.params.id);
+    const inventarioIdEliminado = producto?.inventario_id || null;
     
     dbInv.prepare("DELETE FROM productos_ref WHERE id=?").run(req.params.id);
+    
+    // Emitir eventos
     getIO().emit("inventario_actualizado");
+    getIO().emit("producto_eliminado_inventario", {
+      producto_id: req.params.id,
+      inventario_id: inventarioIdEliminado
+    });
 
     // ⭐️ AUDITORÍA
     registrarAccion({
@@ -1106,6 +1384,7 @@ router.delete(
 router.get("/lotes/:codigo/completo", (req, res) => {
   try {
     const codigo = (req.params.codigo || "").trim();
+    const inventarioId = req.query?.inventario_id ? Number(req.query.inventario_id) : null;
     if (!codigo) {
       return res.status(400).json({ error: "Falta código de producto" });
     }
@@ -1129,22 +1408,46 @@ router.get("/lotes/:codigo/completo", (req, res) => {
       return res.status(404).json({ error: "Producto no encontrado" });
     }
 
-    // Buscar lotes usando el código principal
-    const lotes = dbInv
-      .prepare(`
-        SELECT 
-          id,
-          codigo_producto,
-          lote,
-          cantidad_piezas,
-          laboratorio,
-          fecha_ingreso,
-          activo
-        FROM productos_lotes
-        WHERE codigo_producto = ?
-        ORDER BY activo DESC, fecha_ingreso DESC
-      `)
-      .all(codigoReal);
+    // Buscar lotes usando el código principal (ordenar por activo, luego por caducidad más próxima)
+    const lotes = inventarioId
+      ? dbInv
+          .prepare(`
+            SELECT 
+              id,
+              codigo_producto,
+              lote,
+              cantidad_piezas,
+              caducidad,
+              laboratorio,
+              fecha_ingreso,
+              activo,
+              inventario_id
+            FROM productos_lotes
+            WHERE codigo_producto = ? AND inventario_id = ?
+            ORDER BY activo DESC, 
+                     CASE WHEN caducidad IS NOT NULL AND caducidad != '' THEN caducidad ELSE '9999-12-31' END ASC,
+                     fecha_ingreso DESC
+          `)
+          .all(codigoReal, inventarioId)
+      : dbInv
+          .prepare(`
+            SELECT 
+              id,
+              codigo_producto,
+              lote,
+              cantidad_piezas,
+              caducidad,
+              laboratorio,
+              fecha_ingreso,
+              activo,
+              inventario_id
+            FROM productos_lotes
+            WHERE codigo_producto = ?
+            ORDER BY activo DESC, 
+                     CASE WHEN caducidad IS NOT NULL AND caducidad != '' THEN caducidad ELSE '9999-12-31' END ASC,
+                     fecha_ingreso DESC
+          `)
+          .all(codigoReal);
 
     res.json(lotes);
   } catch (err) {
@@ -1160,7 +1463,7 @@ router.post(
   (req, res) => {
     try {
       const codigo = (req.params.codigo || "").trim();
-      const { lote, cantidad_piezas, laboratorio, activo } = req.body || {};
+      const { lote, cantidad_piezas, laboratorio, activo, inventario_id } = req.body || {};
 
       if (!codigo || !lote) {
         return res.status(400).json({ error: "Faltan código o lote" });
@@ -1179,7 +1482,7 @@ router.post(
 
       // Verificar que el producto existe usando el código principal
       const productoVerificar = dbInv
-        .prepare("SELECT codigo, nombre FROM productos_ref WHERE codigo=?")
+        .prepare("SELECT codigo, nombre, inventario_id FROM productos_ref WHERE codigo=?")
         .get(codigoReal);
 
       if (!productoVerificar) {
@@ -1202,48 +1505,61 @@ router.post(
       
       const cantidad = soloLote ? 0 : Number(cantidad_piezas || 0);
       const esActivo = soloLote ? false : (activo === true || activo === 1);
+      const inventarioIdFinal = inventario_id || productoVerificar.inventario_id || 1;
 
-      // Si este lote será activo, desactivar los demás usando el código principal
+      // Si este lote será activo, desactivar los demás usando el código principal y el inventario destino
       if (esActivo) {
         dbInv
           .prepare(
-            "UPDATE productos_lotes SET activo = 0 WHERE codigo_producto = ?"
+            "UPDATE productos_lotes SET activo = 0 WHERE codigo_producto = ? AND inventario_id = ?"
           )
-          .run(codigoReal);
-        
-        // ⚠️ NO actualizar productos_ref.lote - el lote se obtiene desde productos_lotes
+          .run(codigoReal, inventarioIdFinal);
       }
 
       let resultado;
       try {
         resultado = dbInv
           .prepare(`
-            INSERT INTO productos_lotes (codigo_producto, lote, cantidad_piezas, laboratorio, activo, fecha_ingreso)
-            VALUES (?, ?, ?, ?, ?, datetime('now', 'localtime'))
+            INSERT INTO productos_lotes (codigo_producto, lote, cantidad_piezas, caducidad, laboratorio, activo, fecha_ingreso, inventario_id)
+            VALUES (?, ?, ?, ?, ?, ?, datetime('now', 'localtime'), ?)
           `)
-          .run(codigoReal, lote, cantidad, laboratorio || null, esActivo ? 1 : 0);
+          .run(codigoReal, lote, cantidad, req.body.caducidad || null, laboratorio || null, esActivo ? 1 : 0, inventarioIdFinal);
       } catch (e) {
         if (String(e.message).includes("UNIQUE")) {
           resultado = dbInv
             .prepare(`
               UPDATE productos_lotes
-              SET cantidad_piezas = ?, laboratorio = ?, activo = ?, fecha_ingreso = datetime('now', 'localtime')
-              WHERE codigo_producto = ? AND lote = ?
+              SET cantidad_piezas = ?, caducidad = ?, laboratorio = ?, activo = ?, fecha_ingreso = datetime('now', 'localtime'), inventario_id = ?
+              WHERE codigo_producto = ? AND lote = ? AND inventario_id = ?
             `)
-            .run(cantidad, laboratorio || null, esActivo ? 1 : 0, codigoReal, lote);
+            .run(cantidad, req.body.caducidad || null, laboratorio || null, esActivo ? 1 : 0, inventarioIdFinal, codigoReal, lote, inventarioIdFinal);
         } else {
           console.error(`❌ [POST /lotes/${codigo}/nuevo] Error insertando/actualizando lote:`, e);
           throw e;
         }
       }
       
-      // Verificar que se guardó correctamente usando el código principal
-      const loteVerificado = dbInv
-        .prepare("SELECT * FROM productos_lotes WHERE codigo_producto = ? AND lote = ?")
-        .get(codigoReal, lote);
+      // Verificar que se guardó correctamente usando el código principal y el inventario
+      let loteVerificado = dbInv
+        .prepare("SELECT * FROM productos_lotes WHERE codigo_producto = ? AND lote = ? AND inventario_id = ?")
+        .get(codigoReal, lote, inventarioIdFinal);
+      
+      // Si no se encuentra con inventario_id, intentar sin él (compatibilidad)
+      if (!loteVerificado) {
+        loteVerificado = dbInv
+          .prepare("SELECT * FROM productos_lotes WHERE codigo_producto = ? AND lote = ?")
+          .get(codigoReal, lote);
+        // Si se encuentra sin inventario_id, actualizarlo
+        if (loteVerificado && (!loteVerificado.inventario_id || loteVerificado.inventario_id === null)) {
+          dbInv
+            .prepare("UPDATE productos_lotes SET inventario_id = ? WHERE id = ?")
+            .run(inventarioIdFinal, loteVerificado.id);
+          loteVerificado.inventario_id = inventarioIdFinal;
+        }
+      }
       
       if (!loteVerificado) {
-        console.error(`❌ [POST /lotes/${codigo}/nuevo] ERROR: El lote no se guardó correctamente para ${codigoReal} - ${lote}`);
+        console.error(`❌ [POST /lotes/${codigo}/nuevo] ERROR: El lote no se guardó correctamente para ${codigoReal} - ${lote} - inventario ${inventarioIdFinal}`);
         
         // Verificar si hay algún problema con la tabla
         const tablaExiste = dbInv
@@ -1302,10 +1618,10 @@ router.post(
 
       getIO().emit("inventario_actualizado");
 
-      // Devolver el lote recién creado/actualizado para confirmación
+      // Devolver el lote recién creado/actualizado para confirmación usando el código principal y el inventario
       const loteGuardado = dbInv
-        .prepare("SELECT * FROM productos_lotes WHERE codigo_producto = ? AND lote = ?")
-        .get(codigo, lote);
+        .prepare("SELECT * FROM productos_lotes WHERE codigo_producto = ? AND lote = ? AND inventario_id = ?")
+        .get(codigoReal, lote, inventarioIdFinal);
       
       res.json({ 
         ok: true, 
@@ -1336,19 +1652,62 @@ router.put(
     try {
       const codigo = (req.params.codigo || "").trim();
       const id = Number(req.params.id);
-      const { lote, cantidad_piezas, laboratorio, activo } = req.body || {};
+      const { lote, cantidad_piezas, caducidad, laboratorio, activo, inventario_id } = req.body || {};
+
+      // Log detallado para debug
+      console.log(`🔍 [PUT /lotes/${codigo}/${id}] Request recibido:`, {
+        codigo,
+        id,
+        body: req.body,
+        cantidad_piezas,
+        inventario_id,
+        activo
+      });
 
       if (!codigo || !id) {
         return res.status(400).json({ error: "Faltan código o ID de lote" });
       }
 
-      // Verificar que el lote existe
-      const loteActual = dbInv
-        .prepare("SELECT * FROM productos_lotes WHERE id = ? AND codigo_producto = ?")
-        .get(id, codigo);
+      // Convertir alias a código principal si es necesario
+      let codigoReal = codigo;
+      const alias = dbInv
+        .prepare(`SELECT codigo_principal FROM codigos_alias WHERE codigo_extra=?`)
+        .get(codigo);
+      
+      if (alias?.codigo_principal) {
+        codigoReal = alias.codigo_principal;
+      }
+
+      // Verificar que el lote existe usando el código principal
+      // Primero intentar con inventario_id si viene, sino buscar sin filtro (compatibilidad)
+      let loteActual;
+      if (inventario_id) {
+        // Intentar primero con inventario_id
+        loteActual = dbInv
+          .prepare("SELECT * FROM productos_lotes WHERE id = ? AND codigo_producto = ? AND inventario_id = ?")
+          .get(id, codigoReal, inventario_id);
+        // Si no se encuentra, buscar sin inventario_id (para compatibilidad con lotes antiguos)
+        if (!loteActual) {
+          loteActual = dbInv
+            .prepare("SELECT * FROM productos_lotes WHERE id = ? AND codigo_producto = ?")
+            .get(id, codigoReal);
+        }
+      } else {
+        loteActual = dbInv
+          .prepare("SELECT * FROM productos_lotes WHERE id = ? AND codigo_producto = ?")
+          .get(id, codigoReal);
+      }
 
       if (!loteActual) {
         return res.status(404).json({ error: "Lote no encontrado" });
+      }
+      
+      // Si el lote no tiene inventario_id pero se proporcionó uno, actualizarlo
+      if (inventario_id && (!loteActual.inventario_id || loteActual.inventario_id === null)) {
+        dbInv
+          .prepare("UPDATE productos_lotes SET inventario_id = ? WHERE id = ?")
+          .run(inventario_id, id);
+        loteActual.inventario_id = inventario_id;
       }
 
       // Manejar cantidad_piezas: si viene en el body, actualizarla (incluso si es 0 o null)
@@ -1362,53 +1721,120 @@ router.put(
         nuevaCantidad = loteActual.cantidad_piezas;
       }
              const nuevoLote = lote || loteActual.lote;
+             const nuevaCaducidad = caducidad !== undefined ? (caducidad || null) : loteActual.caducidad;
              const nuevoLaboratorio = laboratorio !== undefined ? (laboratorio || null) : loteActual.laboratorio;
              const esActivo = activo !== undefined ? (activo === true || activo === 1) : loteActual.activo === 1;
 
-      // Si este lote será activo, desactivar los demás
+      const inventarioIdLote = inventario_id || loteActual.inventario_id || 1;
+
+      // Si este lote será activo, desactivar los demás usando el código principal y el mismo inventario
       if (esActivo) {
         dbInv
           .prepare(
-            "UPDATE productos_lotes SET activo = 0 WHERE codigo_producto = ? AND id != ?"
+            "UPDATE productos_lotes SET activo = 0 WHERE codigo_producto = ? AND inventario_id = ? AND id != ?"
           )
-          .run(codigo, id);
-        
-        // ⚠️ NO actualizar productos_ref.lote - el lote se obtiene desde productos_lotes
+          .run(codigoReal, inventarioIdLote, id);
       }
 
-      // Actualizar el lote
-      dbInv
+      // Actualizar el lote usando el código principal (incluyendo inventario_id si viene)
+      // Primero intentar con el WHERE completo
+      let updateResult = dbInv
         .prepare(`
           UPDATE productos_lotes
-          SET lote = ?, cantidad_piezas = ?, laboratorio = ?, activo = ?
+          SET lote = ?, cantidad_piezas = ?, caducidad = ?, laboratorio = ?, activo = ?, inventario_id = ?
           WHERE id = ? AND codigo_producto = ?
         `)
-        .run(nuevoLote, nuevaCantidad, nuevoLaboratorio, esActivo ? 1 : 0, id, codigo);
-
-      // Verificar que se actualizó correctamente
-      const loteActualizado = dbInv
-        .prepare("SELECT * FROM productos_lotes WHERE id = ? AND codigo_producto = ?")
-        .get(id, codigo);
-
-      if (!loteActualizado) {
-        return res.status(500).json({ error: "Error: El lote no se actualizó correctamente" });
+        .run(nuevoLote, nuevaCantidad, nuevaCaducidad, nuevoLaboratorio, esActivo ? 1 : 0, inventarioIdLote, id, codigoReal);
+      
+      // Si no se actualizó nada, intentar solo con id (por si el codigo_producto cambió o hay algún problema)
+      if (updateResult.changes === 0) {
+        updateResult = dbInv
+          .prepare(`
+            UPDATE productos_lotes
+            SET lote = ?, cantidad_piezas = ?, caducidad = ?, laboratorio = ?, activo = ?, inventario_id = ?
+            WHERE id = ?
+          `)
+          .run(nuevoLote, nuevaCantidad, nuevaCaducidad, nuevoLaboratorio, esActivo ? 1 : 0, inventarioIdLote, id);
+      }
+      
+      // Log para debug
+      if (updateResult.changes === 0) {
+        console.error(`❌ [PUT /lotes/${codigo}/${id}] No se actualizó ningún registro. id=${id}, codigo=${codigoReal}, inventario=${inventarioIdLote}, cantidad=${nuevaCantidad}`);
+        console.error(`   Lote actual encontrado:`, loteActual);
+      } else {
+        console.log(`✅ [PUT /lotes/${codigo}/${id}] Lote actualizado: cantidad=${nuevaCantidad}, inventario=${inventarioIdLote}, cambios=${updateResult.changes}`);
       }
 
-      // Calcular total de piezas disponibles del producto (solo lotes activos)
+      // Verificar que se actualizó correctamente usando el código principal y el inventario
+      let loteActualizado = dbInv
+        .prepare("SELECT * FROM productos_lotes WHERE id = ? AND codigo_producto = ? AND inventario_id = ?")
+        .get(id, codigoReal, inventarioIdLote);
+
+      // Si no se encuentra con inventario_id, intentar solo con id (por si el inventario_id no se actualizó aún)
+      if (!loteActualizado) {
+        loteActualizado = dbInv
+          .prepare("SELECT * FROM productos_lotes WHERE id = ?")
+          .get(id);
+      }
+
+      if (!loteActualizado) {
+        console.error(`❌ [PUT /lotes/${codigo}/${id}] ERROR: No se pudo verificar el lote actualizado. id=${id}`);
+        return res.status(500).json({ error: "Error: El lote no se actualizó correctamente" });
+      }
+      
+      // Log de verificación
+      console.log(`✅ [PUT /lotes/${codigo}/${id}] Lote verificado después de actualizar:`, {
+        id: loteActualizado.id,
+        cantidad_piezas: loteActualizado.cantidad_piezas,
+        inventario_id: loteActualizado.inventario_id
+      });
+
+      // Registrar en historial si cambió la cantidad de piezas
+      const cantidadAnterior = loteActual.cantidad_piezas || 0;
+      if (cantidadAnterior !== nuevaCantidad) {
+        const diferencia = nuevaCantidad - cantidadAnterior;
+        const motivo = req.body.motivo || (diferencia > 0 ? "Agregar piezas" : diferencia < 0 ? "Descontar piezas" : "Ajuste");
+        const observaciones = req.body.observaciones || null;
+        const usuario = req.user?.name || req.user?.username || "Usuario desconocido";
+        const fecha = new Date().toISOString().split('T')[0];
+        const hora = new Date().toTimeString().split(' ')[0];
+        
+        dbInv
+          .prepare(`
+            INSERT INTO lotes_historial 
+            (lote_id, codigo_producto, lote, cantidad_anterior, cantidad_nueva, diferencia, motivo, usuario, fecha, hora, observaciones)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `)
+          .run(
+            id,
+            codigoReal,
+            nuevoLote,
+            cantidadAnterior,
+            nuevaCantidad,
+            diferencia,
+            motivo,
+            usuario,
+            fecha,
+            hora,
+            observaciones
+          );
+      }
+
+      // Calcular total de piezas disponibles del producto (solo lotes activos) usando el código principal y el inventario
       const totalPiezas = dbInv
         .prepare(`
           SELECT COALESCE(SUM(cantidad_piezas), 0) as total 
           FROM productos_lotes 
-          WHERE codigo_producto = ? AND activo = 1
+          WHERE codigo_producto = ? AND inventario_id = ? AND activo = 1
         `)
-        .get(codigo);
+        .get(codigoReal, inventarioIdLote);
 
       const tienePiezas = (totalPiezas?.total || 0) > 0;
 
-      // Obtener el producto para actualizar mostrar_en_pagina
+      // Obtener el producto para actualizar mostrar_en_pagina usando el código principal y el inventario
       const productoParaActualizar = dbInv
-        .prepare("SELECT id, mostrar_en_pagina FROM productos_ref WHERE codigo = ?")
-        .get(codigo);
+        .prepare("SELECT id, mostrar_en_pagina FROM productos_ref WHERE codigo = ? AND inventario_id = ?")
+        .get(codigoReal, inventarioIdLote);
 
       if (productoParaActualizar) {
         // Activar mostrar_en_pagina si tiene piezas, desactivar si no tiene
@@ -1422,23 +1848,36 @@ router.put(
         }
       }
 
+      // Emitir eventos de actualización
+      getIO().emit("inventario_actualizado");
+      
+      // Obtener el producto para emitir evento de actualización usando el código principal y el inventario
+      const producto = dbInv
+        .prepare("SELECT * FROM productos_ref WHERE codigo = ? AND inventario_id = ?")
+        .get(codigoReal, inventarioIdLote);
+      
+      if (producto) {
+        getIO().emit("producto_actualizado_inventario", {
+          producto: producto,
+          inventario_id: producto.inventario_id
+        });
+      }
+
       // ⭐️ AUDITORÍA
       registrarAccion({
         usuario: req.user,
         accion: "EDITAR_LOTE",
-        detalle: `Lote actualizado: '${nuevoLote}'`,
+        detalle: `Lote actualizado: '${nuevoLote}' - Cantidad: ${nuevaCantidad}`,
         tabla: "productos_lotes",
         registroId: id,
         cambios: {
           lote: nuevoLote,
           cantidad_piezas: nuevaCantidad,
           activo: esActivo ? 'sí' : 'no',
-          codigo: codigo,
+          codigo: codigoReal,
           producto_activado: tienePiezas ? 'sí' : 'no'
         }
       });
-
-      getIO().emit("inventario_actualizado");
 
       res.json({ 
         ok: true, 
@@ -1483,29 +1922,64 @@ router.put(
         : (lote.activo !== 1);
 
       if (nuevoEstado) {
-        // Si se activa, desactivar todos los demás lotes del producto
+        // Si se activa, primero verificar si hay lotes con caducidad más próxima
+        // Si el lote que se quiere activar no tiene caducidad, buscar si hay otros con caducidad
+        const loteParaActivar = dbInv
+          .prepare("SELECT * FROM productos_lotes WHERE id = ? AND codigo_producto = ?")
+          .get(id, codigo);
+        
+        // Buscar lote con caducidad más próxima
+        const loteMasProximo = dbInv
+          .prepare(`
+            SELECT * FROM productos_lotes 
+            WHERE codigo_producto = ? 
+              AND caducidad IS NOT NULL 
+              AND caducidad != '' 
+              AND cantidad_piezas > 0
+            ORDER BY caducidad ASC
+            LIMIT 1
+          `)
+          .get(codigo);
+        
+        // Si hay un lote con caducidad más próxima y el que se quiere activar no tiene caducidad o tiene una más lejana
+        let loteAActivarse = loteParaActivar;
+        if (loteMasProximo) {
+          const caducidadMasProxima = loteMasProximo.caducidad;
+          const caducidadParaActivar = loteParaActivar.caducidad || "";
+          
+          // Si el lote a activar no tiene caducidad o tiene una más lejana, activar el de caducidad más próxima
+          if (!caducidadParaActivar || caducidadParaActivar > caducidadMasProxima) {
+            loteAActivarse = loteMasProximo;
+          }
+        }
+        
+        // Desactivar todos los demás lotes del producto
         dbInv
           .prepare(
-            "UPDATE productos_lotes SET activo = 0 WHERE codigo_producto = ? AND id != ?"
+            "UPDATE productos_lotes SET activo = 0 WHERE codigo_producto = ?"
           )
-          .run(codigo, id);
+          .run(codigo);
 
-        // Activar el lote seleccionado
+        // Activar el lote seleccionado (o el de caducidad más próxima si aplica)
         dbInv
           .prepare(
             "UPDATE productos_lotes SET activo = 1 WHERE id = ? AND codigo_producto = ?"
           )
-          .run(id, codigo);
+          .run(loteAActivarse.id, codigo);
 
         // ⚠️ NO actualizar productos_ref.lote - el lote se obtiene desde productos_lotes
 
         // ⭐️ AUDITORÍA
+        const loteActivadoFinal = dbInv
+          .prepare("SELECT * FROM productos_lotes WHERE id = ? AND codigo_producto = ?")
+          .get(loteAActivarse.id, codigo);
+        
         registrarAccion({
           usuario: req.user?.name,
           accion: "ACTIVAR_LOTE",
-          detalle: `Lote '${lote.lote}' activado para producto ${codigo}`,
+          detalle: `Lote '${loteActivadoFinal.lote}' activado para producto ${codigo}${loteActivadoFinal.caducidad ? ` (Caducidad: ${loteActivadoFinal.caducidad})` : ''}${loteAActivarse.id !== id ? ' - Activado por caducidad más próxima' : ''}`,
           tabla: "productos_lotes",
-          registroId: id,
+          registroId: loteAActivarse.id,
         });
       } else {
         // Si se desactiva, solo desactivar este lote
@@ -1527,21 +2001,21 @@ router.put(
         });
       }
 
-      // Calcular total de piezas disponibles del producto (solo lotes activos)
+      // Calcular total de piezas disponibles del producto (solo lotes activos) usando el código principal
       const totalPiezas = dbInv
         .prepare(`
           SELECT COALESCE(SUM(cantidad_piezas), 0) as total 
           FROM productos_lotes 
-          WHERE codigo_producto = ? AND activo = 1
+          WHERE codigo_producto = ? AND inventario_id = ? AND activo = 1
         `)
-        .get(codigo);
+        .get(codigoReal, inventarioIdLote);
 
       const tienePiezas = (totalPiezas?.total || 0) > 0;
 
-      // Obtener el producto para actualizar mostrar_en_pagina
+      // Obtener el producto para actualizar mostrar_en_pagina usando el código principal
       const productoParaActualizar = dbInv
         .prepare("SELECT id, mostrar_en_pagina FROM productos_ref WHERE codigo = ?")
-        .get(codigo);
+        .get(codigoReal);
 
       if (productoParaActualizar) {
         // Activar mostrar_en_pagina si tiene piezas, desactivar si no tiene
@@ -2055,5 +2529,653 @@ router.get("/qr/:codigo", authRequired, async (req, res) => {
     res.status(500).json({ error: "Error generando QR" });
   }
 });
+
+// ============================================================
+// MÚLTIPLES INVENTARIOS
+// ============================================================
+
+// Listar todos los inventarios
+router.get("/inventarios", authRequired, (req, res) => {
+  try {
+    const inventarios = dbInv
+      .prepare("SELECT id, nombre, alias, fecha_creacion, activo FROM inventarios ORDER BY fecha_creacion ASC")
+      .all();
+    res.json(inventarios);
+  } catch (error) {
+    console.error("❌ Error listando inventarios:", error);
+    res.status(500).json({ error: "Error listando inventarios", detalles: error.message });
+  }
+});
+
+// Crear nuevo inventario
+router.post(
+  "/inventarios",
+  requierePermiso("inventario.crear_inventario"),
+  (req, res) => {
+    try {
+      const { nombre, alias, es_copia, inventario_origen_id } = req.body || {};
+      
+      if (!nombre || !nombre.trim()) {
+        return res.status(400).json({ error: "El nombre del inventario es requerido" });
+      }
+
+      const esCopia = es_copia === true || es_copia === 1;
+      const inventarioOrigenId = inventario_origen_id ? parseInt(inventario_origen_id) : null;
+      const sincronizarProductos = esCopia ? 1 : 0;
+
+      // Si es copia, verificar que el inventario origen existe
+      if (esCopia && inventarioOrigenId) {
+        // BARRERA: Si es copia, solo permitir copia de CEDIS (ID 1)
+        if (inventarioOrigenId !== 1) {
+          return res.status(400).json({ 
+            error: "Solo se pueden crear inventarios como copia de CEDIS (Inventario ID 1)" 
+          });
+        }
+
+        const inventarioOrigen = dbInv
+          .prepare("SELECT id, nombre FROM inventarios WHERE id = ?")
+          .get(inventarioOrigenId);
+        
+        if (!inventarioOrigen) {
+          return res.status(400).json({ error: "El inventario origen (CEDIS) no existe. Contacte al administrador." });
+        }
+      }
+
+      const info = dbInv
+        .prepare(`
+          INSERT INTO inventarios (nombre, alias, es_copia, inventario_origen_id, sincronizar_productos) 
+          VALUES (?, ?, ?, ?, ?)
+        `)
+        .run(
+          nombre.trim(), 
+          alias ? alias.trim() : null,
+          esCopia ? 1 : 0,
+          inventarioOrigenId,
+          sincronizarProductos
+        );
+
+      const nuevoInventarioId = info.lastInsertRowid;
+
+      // Si es copia, copiar todos los productos del inventario origen (CEDIS)
+      if (esCopia && inventarioOrigenId) {
+        const productosOrigen = dbInv
+          .prepare(`
+            SELECT codigo, nombre, presentacion, categoria, subcategoria, piezas_por_caja, precio, foto, activo
+            FROM productos_ref
+            WHERE inventario_id = ?
+          `)
+          .all(inventarioOrigenId);
+
+        const insertProducto = dbInv.prepare(`
+          INSERT INTO productos_ref 
+          (codigo, nombre, presentacion, categoria, subcategoria, piezas_por_caja, inventario_id, precio, foto, activo)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `);
+
+        for (const producto of productosOrigen) {
+          try {
+            insertProducto.run(
+              producto.codigo,
+              producto.nombre,
+              producto.presentacion,
+              producto.categoria,
+              producto.subcategoria,
+              producto.piezas_por_caja,
+              nuevoInventarioId,
+              producto.precio ?? 0,
+              producto.foto ?? null,
+              producto.activo ?? 1
+            );
+          } catch (e) {
+            // Si el producto ya existe (mismo código), ignorar
+            if (!String(e.message).includes("UNIQUE")) {
+              console.error(`❌ Error copiando producto ${producto.codigo}:`, e);
+            }
+          }
+        }
+
+        registrarAccion(
+          req.user?.name || "Sistema", 
+          "inventario", 
+          "crear_inventario", 
+          `Inventario copiado desde CEDIS: ${nombre}${alias ? ` (${alias})` : ""} (${productosOrigen.length} productos copiados)`, 
+          nuevoInventarioId
+        );
+      } else {
+        registrarAccion(
+          req.user?.name || "Sistema", 
+          "inventario", 
+          "crear_inventario", 
+          `Inventario nuevo creado: ${nombre}${alias ? ` (${alias})` : ""}`, 
+          nuevoInventarioId
+        );
+      }
+
+      res.json({ 
+        id: nuevoInventarioId, 
+        nombre: nombre.trim(), 
+        alias: alias ? alias.trim() : null,
+        es_copia: esCopia,
+        inventario_origen_id: inventarioOrigenId,
+        sincronizar_productos: sincronizarProductos,
+        mensaje: esCopia ? "Inventario copiado desde CEDIS exitosamente" : "Inventario nuevo creado exitosamente"
+      });
+    } catch (error) {
+      console.error("❌ Error creando inventario:", error);
+      res.status(500).json({ error: "Error creando inventario", detalles: error.message });
+    }
+  }
+);
+
+// Obtener productos de un inventario específico
+router.get("/inventarios/:id/productos", authRequired, (req, res) => {
+  try {
+    const inventarioId = parseInt(req.params.id);
+    
+    if (!inventarioId) {
+      return res.status(400).json({ error: "ID de inventario inválido" });
+    }
+
+    const rows = dbInv
+      .prepare(
+        `
+          SELECT
+            id, codigo, nombre,
+            COALESCE(presentacion,'') AS presentacion,
+            COALESCE(categoria,'') AS categoria,
+            COALESCE(subcategoria,'') AS subcategoria,
+            COALESCE(piezas_por_caja,0) AS piezas_por_caja,
+            COALESCE(mostrar_en_pagina,0) AS mostrar_en_pagina,
+            COALESCE(activo,1) AS activo,
+            COALESCE(inventario_id, 1) AS inventario_id
+          FROM productos_ref
+          WHERE inventario_id = ?
+          ORDER BY nombre ASC, presentacion ASC
+        `
+      )
+      .all(inventarioId);
+    
+    // Para cada producto, obtener información de lotes
+    const productosConLotes = rows.map(producto => {
+        const loteActivo = dbInv
+          .prepare(`SELECT lote, cantidad_piezas FROM productos_lotes WHERE codigo_producto = ? AND inventario_id = ? AND activo = 1 LIMIT 1`)
+          .get(producto.codigo, inventarioId);
+      
+      const piezasLoteActivo = loteActivo?.cantidad_piezas || 0;
+      
+        const totalPiezasActivas = dbInv
+          .prepare(`SELECT COALESCE(SUM(cantidad_piezas), 0) as total FROM productos_lotes WHERE codigo_producto = ? AND inventario_id = ? AND activo = 1`)
+          .get(producto.codigo, inventarioId);
+      
+        const totalPiezasGeneral = dbInv
+          .prepare(`SELECT COALESCE(SUM(cantidad_piezas), 0) as total FROM productos_lotes WHERE codigo_producto = ? AND inventario_id = ?`)
+          .get(producto.codigo, inventarioId);
+      
+      return {
+        ...producto,
+        lote: loteActivo?.lote || '',
+        piezas_lote_activo: piezasLoteActivo,
+        total_piezas_activas: totalPiezasActivas?.total || 0,
+        total_piezas_general: totalPiezasGeneral?.total || 0
+      };
+    });
+    
+    res.json(productosConLotes);
+  } catch (error) {
+    console.error("❌ Error obteniendo productos del inventario:", error);
+    res.status(500).json({ error: "Error obteniendo productos", detalles: error.message });
+  }
+});
+
+// Validar código en un inventario específico
+router.get("/inventarios/:id/validar-codigo/:codigo", authRequired, (req, res) => {
+  try {
+    const inventarioId = parseInt(req.params.id);
+    const code = (req.params.codigo || "").trim();
+
+    if (!inventarioId) {
+      return res.status(400).json({ error: "ID de inventario inválido" });
+    }
+
+    if (!code) {
+      return res.status(400).json({ error: "Código vacío" });
+    }
+
+    // Buscar código principal o alias en el inventario específico
+    const principal = dbInv
+      .prepare(`
+        SELECT codigo_principal 
+        FROM codigos_alias 
+        WHERE codigo_extra = ? 
+        AND EXISTS (
+          SELECT 1 FROM productos_ref 
+          WHERE codigo = codigos_alias.codigo_principal 
+          AND inventario_id = ?
+        )
+      `)
+      .get(code, inventarioId);
+
+    if (principal) {
+      return res.json({ existe: true, codigo_principal: principal.codigo_principal });
+    }
+
+    // Buscar código directo en el inventario específico
+    const directo = dbInv
+      .prepare("SELECT codigo FROM productos_ref WHERE codigo = ? AND inventario_id = ?")
+      .get(code, inventarioId);
+
+    if (directo) {
+      return res.json({ existe: true, codigo_principal: directo.codigo });
+    }
+
+    res.json({ existe: false });
+  } catch (err) {
+    console.error("Error validando código:", err);
+    res.status(500).json({ error: "Error validando código" });
+  }
+});
+
+// Obtener producto de un inventario específico
+router.get("/inventarios/:id/producto/:codigo", authRequired, (req, res) => {
+  try {
+    const inventarioId = parseInt(req.params.id);
+    const raw = (req.params.codigo || "").trim();
+    
+    if (!inventarioId) {
+      return res.status(400).json({ error: "ID de inventario inválido" });
+    }
+
+    if (!raw) {
+      return res.status(400).json({ error: "Falta código" });
+    }
+
+    const prod = dbInv.prepare(`
+      SELECT codigo, nombre, presentacion, categoria, subcategoria, piezas_por_caja, 
+             COALESCE(activo, 1) AS activo, COALESCE(inventario_id, 1) AS inventario_id
+      FROM productos_ref
+      WHERE codigo = ? AND inventario_id = ?
+    `).get(raw, inventarioId);
+
+    if (!prod) {
+      return res.status(404).json({ error: "Producto no encontrado en este inventario" });
+    }
+
+    res.json(prod);
+  } catch (err) {
+    console.error("Error obteniendo producto:", err);
+    res.status(500).json({ error: "Error obteniendo producto" });
+  }
+});
+
+// Obtener lotes completos de un producto en un inventario específico
+router.get("/inventarios/:id/lotes/:codigo/completo", authRequired, (req, res) => {
+  try {
+    const inventarioId = parseInt(req.params.id);
+    const codigo = (req.params.codigo || "").trim();
+    
+    if (!inventarioId) {
+      return res.status(400).json({ error: "ID de inventario inválido" });
+    }
+
+    if (!codigo) {
+      return res.status(400).json({ error: "Falta código de producto" });
+    }
+
+    // Obtener lotes del inventario específico
+    const lotes = dbInv
+      .prepare(`
+        SELECT 
+          id,
+          codigo_producto,
+          lote,
+          cantidad_piezas,
+          caducidad,
+          activo,
+          fecha_ingreso,
+          inventario_id
+        FROM productos_lotes
+        WHERE codigo_producto = ? AND inventario_id = ?
+        ORDER BY activo DESC, caducidad ASC, fecha_ingreso DESC
+      `)
+      .all(codigo, inventarioId);
+
+    res.json(lotes || []);
+  } catch (err) {
+    console.error(`❌ [GET /inventarios/${req.params.id}/lotes/${req.params.codigo}/completo] Error obteniendo lotes:`, err);
+    res.status(500).json({ error: "Error obteniendo lotes", details: err.message });
+  }
+});
+
+// Eliminar inventario (requiere permiso y contraseña de admin)
+router.delete(
+  "/inventarios/:id",
+  requierePermiso("inventario.crear_inventario"), // Mismo permiso que crear
+  async (req, res) => {
+    try {
+      const inventarioId = parseInt(req.params.id);
+      const { password } = req.body || {};
+
+      if (!inventarioId) {
+        return res.status(400).json({ error: "ID de inventario inválido" });
+      }
+
+      if (!password) {
+        return res.status(400).json({ error: "Se requiere contraseña de administrador para eliminar inventarios" });
+      }
+
+      // Verificar que el inventario existe
+      const inventario = dbInv
+        .prepare("SELECT id, nombre, alias FROM inventarios WHERE id = ?")
+        .get(inventarioId);
+
+      if (!inventario) {
+        return res.status(404).json({ error: "Inventario no encontrado" });
+      }
+
+      // Verificar que el usuario es admin o superior
+      const userId = req.user?.id;
+      if (!userId) {
+        return res.status(401).json({ error: "Usuario no autenticado" });
+      }
+
+      // Verificar permisos de admin (al menos uno de los permisos)
+      const tienePermisoAdmin = tienePermiso(userId, "tab:admin") || tienePermiso(userId, "admin.usuarios.eliminar");
+      if (!tienePermisoAdmin) {
+        return res.status(403).json({ error: "Solo administradores pueden eliminar inventarios" });
+      }
+
+      // Obtener el usuario y verificar contraseña
+      const user = dbUsers.prepare("SELECT * FROM users WHERE id = ?").get(userId);
+      if (!user) {
+        return res.status(404).json({ error: "Usuario no encontrado" });
+      }
+
+      if (!user.password_hash) {
+        return res.status(400).json({ error: "El usuario no tiene contraseña configurada" });
+      }
+
+      const passwordValida = await verifyPassword(password, user.password_hash);
+      if (!passwordValida) {
+        return res.status(401).json({ error: "Contraseña incorrecta" });
+      }
+
+      // Contar productos del inventario
+      const cantidadProductos = dbInv
+        .prepare("SELECT COUNT(*) as total FROM productos_ref WHERE inventario_id = ?")
+        .get(inventarioId);
+
+      // Eliminar lotes de los productos de este inventario (sin FK)
+      dbInv
+        .prepare(
+          "DELETE FROM productos_lotes WHERE codigo_producto IN (SELECT codigo FROM productos_ref WHERE inventario_id = ?)"
+        )
+        .run(inventarioId);
+
+      // Eliminar productos del inventario
+      dbInv.prepare("DELETE FROM productos_ref WHERE inventario_id = ?").run(inventarioId);
+
+      // Eliminar el inventario
+      dbInv.prepare("DELETE FROM inventarios WHERE id = ?").run(inventarioId);
+
+      // Registrar auditoría
+      registrarAccion(
+        req.user?.name || "Sistema",
+        "inventario",
+        "eliminar_inventario",
+        `Inventario eliminado: ${inventario.nombre}${inventario.alias ? ` (${inventario.alias})` : ""} - ${cantidadProductos?.total || 0} productos eliminados`,
+        inventarioId
+      );
+
+      getIO().emit("inventario_actualizado");
+
+      res.json({
+        ok: true,
+        mensaje: `Inventario "${inventario.nombre}" eliminado exitosamente`,
+        productos_eliminados: cantidadProductos?.total || 0
+      });
+    } catch (error) {
+      console.error("❌ Error eliminando inventario:", error);
+      res.status(500).json({ error: "Error eliminando inventario", detalles: error.message });
+    }
+  }
+);
+
+// Transferir producto entre inventarios
+router.post(
+  "/inventarios/transferir",
+  requierePermiso("inventario.crear_inventario"),
+  (req, res) => {
+    try {
+      const { producto_id, inventario_origen_id, inventario_destino_id, lotes = [] } = req.body || {};
+      
+      if (!producto_id || !inventario_origen_id || !inventario_destino_id) {
+        return res.status(400).json({ error: "Faltan datos para la transferencia" });
+      }
+
+      if (inventario_origen_id === inventario_destino_id) {
+        return res.status(400).json({ error: "No se puede transferir a el mismo inventario" });
+      }
+
+      // Verificar que el producto existe y pertenece al inventario origen
+      const producto = dbInv
+        .prepare("SELECT codigo, nombre FROM productos_ref WHERE id = ? AND inventario_id = ?")
+        .get(producto_id, inventario_origen_id);
+
+      if (!producto) {
+        return res.status(404).json({ error: "Producto no encontrado en el inventario origen" });
+      }
+
+      // Verificar que el producto existe en el inventario destino (si no, crearlo)
+      const productoDestino = dbInv
+        .prepare("SELECT id FROM productos_ref WHERE codigo = ? AND inventario_id = ?")
+        .get(producto.codigo, inventario_destino_id);
+
+      let productoDestinoId = productoDestino?.id;
+
+      // Si el producto no existe en el destino, crearlo
+      if (!productoDestinoId) {
+        const productoOrigen = dbInv
+          .prepare("SELECT nombre, presentacion, categoria, subcategoria, piezas_por_caja FROM productos_ref WHERE id = ?")
+          .get(producto_id);
+
+        const infoNuevo = dbInv
+          .prepare(`
+            INSERT INTO productos_ref
+            (codigo, nombre, presentacion, categoria, subcategoria, piezas_por_caja, inventario_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+          `)
+          .run(
+            producto.codigo,
+            productoOrigen?.nombre || producto.nombre,
+            productoOrigen?.presentacion || null,
+            productoOrigen?.categoria || null,
+            productoOrigen?.subcategoria || null,
+            productoOrigen?.piezas_por_caja || 0,
+            inventario_destino_id
+          );
+
+        productoDestinoId = infoNuevo.lastInsertRowid;
+      }
+
+      // Procesar transferencia de lotes
+      let totalPiezasTransferidas = 0;
+      const lotesTransferidos = [];
+
+      for (const loteTransferir of lotes) {
+        const { lote_id, lote: loteNombre, cantidad_piezas, caducidad, laboratorio, activo } = loteTransferir;
+
+        if (!cantidad_piezas || cantidad_piezas <= 0) continue;
+
+        // Obtener el lote original
+        const loteOriginal = dbInv
+          .prepare("SELECT * FROM productos_lotes WHERE id = ? AND codigo_producto = ? AND inventario_id = ?")
+          .get(lote_id, producto.codigo, inventario_origen_id);
+
+        if (!loteOriginal) {
+          console.warn(`⚠️ Lote ${lote_id} no encontrado para producto ${producto.codigo}`);
+          continue;
+        }
+
+        // Verificar que hay suficientes piezas
+        if (loteOriginal.cantidad_piezas < cantidad_piezas) {
+          console.warn(`⚠️ No hay suficientes piezas en lote ${loteNombre}. Disponible: ${loteOriginal.cantidad_piezas}, Solicitado: ${cantidad_piezas}`);
+          continue;
+        }
+
+        // Verificar si el lote ya existe en el inventario destino
+        const loteExistenteDestino = dbInv
+          .prepare("SELECT * FROM productos_lotes WHERE codigo_producto = ? AND inventario_id = ? AND lote = ?")
+          .get(producto.codigo, inventario_destino_id, loteNombre);
+
+        if (loteExistenteDestino) {
+          // Sumar piezas al lote existente
+          const nuevaCantidad = (loteExistenteDestino.cantidad_piezas || 0) + cantidad_piezas;
+          
+          // Si hay vigencia próxima, activar ese lote
+          const tieneVigenciaProxima = caducidad && new Date(caducidad) <= new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+          const activarLote = tieneVigenciaProxima ? 1 : loteExistenteDestino.activo;
+
+          dbInv
+            .prepare(`
+              UPDATE productos_lotes
+              SET cantidad_piezas = ?, activo = ?
+              WHERE id = ?
+            `)
+            .run(nuevaCantidad, activarLote, loteExistenteDestino.id);
+        } else {
+          // Crear nuevo lote en el inventario destino
+          // Si hay vigencia próxima, activar ese lote
+          const tieneVigenciaProxima = caducidad && new Date(caducidad) <= new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+          
+          dbInv
+            .prepare(`
+              INSERT INTO productos_lotes
+              (codigo_producto, lote, cantidad_piezas, caducidad, laboratorio, activo, fecha_ingreso, inventario_id)
+              VALUES (?, ?, ?, ?, ?, ?, datetime('now', 'localtime'), ?)
+            `)
+            .run(
+              producto.codigo,
+              loteNombre,
+              cantidad_piezas,
+              caducidad || null,
+              laboratorio || null,
+              (tieneVigenciaProxima || activo) ? 1 : 0,
+              inventario_destino_id
+            );
+        }
+
+        // Restar piezas del lote origen
+        const nuevaCantidadOrigen = (loteOriginal.cantidad_piezas || 0) - cantidad_piezas;
+        
+        // Mantener el lote incluso si queda en 0 para historial
+        // Actualizar cantidad del lote origen (puede quedar en 0)
+        dbInv
+          .prepare("UPDATE productos_lotes SET cantidad_piezas = ?, activo = 0 WHERE id = ?")
+          .run(Math.max(0, nuevaCantidadOrigen), lote_id);
+
+        totalPiezasTransferidas += cantidad_piezas;
+        lotesTransferidos.push({ lote: loteNombre, cantidad: cantidad_piezas });
+      }
+
+      // Si no hay lotes para transferir, copiar el producto al destino (no moverlo)
+      if (lotes.length === 0) {
+        // Verificar si el producto ya existe en destino, si no crearlo
+        if (!productoDestinoId) {
+          const productoOrigen = dbInv
+            .prepare("SELECT nombre, presentacion, categoria, subcategoria, piezas_por_caja FROM productos_ref WHERE id = ?")
+            .get(producto_id);
+
+          const infoNuevo = dbInv
+            .prepare(`
+              INSERT INTO productos_ref
+              (codigo, nombre, presentacion, categoria, subcategoria, piezas_por_caja, inventario_id)
+              VALUES (?, ?, ?, ?, ?, ?, ?)
+            `)
+            .run(
+              producto.codigo,
+              productoOrigen?.nombre || producto.nombre,
+              productoOrigen?.presentacion || null,
+              productoOrigen?.categoria || null,
+              productoOrigen?.subcategoria || null,
+              productoOrigen?.piezas_por_caja || 0,
+              inventario_destino_id
+            );
+
+          productoDestinoId = infoNuevo.lastInsertRowid;
+        }
+      }
+
+      registrarAccion(
+        req.user?.name || "Sistema",
+        "inventario",
+        "transferir_producto",
+        `Producto ${producto.codigo} (${producto.nombre}) transferido de inventario ${inventario_origen_id} a ${inventario_destino_id}${lotesTransferidos.length > 0 ? ` - ${totalPiezasTransferidas} piezas en ${lotesTransferidos.length} lote(s)` : ""}`,
+        producto_id
+      );
+
+      getIO().emit("inventario_actualizado");
+      
+      // Emitir eventos de actualización
+      if (lotesTransferidos.length > 0) {
+        // Si se transfirieron lotes, actualizar ambos inventarios
+        getIO().emit("producto_actualizado_inventario", {
+          producto: dbInv.prepare("SELECT * FROM productos_ref WHERE id = ?").get(producto_id),
+          inventario_id: inventario_origen_id
+        });
+        
+        if (productoDestinoId) {
+          getIO().emit("producto_actualizado_inventario", {
+            producto: dbInv.prepare("SELECT * FROM productos_ref WHERE id = ?").get(productoDestinoId),
+            inventario_id: inventario_destino_id
+          });
+        }
+      } else if (productoDestinoId) {
+        // Si solo se copió el producto (sin lotes), emitir evento de producto agregado
+        getIO().emit("producto_agregado_inventario", {
+          producto: dbInv.prepare("SELECT * FROM productos_ref WHERE id = ?").get(productoDestinoId),
+          inventario_id: inventario_destino_id
+        });
+      }
+
+      res.json({ 
+        mensaje: "Producto transferido exitosamente",
+        piezas_transferidas: totalPiezasTransferidas,
+        lotes_transferidos: lotesTransferidos.length
+      });
+    } catch (error) {
+      console.error("❌ Error transfiriendo producto:", error);
+      res.status(500).json({ error: "Error transfiriendo producto", detalles: error.message });
+    }
+  }
+);
+
+// GET: Obtener historial de un lote
+router.get(
+  "/lotes/:id/historial",
+  authRequired,
+  requierePermiso("tab:inventario"),
+  (req, res) => {
+    try {
+      const loteId = Number(req.params.id);
+      
+      if (!loteId) {
+        return res.status(400).json({ error: "ID de lote inválido" });
+      }
+
+      const historial = dbInv
+        .prepare(`
+          SELECT * FROM lotes_historial 
+          WHERE lote_id = ?
+          ORDER BY fecha DESC, hora DESC
+        `)
+        .all(loteId);
+
+      res.json(historial || []);
+    } catch (err) {
+      console.error("Error obteniendo historial de lote:", err);
+      res.status(500).json({ error: "Error obteniendo historial" });
+    }
+  }
+);
 
 export default router;

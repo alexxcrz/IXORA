@@ -52,6 +52,7 @@ export default function ControlPDAs({ serverUrl }) {
   const [draggedIndex, setDraggedIndex] = useState(null);
   const [dragOverIndex, setDragOverIndex] = useState(null);
   const [menuAbierto, setMenuAbierto] = useState(false);
+  const [busqueda, setBusqueda] = useState("");
 
   // Cargar datos
   const cargar = async () => {
@@ -809,8 +810,21 @@ export default function ControlPDAs({ serverUrl }) {
     }
   };
 
+  // Filtrar y ordenar PDAs
+  const pdasFiltrados = busqueda.trim()
+    ? pdas.filter((pda) => {
+        const busquedaLower = busqueda.toLowerCase();
+        const pdaText = (pda.pda || pda.equipo_pda || "").toLowerCase();
+        const responsable = (pda.responsable || "").toLowerCase();
+        const area = ((pda.area || pda.unidad) || "").toLowerCase();
+        return pdaText.includes(busquedaLower) || 
+               responsable.includes(busquedaLower) || 
+               area.includes(busquedaLower);
+      })
+    : pdas;
+
   // Ordenar PDAs por campo 'orden' si existe, sino por área y responsable
-  const pdasOrdenados = [...pdas].sort((a, b) => {
+  const pdasOrdenados = [...pdasFiltrados].sort((a, b) => {
     // Si ambos tienen campo orden, usar ese
     if (a.orden !== undefined && a.orden !== null && b.orden !== undefined && b.orden !== null) {
       if (a.orden !== b.orden) {
@@ -1017,6 +1031,27 @@ export default function ControlPDAs({ serverUrl }) {
         </div>
       </div>
 
+      {/* Buscador */}
+      <div style={{ marginBottom: "20px", padding: "0 20px" }}>
+        <input
+          type="text"
+          placeholder="🔍 Buscar por PDA, responsable o área..."
+          value={busqueda}
+          onChange={(e) => setBusqueda(e.target.value)}
+          style={{
+            width: "100%",
+            padding: "12px 16px",
+            fontSize: "16px",
+            border: "2px solid #e5e7eb",
+            borderRadius: "8px",
+            outline: "none",
+            transition: "border-color 0.2s",
+          }}
+          onFocus={(e) => e.target.style.borderColor = "#dc2626"}
+          onBlur={(e) => e.target.style.borderColor = "#e5e7eb"}
+        />
+      </div>
+
       <div className="activos-tabla-container" style={{ overflowX: "auto" }}>
         <table className="activos-tabla" style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.9rem" }}>
           <thead>
@@ -1166,7 +1201,7 @@ export default function ControlPDAs({ serverUrl }) {
       {/* Modal para PDA */}
       {modalAbierto && (
         <div className="modal-overlay" onClick={() => setModalAbierto(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
+          <div className="modal modal-lg" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3>{editarId ? "Editar PDA" : "Nuevo PDA"}</h3>
               <button
@@ -1455,7 +1490,7 @@ export default function ControlPDAs({ serverUrl }) {
 
       {showModalImportar && (
         <div className="modal-overlay" onClick={() => !importando && setShowModalImportar(false)}>
-          <div className="modal modal-importar" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "800px", width: "90vw" }}>
+          <div className="modal modal-importar" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3>Importar PDAs</h3>
               <button className="modal-close" onClick={() => !importando && setShowModalImportar(false)} disabled={importando}>

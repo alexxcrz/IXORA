@@ -208,6 +208,9 @@ function enviarUsuariosActivos() {
     }));
 
   io.emit("usuarios_activos", lista);
+  
+  // Emitir evento para actualizar estados (para que los clientes recarguen estados)
+  io.emit("estados_actualizados");
 }
 
 export const getIO = () => io;

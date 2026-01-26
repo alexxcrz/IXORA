@@ -5,16 +5,30 @@ import { useAlert } from "../../components/AlertModal";
 import { Document, Packer, Paragraph, AlignmentType, TextRun, ImageRun, PageOrientation } from "docx";
 import ExcelJS from "exceljs";
 import { Capacitor } from "@capacitor/core";
-import { registerPlugin } from '@capacitor/core';
 
-// Definir el plugin directamente aquí para evitar problemas de importación TypeScript
-const AndroidPrinterPlugin = registerPlugin('AndroidPrinter', {
-  web: () => Promise.resolve({
-    printToBluetooth: async () => ({ result: 'ERROR: No disponible en web' }),
-    printZPL: async () => ({ result: 'ERROR: No disponible en web' }),
+// Usar el plugin existente si ya está registrado, de lo contrario crear un fallback
+// Esto evita el error de registro duplicado
+let AndroidPrinterPlugin;
+try {
+  // Intentar obtener el plugin del registro global de Capacitor
+  if (typeof window !== 'undefined' && window.Capacitor?.Plugins?.AndroidPrinter) {
+    AndroidPrinterPlugin = window.Capacitor.Plugins.AndroidPrinter;
+  } else {
+    // Si no está registrado, crear un objeto mock (no registrar para evitar duplicados)
+    AndroidPrinterPlugin = {
+      printToBluetooth: async () => ({ result: 'ERROR: Plugin no disponible' }),
+      printZPL: async () => ({ result: 'ERROR: Plugin no disponible' }),
+      findBluetoothPrinters: async () => ({ devices: [] })
+    };
+  }
+} catch (e) {
+  // Fallback en caso de error
+  AndroidPrinterPlugin = {
+    printToBluetooth: async () => ({ result: 'ERROR: Plugin no disponible' }),
+    printZPL: async () => ({ result: 'ERROR: Plugin no disponible' }),
     findBluetoothPrinters: async () => ({ devices: [] })
-  })
-});
+  };
+}
 
 export default function Inventario({
   SERVER_URL,
@@ -26,6 +40,7 @@ export default function Inventario({
   setLotesCache,
   inventario,
   setInventario,
+  socket,
 }) {
   const { perms } = useAuth();
   const { showAlert, showConfirm } = useAlert();
@@ -58,6 +73,27 @@ export default function Inventario({
   const [invQuery, setInvQuery] = useState("");
   const [showAddInv, setShowAddInv] = useState(false);
   const [showEditInv, setShowEditInv] = useState(false);
+  const [mostrarSoloAgotados, setMostrarSoloAgotados] = useState(false);
+  
+  // Estados para múltiples inventarios
+  const [inventarios, setInventarios] = useState([]); // Lista de todos los inventarios
+  const [inventarioActivo, setInventarioActivo] = useState(null); // ID del inventario activo
+  const [showMenuBotones, setShowMenuBotones] = useState(false); // Menú desplegable de botones
+  const [showModalNuevoInventario, setShowModalNuevoInventario] = useState(false); // Modal crear inventario
+  const [formNuevoInventario, setFormNuevoInventario] = useState({ 
+    nombre: "", 
+    alias: "", 
+    tipo: "nuevo", // "nuevo" o "copia"
+    inventario_origen_id: null 
+  }); // Formulario nuevo inventario
+  const [showModalEliminarInventario, setShowModalEliminarInventario] = useState(false); // Modal eliminar inventario
+  const [inventarioAEliminar, setInventarioAEliminar] = useState(null); // Inventario seleccionado para eliminar
+  const [passwordEliminar, setPasswordEliminar] = useState(""); // Contraseña para eliminar
+  const [productoTransferir, setProductoTransferir] = useState(null); // Producto seleccionado para transferir
+  const [showMenuTransferir, setShowMenuTransferir] = useState(false); // Menú de transferencia
+  const [lotesProductoTransferir, setLotesProductoTransferir] = useState([]); // Lotes del producto a transferir
+  const [inventarioDestinoSeleccionado, setInventarioDestinoSeleccionado] = useState(null); // Inventario destino seleccionado
+  const [lotesSeleccionados, setLotesSeleccionados] = useState({}); // { loteId: cantidad a transferir }
 
   const [formInv, setFormInv] = useState({
     codigo: "",
@@ -107,6 +143,7 @@ export default function Inventario({
     dimensiones: "",
     fecha_vencimiento: "",
     activo: true,
+    inventario_id: null,
   });
 
   const [modalCodigos, setModalCodigos] = useState(false);
@@ -116,6 +153,8 @@ export default function Inventario({
   const [qrModalOpen, setQrModalOpen] = useState(false);
   const [qrModalCodigo, setQrModalCodigo] = useState("");
   const [qrModalNombre, setQrModalNombre] = useState("");
+  // eslint-disable-next-line no-unused-vars
+  const [qrModalPresentacion, setQrModalPresentacion] = useState("");
   const [qrModalUrl, setQrModalUrl] = useState("");
   const [qrModalLoading, setQrModalLoading] = useState(false);
 
@@ -132,8 +171,13 @@ export default function Inventario({
   
   // Estados para gestión de lotes
   const [lotesProducto, setLotesProducto] = useState([]);
-  const [nuevoLote, setNuevoLote] = useState({ lote: "", cantidad_piezas: "", laboratorio: "" });
+  const [nuevoLote, setNuevoLote] = useState({ lote: "", cantidad_piezas: "", laboratorio: "", caducidad: "" });
   const [cargandoLotes, setCargandoLotes] = useState(false);
+  const [loteEditando, setLoteEditando] = useState(null);
+  const [showModalEditarLote, setShowModalEditarLote] = useState(false);
+  const [showModalHistorialLote, setShowModalHistorialLote] = useState(false);
+  const [loteHistorial, setLoteHistorial] = useState(null);
+  const [historialLote, setHistorialLote] = useState([]);
 
   // Estados para importar/exportar
   const [showModalImportar, setShowModalImportar] = useState(false);
@@ -149,11 +193,6 @@ export default function Inventario({
   const [progresoImportacion, setProgresoImportacion] = useState({ actual: 0, total: 0, exitosos: 0, errores: 0 });
   const fileInputRef = useRef(null);
 
-  // Debug: Monitorear cambios en el estado de importación
-  useEffect(() => {
-    console.log("🔵 [ESTADO] importando cambió a:", importando);
-    console.log("🔵 [ESTADO] progresoImportacion:", progresoImportacion);
-  }, [importando, progresoImportacion]);
 
   // Funciones para manejar fotos
   const handleFileUpload = (files) => {
@@ -188,16 +227,15 @@ export default function Inventario({
   };
 
   // Función para cargar lotes del producto desde el servidor
-  const cargarLotesDelProducto = async (codigo) => {
+  const cargarLotesDelProducto = async (codigo, invId) => {
     if (!codigo) return;
     
     try {
-      const lotes = await authFetch(`${SERVER_URL}/inventario/lotes/${codigo}/completo`);
+      const inventarioIdQuery = invId || inventarioActivo || "";
+      const lotes = await authFetch(`${SERVER_URL}/inventario/lotes/${codigo}/completo${inventarioIdQuery ? `?inventario_id=${inventarioIdQuery}` : ""}`);
       if (Array.isArray(lotes)) {
         setLotesProducto(lotes);
-        console.log(`✅ Lotes cargados para ${codigo}:`, lotes.length);
       } else {
-        console.warn(`⚠️ Respuesta inesperada al cargar lotes para ${codigo}:`, lotes);
         setLotesProducto([]);
       }
     } catch (err) {
@@ -221,8 +259,268 @@ export default function Inventario({
     setImagenPrincipal(null);
     setPiezasActual("");
     setLotesProducto([]);
-    setNuevoLote({ lote: "", cantidad_piezas: "" });
+    setNuevoLote({ lote: "", cantidad_piezas: "", laboratorio: "", caducidad: "" });
   };
+
+  // Variable para controlar advertencias (una sola vez)
+  const advertenciaFiltradoRef = useRef(false);
+
+  // Función helper para filtrar productos del inventario activo (BARRERA DE SEGURIDAD)
+  const filtrarProductosPorInventario = (productos) => {
+    if (!Array.isArray(productos) || !inventarioActivo) return productos;
+    
+    const productosFiltrados = productos.filter(p => {
+      const productoInventarioId = p.inventario_id || p.inventarioId || 1;
+      return productoInventarioId === inventarioActivo;
+    });
+    
+    // Advertencia solo una vez si se detectan productos de otros inventarios
+    if (!advertenciaFiltradoRef.current && productos.length !== productosFiltrados.length) {
+      advertenciaFiltradoRef.current = true;
+    }
+    
+    return productosFiltrados;
+  };
+
+  // Cargar inventarios múltiples al montar
+  useEffect(() => {
+    const cargarInventarios = async () => {
+      try {
+        const data = await authFetch(`${SERVER_URL}/inventario/inventarios`);
+        if (Array.isArray(data) && data.length > 0) {
+          setInventarios(data);
+          // Si no hay inventario activo, usar el primero
+          if (!inventarioActivo) {
+            setInventarioActivo(data[0].id);
+          }
+        } else {
+          // Si no hay inventarios, crear el por defecto
+          const inventarioDefault = { id: 1, nombre: "Inventario", alias: "CEDIS" };
+          setInventarios([inventarioDefault]);
+          setInventarioActivo(1);
+        }
+      } catch (err) {
+        console.error("❌ Error cargando inventarios:", err);
+        // En caso de error, usar inventario por defecto
+        const inventarioDefault = { id: 1, nombre: "Inventario", alias: "CEDIS" };
+        setInventarios([inventarioDefault]);
+        setInventarioActivo(1);
+      }
+    };
+    cargarInventarios();
+  }, [SERVER_URL]);
+
+  // BARRERA: Filtrar el prop inventario inicial si viene con productos mezclados
+  useEffect(() => {
+    if (inventario && inventario.length > 0 && inventarioActivo) {
+      const productosFiltrados = inventario.filter(p => {
+        const productoInventarioId = p.inventario_id || p.inventarioId || 1;
+        return productoInventarioId === inventarioActivo;
+      });
+      // Solo actualizar si hay diferencia (productos mezclados)
+      if (productosFiltrados.length !== inventario.length) {
+        setInventario(productosFiltrados);
+      }
+    } else if (inventario && inventario.length > 0 && !inventarioActivo) {
+      // Si hay productos pero no hay inventario activo, limpiar
+      setInventario([]);
+    }
+  }, []); // Solo al montar
+
+  // Cargar productos cuando cambia el inventario activo
+  useEffect(() => {
+    if (inventarioActivo) {
+      // Resetear la advertencia cuando cambia el inventario activo
+      advertenciaFiltradoRef.current = false;
+      
+      const cargarProductosInventario = async () => {
+        try {
+          // Limpiar inventario primero para evitar mostrar productos del inventario anterior
+          setInventario([]);
+          
+          const data = await authFetch(`${SERVER_URL}/inventario/inventarios/${inventarioActivo}/productos`);
+          if (Array.isArray(data)) {
+            // BARRERA: Filtrar solo productos del inventario activo (doble verificación)
+            const productosFiltrados = data.filter(p => {
+              const productoInventarioId = p.inventario_id || p.inventarioId || 1;
+              return productoInventarioId === inventarioActivo;
+            });
+            setInventario(productosFiltrados);
+          }
+        } catch (err) {
+          console.error("❌ Error cargando productos del inventario:", err);
+          // No usar cargarInventario() porque mezcla inventarios
+          setInventario([]);
+        }
+      };
+      cargarProductosInventario();
+    } else {
+      // Si no hay inventario activo, limpiar el estado
+      setInventario([]);
+    }
+  }, [inventarioActivo, SERVER_URL]);
+
+  // Cerrar menú de botones al hacer clic fuera
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (showMenuBotones && !e.target.closest('.inventario-header')) {
+        setShowMenuBotones(false);
+      }
+    };
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, [showMenuBotones]);
+
+  // Escuchar actualizaciones en tiempo real de inventarios
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleProductoAgregado = async (data) => {
+      if (!data?.producto || !data?.inventario_id) return;
+      
+      // BARRERA: Solo agregar si pertenece al inventario activo
+      if (data.inventario_id === inventarioActivo) {
+        setInventario(prev => {
+          // Verificar que el producto pertenezca al inventario activo
+          const productoInventarioId = data.producto.inventario_id || data.producto.inventarioId || 1;
+          if (productoInventarioId !== inventarioActivo) return prev;
+          
+          // Verificar si ya existe para evitar duplicados
+          const existe = prev.find(p => p.id === data.producto.id && (p.inventario_id || p.inventarioId || 1) === inventarioActivo);
+          if (existe) return prev;
+          return [...prev, data.producto].sort((a, b) =>
+            (a.nombre || "").localeCompare(b.nombre || "", "es")
+          );
+        });
+      }
+      
+      // Si hay inventarios vinculados (copias), también actualizar sus listas si están activos
+      const inventariosVinculados = inventarios.filter(inv => 
+        inv.sincronizar_productos === 1 && 
+        inv.inventario_origen_id === data.inventario_id
+      );
+      
+      for (const invVinculado of inventariosVinculados) {
+        if (invVinculado.id === inventarioActivo) {
+          // Recargar productos del inventario vinculado activo
+          try {
+            const productosData = await authFetch(`${SERVER_URL}/inventario/inventarios/${inventarioActivo}/productos`);
+            if (Array.isArray(productosData)) {
+              setInventario(filtrarProductosPorInventario(productosData));
+            }
+          } catch (err) {
+            console.error("❌ Error recargando inventario vinculado:", err);
+          }
+        }
+      }
+    };
+
+    const handleProductoEliminado = (data) => {
+      if (!data?.producto_id || !data?.inventario_id) return;
+      
+      // Si el producto se eliminó del inventario activo, quitarlo del estado local
+      if (data.inventario_id === inventarioActivo) {
+        setInventario(prev => prev.filter(p => p.id !== parseInt(data.producto_id)));
+      }
+      
+      // Si hay inventarios vinculados, también actualizar sus listas si están activos
+      const inventariosVinculados = inventarios.filter(inv => 
+        inv.sincronizar_productos === 1 && 
+        inv.inventario_origen_id === data.inventario_id
+      );
+      
+      for (const invVinculado of inventariosVinculados) {
+        if (invVinculado.id === inventarioActivo) {
+          setInventario(prev => prev.filter(p => p.id !== parseInt(data.producto_id)));
+        }
+      }
+    };
+
+    const handleProductoActualizado = (data) => {
+      if (!data?.producto || !data?.inventario_id) return;
+      
+      // BARRERA: Solo actualizar si pertenece al inventario activo
+      if (data.inventario_id === inventarioActivo) {
+        setInventario(prev => {
+          const productoInventarioId = data.producto.inventario_id || data.producto.inventarioId || 1;
+          // Si el producto actualizado no pertenece al inventario activo, no hacer nada
+          if (productoInventarioId !== inventarioActivo) {
+            // Si estaba en la lista pero ahora pertenece a otro inventario, eliminarlo
+            return prev.filter(p => {
+              const pInvId = p.inventario_id || p.inventarioId || 1;
+              return !(p.id === data.producto.id && pInvId !== inventarioActivo);
+            });
+          }
+          
+          const idx = prev.findIndex(p => {
+            const pInvId = p.inventario_id || p.inventarioId || 1;
+            return p.id === data.producto.id && pInvId === inventarioActivo;
+          });
+          if (idx === -1) {
+            // Si no existe, agregarlo
+            return [...prev, data.producto].sort((a, b) =>
+              (a.nombre || "").localeCompare(b.nombre || "", "es")
+            );
+          }
+          // Si existe, actualizarlo
+          const copy = [...prev];
+          copy[idx] = data.producto;
+          return copy;
+        });
+      }
+      
+      // Si hay inventarios vinculados, también actualizar sus listas si están activos
+      const inventariosVinculados = inventarios.filter(inv => 
+        inv.sincronizar_productos === 1 && 
+        inv.inventario_origen_id === data.inventario_id
+      );
+      
+      for (const invVinculado of inventariosVinculados) {
+        if (invVinculado.id === inventarioActivo) {
+          setInventario(prev => {
+            const idx = prev.findIndex(p => p.id === data.producto.id);
+            if (idx === -1) {
+              return [...prev, data.producto].sort((a, b) =>
+                (a.nombre || "").localeCompare(b.nombre || "", "es")
+              );
+            }
+            const copy = [...prev];
+            copy[idx] = data.producto;
+            return copy;
+          });
+        }
+      }
+    };
+
+    const handleInventarioActualizado = async () => {
+      // Si hay inventarios vinculados activos, recargar sus productos
+      if (inventarioActivo) {
+        const invActivo = inventarios.find(inv => inv.id === inventarioActivo);
+        if (invActivo?.sincronizar_productos === 1) {
+          try {
+            const productosData = await authFetch(`${SERVER_URL}/inventario/inventarios/${inventarioActivo}/productos`);
+            if (Array.isArray(productosData)) {
+              setInventario(filtrarProductosPorInventario(productosData));
+            }
+          } catch (err) {
+            console.error("❌ Error recargando inventario vinculado:", err);
+          }
+        }
+      }
+    };
+
+    socket.on("producto_agregado_inventario", handleProductoAgregado);
+    socket.on("producto_eliminado_inventario", handleProductoEliminado);
+    socket.on("producto_actualizado_inventario", handleProductoActualizado);
+    socket.on("inventario_actualizado", handleInventarioActualizado);
+
+    return () => {
+      socket.off("producto_agregado_inventario", handleProductoAgregado);
+      socket.off("producto_eliminado_inventario", handleProductoEliminado);
+      socket.off("producto_actualizado_inventario", handleProductoActualizado);
+      socket.off("inventario_actualizado", handleInventarioActualizado);
+    };
+  }, [socket, inventarioActivo, inventarios, SERVER_URL]);
 
   // detectar cápsulas/polvos sin piezasPorCaja
   useEffect(() => {
@@ -255,7 +553,104 @@ export default function Inventario({
     }
   }, [inventario, modalPiezas]);
 
-  // Función para generar y descargar QR individual con código
+  // ====== COMPARTIR POR CHAT ======
+  const [compartirOpen, setCompartirOpen] = useState(false);
+  const [compartirProducto, setCompartirProducto] = useState(null);
+  const [compartirUsuarios, setCompartirUsuarios] = useState([]);
+  const [compartirDestino, setCompartirDestino] = useState("");
+  const [compartiendo, setCompartiendo] = useState(false);
+
+  const cargarUsuariosChat = async () => {
+    try {
+      const data = await authFetch(`${SERVER_URL}/chat/usuarios`);
+      setCompartirUsuarios(Array.isArray(data) ? data : []);
+    } catch (e) {
+      console.error("Error cargando usuarios de chat:", e);
+      setCompartirUsuarios([]);
+    }
+  };
+
+  const abrirCompartir = async (producto) => {
+    setCompartirProducto(producto);
+    setCompartirDestino("");
+    setCompartirOpen(true);
+    await cargarUsuariosChat();
+  };
+
+  const construirMensajeCompartir = (producto) => {
+    if (!producto) return "Producto compartido.";
+    const base = new URL(window.location.origin);
+    base.searchParams.set("tab", "inventario");
+    base.searchParams.set("share", "producto");
+    if (producto.codigo) base.searchParams.set("codigo", String(producto.codigo));
+    if (producto.id) base.searchParams.set("id", String(producto.id));
+    return base.toString();
+  };
+
+  const enviarCompartir = async () => {
+    if (!compartirDestino || !compartirProducto) {
+      pushToast("Selecciona un usuario para compartir.", "warn");
+      return;
+    }
+    try {
+      setCompartiendo(true);
+      await authFetch(`${SERVER_URL}/chat/privado`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          para_nickname: compartirDestino,
+          mensaje: construirMensajeCompartir(compartirProducto),
+          tipo_mensaje: "texto",
+        }),
+      });
+      pushToast("Producto compartido por chat.", "ok");
+      setCompartirOpen(false);
+    } catch (e) {
+      console.error("Error compartiendo producto:", e);
+      pushToast("No se pudo compartir el producto.", "err");
+    } finally {
+      setCompartiendo(false);
+    }
+  };
+
+  // Función para compartir por Web Share API (otras apps)
+  const compartirPorOtrasApps = async (producto) => {
+    if (!producto || !producto.codigo) {
+      pushToast("❌ No hay información del producto para compartir", "err");
+      return;
+    }
+
+    const nombreCompleto = obtenerNombreCompleto(producto.nombre || "", producto.presentacion || "");
+    const enlace = construirMensajeCompartir(producto);
+    
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: `Producto: ${nombreCompleto || producto.codigo}`,
+          text: `📦 ${nombreCompleto || producto.codigo}\n🔖 Código: ${producto.codigo}`,
+          url: enlace
+        });
+        pushToast("✅ Producto compartido exitosamente", "ok");
+      } else {
+        // Fallback: copiar enlace al portapapeles
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(enlace);
+          pushToast("✅ Enlace copiado al portapapeles", "ok");
+        } else {
+          pushToast("⚠️ Compartir no disponible en este dispositivo", "warn");
+        }
+      }
+    } catch (err) {
+      if (err.name === 'AbortError') {
+        return; // Usuario canceló
+      }
+      console.error("Error compartiendo:", err);
+      pushToast("❌ Error al compartir", "err");
+    }
+  };
+
+  // Función para generar y descargar QR individual con código (no usada - compartir por QR eliminado)
+  // eslint-disable-next-line no-unused-vars
   async function generarQRIndividual(codigo, nombre, presentacion) {
     if (!codigo) {
       pushToast("❌ No hay código para generar QR", "err");
@@ -281,28 +676,199 @@ export default function Inventario({
       
       const blob = await response.blob();
       
-      // Crear un canvas para agregar código debajo del QR
+      // Crear un canvas para agregar código y nombre debajo del QR con bordes redondeados
       const img = new Image();
       img.crossOrigin = "anonymous";
       
       img.onload = () => {
         const canvas = document.createElement("canvas");
-        canvas.width = 400;
-        canvas.height = 480; // Espacio extra para el código
+        const qrSize = 400;
+        const paddingBottom = 180; // Espacio extra para nombre (2 líneas) y presentación
+        const borderRadius = 20; // Bordes redondeados
+        canvas.width = qrSize;
+        canvas.height = qrSize + paddingBottom;
         const ctx = canvas.getContext("2d");
         
-        // Fondo blanco
+        // Función helper para dibujar rectángulo redondeado
+        const drawRoundedRect = (x, y, width, height, radius) => {
+          ctx.beginPath();
+          ctx.moveTo(x + radius, y);
+          ctx.lineTo(x + width - radius, y);
+          ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+          ctx.lineTo(x + width, y + height - radius);
+          ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+          ctx.lineTo(x + radius, y + height);
+          ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+          ctx.lineTo(x, y + radius);
+          ctx.quadraticCurveTo(x, y, x + radius, y);
+          ctx.closePath();
+        };
+        
+        // Fondo blanco con bordes redondeados
         ctx.fillStyle = "#FFFFFF";
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        drawRoundedRect(0, 0, canvas.width, canvas.height, borderRadius);
+        ctx.fill();
         
-        // Dibujar QR (con logo integrado)
-        ctx.drawImage(img, 0, 0, 400, 400);
+        // Dibujar QR (con logo integrado) con bordes redondeados
+        ctx.save();
+        drawRoundedRect(0, 0, qrSize, qrSize, borderRadius);
+        ctx.clip();
+        ctx.drawImage(img, 0, 0, qrSize, qrSize);
+        ctx.restore();
         
-        // Agregar código debajo (más grande)
-        ctx.fillStyle = "#000000";
-        ctx.font = "bold 28px Arial";
-        ctx.textAlign = "center";
-        ctx.fillText(codigo, 200, 440);
+        // Agregar nombre del producto debajo del QR (negro, máximo 2 líneas si es necesario)
+        const nombreProducto = (nombre || "").trim();
+        if (nombreProducto && nombreProducto.length > 0) {
+          ctx.fillStyle = "#000000"; // Negro
+          ctx.textAlign = "center";
+          
+          const maxWidth = qrSize * 1.15; // Permitir que sea un poco más ancho que el QR
+          let fontSize = 24; // Tamaño inicial más pequeño
+          let text = nombreProducto;
+          
+          // Función para dividir texto en líneas
+          const wrapText = (text, maxWidth, fontSize) => {
+            if (!text || text.trim().length === 0) return [];
+            ctx.font = `bold ${fontSize}px Arial, sans-serif`;
+            const words = text.trim().split(' ').filter(w => w.length > 0);
+            if (words.length === 0) return [];
+            const lines = [];
+            let currentLine = words[0] || "";
+            
+            for (let i = 1; i < words.length; i++) {
+              const word = words[i];
+              const testLine = currentLine + ' ' + word;
+              const metrics = ctx.measureText(testLine);
+              
+              if (metrics.width > maxWidth && currentLine.length > 0) {
+                lines.push(currentLine);
+                currentLine = word;
+              } else {
+                currentLine = testLine;
+              }
+            }
+            lines.push(currentLine);
+            return lines;
+          };
+          
+          // Función para verificar que las líneas quepan en el ancho
+          const checkLinesFit = (lines, maxWidth, fontSize) => {
+            ctx.font = `bold ${fontSize}px Arial, sans-serif`;
+            return lines.every(line => ctx.measureText(line).width <= maxWidth);
+          };
+          
+          // Intentar con tamaño inicial
+          let lines = wrapText(text, maxWidth, fontSize);
+          
+          // Si necesita más de 2 líneas, reducir el tamaño de fuente
+          while (lines.length > 2 && fontSize > 14) {
+            fontSize -= 1;
+            lines = wrapText(text, maxWidth, fontSize);
+          }
+          
+          // Si aún necesita más de 2 líneas, forzar a 2 líneas dividiendo por la mitad
+          if (lines.length > 2) {
+            const midPoint = Math.floor(text.length / 2);
+            // Buscar el espacio más cercano al punto medio
+            let splitIndex = midPoint;
+            for (let i = 0; i < text.length; i++) {
+              if (text[i] === ' ' && Math.abs(i - midPoint) < Math.abs(splitIndex - midPoint)) {
+                splitIndex = i;
+              }
+            }
+            lines = [
+              text.substring(0, splitIndex).trim(),
+              text.substring(splitIndex).trim()
+            ];
+          }
+          
+          // Verificar que las líneas quepan, reducir tamaño si es necesario
+          while (!checkLinesFit(lines, maxWidth, fontSize) && fontSize > 14) {
+            fontSize -= 1;
+            ctx.font = `bold ${fontSize}px Arial, sans-serif`;
+            // Re-dividir con el nuevo tamaño si es necesario
+            if (lines.some(line => ctx.measureText(line).width > maxWidth)) {
+              lines = wrapText(text, maxWidth, fontSize);
+              // Si vuelve a ser más de 2 líneas, forzar a 2 de nuevo
+              if (lines.length > 2) {
+                const midPoint = Math.floor(text.length / 2);
+                let splitIndex = midPoint;
+                for (let i = 0; i < text.length; i++) {
+                  if (text[i] === ' ' && Math.abs(i - midPoint) < Math.abs(splitIndex - midPoint)) {
+                    splitIndex = i;
+                  }
+                }
+                lines = [
+                  text.substring(0, splitIndex).trim(),
+                  text.substring(splitIndex).trim()
+                ];
+              }
+            }
+          }
+          
+          // Dibujar las líneas del nombre y guardar dónde termina
+          ctx.font = `bold ${fontSize}px Arial, sans-serif`;
+          const lineHeight = fontSize * 1.2;
+          let startY = qrSize + 60;
+          
+          lines.forEach((line, index) => {
+            ctx.fillText(line, qrSize / 2, startY + (index * lineHeight));
+          });
+          
+          // Calcular dónde terminó el nombre para la presentación
+          const nombreEndY = startY + (lines.length * lineHeight);
+          
+          // Agregar presentación debajo del nombre (negro, más pequeño)
+          const presentacionProducto = (presentacion || "").trim();
+          if (presentacionProducto && presentacionProducto.length > 0) {
+            try {
+              ctx.fillStyle = "#000000"; // Negro
+              ctx.textAlign = "center";
+              
+              const maxWidth = qrSize * 1.15;
+              let fontSizePres = 28;
+              let text = presentacionProducto;
+              
+              // Si la presentación es muy larga, reducir el tamaño
+              ctx.font = `bold ${fontSizePres}px Arial, sans-serif`;
+              while (ctx.measureText(text).width > maxWidth && fontSizePres > 16) {
+                fontSizePres -= 1;
+                ctx.font = `bold ${fontSizePres}px Arial, sans-serif`;
+              }
+              
+              // Posición Y después del nombre con un poco de espacio
+              const presentacionY = nombreEndY + 15;
+              
+              ctx.fillText(text, qrSize / 2, presentacionY);
+            } catch (err) {
+              console.error("Error dibujando presentación:", err);
+            }
+          }
+        } else {
+          // Si no hay nombre, mostrar solo la presentación
+          const presentacionProducto = (presentacion || "").trim();
+          if (presentacionProducto && presentacionProducto.length > 0) {
+            try {
+              ctx.fillStyle = "#000000"; // Negro
+              ctx.textAlign = "center";
+              ctx.font = "bold 28px Arial, sans-serif";
+              
+              const maxWidth = qrSize * 1.15;
+              let fontSizePres = 28;
+              let text = presentacionProducto;
+              
+              ctx.font = `bold ${fontSizePres}px Arial, sans-serif`;
+              while (ctx.measureText(text).width > maxWidth && fontSizePres > 16) {
+                fontSizePres -= 1;
+                ctx.font = `bold ${fontSizePres}px Arial, sans-serif`;
+              }
+              
+              ctx.fillText(text, qrSize / 2, qrSize + 60);
+            } catch (err) {
+              console.error("Error dibujando presentación sin nombre:", err);
+            }
+          }
+        }
         
         // Convertir a blob y descargar
         canvas.toBlob((blob) => {
@@ -334,9 +900,9 @@ export default function Inventario({
       pushToast?.("❌ No hay código para generar QR", "err");
       return;
     }
-    const nombreCompleto = obtenerNombreCompleto(nombre || "", presentacion || "");
     setQrModalCodigo(codigo);
-    setQrModalNombre(nombreCompleto);
+    setQrModalNombre(nombre || "");
+    setQrModalPresentacion(presentacion || "");
     setQrModalOpen(true);
     setQrModalLoading(true);
 
@@ -372,6 +938,7 @@ export default function Inventario({
     setQrModalUrl("");
     setQrModalCodigo("");
     setQrModalNombre("");
+    setQrModalPresentacion("");
     setQrModalLoading(false);
     setQrModalOpen(false);
   };
@@ -736,6 +1303,145 @@ export default function Inventario({
     }
   }
 
+  // Función para crear nuevo inventario
+  const crearNuevoInventario = async () => {
+    if (!formNuevoInventario.nombre.trim()) {
+      await showAlert("El nombre del inventario es requerido", "warning");
+      return;
+    }
+
+    if (formNuevoInventario.tipo === "copia" && !formNuevoInventario.inventario_origen_id) {
+      await showAlert("Debes seleccionar un inventario origen para copiar", "warning");
+      return;
+    }
+
+    // BARRERA: Si es copia, solo permitir copia de CEDIS
+    if (formNuevoInventario.tipo === "copia" && formNuevoInventario.inventario_origen_id !== 1) {
+      await showAlert("Solo se pueden crear inventarios como copia de CEDIS", "warning");
+      return;
+    }
+
+    try {
+      const payload = {
+        nombre: formNuevoInventario.nombre.trim(),
+        alias: formNuevoInventario.alias.trim() || null,
+        es_copia: formNuevoInventario.tipo === "copia",
+        inventario_origen_id: formNuevoInventario.tipo === "copia" ? formNuevoInventario.inventario_origen_id : null
+      };
+
+      const data = await authFetch(`${SERVER_URL}/inventario/inventarios`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      // Recargar lista de inventarios
+      const inventariosData = await authFetch(`${SERVER_URL}/inventario/inventarios`);
+      setInventarios(inventariosData);
+      
+      // Cambiar al nuevo inventario
+      setInventarioActivo(data.id);
+      
+      // Recargar productos del nuevo inventario
+      const productosData = await authFetch(`${SERVER_URL}/inventario/inventarios/${data.id}/productos`);
+      if (Array.isArray(productosData)) {
+        setInventario(filtrarProductosPorInventario(productosData));
+      }
+      
+      // Cerrar modal y limpiar formulario
+      setShowModalNuevoInventario(false);
+      setFormNuevoInventario({ nombre: "", alias: "", tipo: "nuevo", inventario_origen_id: null });
+      
+      await showAlert(
+        `✅ Inventario "${data.nombre}"${data.alias ? ` (${data.alias})` : ""} ${data.es_copia ? "copiado" : "creado"} exitosamente`, 
+        "success"
+      );
+    } catch (err) {
+      await showAlert(err.message || "Error creando inventario", "error");
+    }
+  };
+
+  // Función para eliminar inventario
+  const eliminarInventario = async () => {
+    if (!passwordEliminar.trim()) {
+      await showAlert("Debes ingresar tu contraseña de administrador", "warning");
+      return;
+    }
+
+    if (!inventarioAEliminar) {
+      await showAlert("No se ha seleccionado un inventario para eliminar", "error");
+      return;
+    }
+
+    try {
+      const data = await authFetch(`${SERVER_URL}/inventario/inventarios/${inventarioAEliminar.id}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: passwordEliminar })
+      });
+
+      // Recargar lista de inventarios
+      const inventariosData = await authFetch(`${SERVER_URL}/inventario/inventarios`);
+      setInventarios(inventariosData);
+      
+      // Si el inventario eliminado era el activo, cambiar al primero disponible
+      if (inventarioAEliminar.id === inventarioActivo) {
+        if (inventariosData.length > 0) {
+          setInventarioActivo(inventariosData[0].id);
+        } else {
+          setInventarioActivo(null);
+          setInventario([]);
+        }
+      }
+      
+      // Cerrar modal y limpiar
+      setShowModalEliminarInventario(false);
+      setInventarioAEliminar(null);
+      setPasswordEliminar("");
+      
+      await showAlert(
+        `✅ Inventario "${inventarioAEliminar.nombre}" eliminado exitosamente (${data.productos_eliminados || 0} productos eliminados)`, 
+        "success"
+      );
+    } catch (err) {
+      await showAlert(err.message || "Error eliminando inventario", "error");
+      setPasswordEliminar(""); // Limpiar contraseña en caso de error
+    }
+  };
+
+  // Función para transferir producto entre inventarios
+  const transferirProducto = async (productoId, inventarioDestinoId, lotesATransferir) => {
+    try {
+      await authFetch(`${SERVER_URL}/inventario/inventarios/transferir`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          producto_id: productoId,
+          inventario_origen_id: inventarioActivo,
+          inventario_destino_id: inventarioDestinoId,
+          lotes: lotesATransferir || []
+        })
+      });
+
+      // Recargar productos del inventario actual
+      const data = await authFetch(`${SERVER_URL}/inventario/inventarios/${inventarioActivo}/productos`);
+      if (Array.isArray(data)) {
+        setInventario(filtrarProductosPorInventario(data));
+      }
+
+      // Cerrar menú de transferencia
+      setShowMenuTransferir(false);
+      setProductoTransferir(null);
+      setLotesProductoTransferir([]);
+      setInventarioDestinoSeleccionado(null);
+      setLotesSeleccionados({});
+      
+      await showAlert("✅ Producto transferido exitosamente", "success");
+    } catch (err) {
+      await showAlert(err.message || "Error transfiriendo producto", "error");
+    }
+  };
+
   // Función para leer archivo Excel/CSV
   async function leerArchivo(file) {
     return new Promise((resolve, reject) => {
@@ -970,10 +1676,6 @@ export default function Inventario({
 
   // Función para procesar importación
   async function procesarImportacion() {
-    console.log("🟢 [IMPORTACIÓN] ===== INICIANDO PROCESO DE IMPORTACIÓN =====");
-    console.log("🟢 [IMPORTACIÓN] Total de productos a importar:", datosImportar.length);
-    console.log("🟢 [IMPORTACIÓN] Opción de importación:", opcionImportar);
-    console.log("🟢 [IMPORTACIÓN] Errores de validación:", erroresValidacion.length);
     
     // Verificar que tenemos datos
     if (!datosImportar || datosImportar.length === 0) {
@@ -984,32 +1686,25 @@ export default function Inventario({
 
     // Manejar errores de validación
     if (erroresValidacion && erroresValidacion.length > 0) {
-      console.log("⚠️ [IMPORTACIÓN] Hay errores de validación, preguntando al usuario...");
       const confirmado = await showConfirm(
         `Hay ${erroresValidacion.length} error(es) de validación. ¿Deseas continuar de todos modos?`,
         "Errores de validación"
       );
       if (!confirmado) {
-        console.log("❌ [IMPORTACIÓN] Usuario canceló por errores de validación");
         return;
       }
-      console.log("✅ [IMPORTACIÓN] Usuario confirmó continuar a pesar de errores");
     }
 
     try {
-      console.log("🟡 [IMPORTACIÓN] Estableciendo estado de importación...");
       
       // CRÍTICO: Establecer estado ANTES de cualquier await
       setImportando(true);
       setProgresoImportacion({ actual: 0, total: datosImportar.length, exitosos: 0, errores: 0 });
       
-      console.log("🟡 [IMPORTACIÓN] Estado establecido - importando debería ser true ahora");
-      console.log("🟡 [IMPORTACIÓN] Esperando 200ms para que React renderice...");
       
       // Pausa más larga para asegurar que React renderice
       await new Promise(resolve => setTimeout(resolve, 200));
       
-      console.log("🟢 [IMPORTACIÓN] Comenzando procesamiento de productos...");
       
       let exitosos = 0;
       let errores = 0;
@@ -1027,8 +1722,6 @@ export default function Inventario({
           // Debug: Verificar mapeo
           const mapeoCodigo = Object.entries(mapeoColumnas).find(([col, campo]) => campo === "codigo");
           if (!mapeoCodigo && datosImportar.length > 0) {
-            console.warn("⚠️ No se encontró mapeo para 'codigo'. Mapeos disponibles:", mapeoColumnas);
-            console.warn("⚠️ Primera fila de datos:", Object.keys(datosImportar[0] || {}));
           }
           
           // IMPORTANTE: Procesar TODAS las columnas del archivo, no solo las mapeadas
@@ -1240,8 +1933,10 @@ export default function Inventario({
           
           // Debug: Log para productos con categoría/subcategoría de importación
           if (payload.categoria && (payload.categoria.toLowerCase().includes("importación") || payload.categoria.toLowerCase().includes("importacion"))) {
-            console.log(`[DEBUG Importación] Importando producto: Código: ${payload.codigo}, Categoría: "${payload.categoria}", Subcategoría: "${payload.subcategoria || 'N/A'}"`);
           }
+
+          // IMPORTANTE: Asignar inventario_id al inventario activo
+          payload.inventario_id = inventarioActivo || 1;
 
           // Buscar si el producto ya existe
           const productoExistente = inventario.find(p => p.codigo === payload.codigo);
@@ -1249,14 +1944,12 @@ export default function Inventario({
           if (productoExistente) {
             if (opcionImportar === "crear") {
               // Saltar si solo crear nuevos
-              console.log(`[IMPORTACIÓN] Saltando producto existente (solo crear): ${payload.codigo}`);
               procesados++;
               setProgresoImportacion({ actual: procesados, total: datosImportar.length, exitosos, errores });
               continue;
             }
             
             // Actualizar producto existente
-            console.log(`[IMPORTACIÓN] Actualizando producto existente: ${payload.codigo}`);
             await authFetch(`${SERVER_URL}/inventario/${productoExistente.id}`, {
               method: "PUT",
               body: JSON.stringify(payload),
@@ -1264,14 +1957,12 @@ export default function Inventario({
           } else {
             if (opcionImportar === "actualizar") {
               // Saltar si solo actualizar
-              console.log(`[IMPORTACIÓN] Saltando producto nuevo (solo actualizar): ${payload.codigo}`);
               procesados++;
               setProgresoImportacion({ actual: procesados, total: datosImportar.length, exitosos, errores });
               continue;
             }
             
             // Crear nuevo producto
-            console.log(`[IMPORTACIÓN] Creando nuevo producto: ${payload.codigo}`);
             await authFetch(`${SERVER_URL}/inventario`, {
               method: "POST",
               body: JSON.stringify(payload),
@@ -1322,7 +2013,13 @@ export default function Inventario({
         fileInputRef.current.value = "";
       }
 
-      await cargarInventario(true);
+      // Recargar productos del inventario activo
+      if (inventarioActivo) {
+        const productosData = await authFetch(`${SERVER_URL}/inventario/inventarios/${inventarioActivo}/productos`);
+        if (Array.isArray(productosData)) {
+          setInventario(filtrarProductosPorInventario(productosData));
+        }
+      }
       
       pushToast(
         `✅ Importación completada: ${exitosos} productos procesados${errores > 0 ? `, ${errores} errores` : ""}`,
@@ -1399,7 +2096,6 @@ T 4 0 10 350 ${codigo}
           }
         } catch (e) {
           if (e.name !== 'AbortError') {
-            console.log("Web Share falló, intentando siguiente método:", e);
           } else {
             return; // Usuario canceló
           }
@@ -1432,7 +2128,6 @@ T 4 0 10 350 ${codigo}
         pushToast("📥 Archivo .cpcl descargado. Ábrelo con Printer Setup y envíalo a la impresora.", "info");
         return;
       } catch (e) {
-        console.log("Descarga falló:", e);
         pushToast("❌ Error al descargar archivo. Intenta nuevamente.", "err");
         return;
       }
@@ -1450,7 +2145,6 @@ T 4 0 10 350 ${codigo}
         if (e.message && (e.message.includes("cancelled") || e.message.includes("canceled") || e.message.includes("No device selected"))) {
           return;
         }
-        console.log("Web Bluetooth falló, intentando métodos alternativos:", e);
         // Continuar con otros métodos
       }
     }
@@ -1478,7 +2172,6 @@ T 4 0 10 350 ${codigo}
         pushToast("📥 Archivo .cpcl descargado. Ábrelo con Printer Setup y envíalo a la impresora.", "info");
         return;
       } catch (e) {
-        console.log("Descarga falló:", e);
         pushToast("❌ Error al descargar archivo. Intenta nuevamente.", "err");
       }
     }
@@ -1496,12 +2189,9 @@ T 4 0 10 350 ${codigo}
           pushToast("✅ QR Code enviado a ZQ210 vía Bluetooth", "ok");
           return;
         } else {
-          const errorMsg = result?.result || "Error desconocido";
-          console.log("AndroidPrinter.printToBluetooth falló:", errorMsg);
           // Continuar con otros métodos
         }
       } catch (e) {
-        console.log("Error con AndroidPrinter plugin:", e);
         // Continuar con otros métodos
       }
     }
@@ -1514,10 +2204,8 @@ T 4 0 10 350 ${codigo}
           pushToast("✅ QR Code enviado a ZQ210 vía Bluetooth", "ok");
           return;
         } else {
-          console.log("window.AndroidPrinter.printToBluetooth falló:", result);
         }
       } catch (e) {
-        console.log("Error con window.AndroidPrinter.printToBluetooth:", e);
       }
     }
 
@@ -1650,18 +2338,29 @@ T 4 0 10 350 ${codigo}
   }, [inventario]);
 
   const invFiltrado = useMemo(() => {
+    // BARRERA DE SEGURIDAD: Filtrar SOLO productos del inventario activo
+    const inventarioFiltrado = inventario.filter(p => {
+      const productoInventarioId = p.inventario_id || p.inventarioId || 1;
+      return productoInventarioId === inventarioActivo;
+    });
+
+    // Filtrar por agotados si está activo
+    const inventarioFiltradoPorAgotados = mostrarSoloAgotados
+      ? inventarioFiltrado.filter(p => Number(p.activo ?? 1) === 0)
+      : inventarioFiltrado;
+
     const q = invQuery.trim().toLowerCase();
 
     const base = q
-      ? inventario.filter(
-        (p) =>
-          (p.nombre || "").toLowerCase().includes(q) ||
-          (p.presentacion || "").toLowerCase().includes(q) ||
-          (p.codigo || "").toLowerCase().includes(q) ||
-          (p.categoria || "").toLowerCase().includes(q) ||
-          (p.subcategoria || "").toLowerCase().includes(q)
-      )
-      : inventario.slice();
+      ? inventarioFiltradoPorAgotados.filter(
+          (p) =>
+            (p.nombre || "").toLowerCase().includes(q) ||
+            (p.presentacion || "").toLowerCase().includes(q) ||
+            (p.codigo || "").toLowerCase().includes(q) ||
+            (p.categoria || "").toLowerCase().includes(q) ||
+            (p.subcategoria || "").toLowerCase().includes(q)
+        )
+      : inventarioFiltradoPorAgotados.slice();
 
     const grupos = {};
 
@@ -1680,7 +2379,7 @@ T 4 0 10 350 ${codigo}
       grupos,
     };
 
-  }, [inventario, invQuery]);
+  }, [inventario, invQuery, inventarioActivo, mostrarSoloAgotados]);
 
   const abrirAddInv = () => {
     const codigoInicial = invQuery.trim();
@@ -1713,10 +2412,293 @@ T 4 0 10 350 ${codigo}
   // Función para activar mostrar_en_pagina solo para productos con piezas disponibles
 
   return (
-    <div className="card">
+    <>
+    <div className="card inventario-card">
       {/* HEADER: Clases agregadas, style eliminado */}
       <div className="inventario-header">
-        <h2 className="header-title">Inventario</h2>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", marginBottom: "15px" }}>
+          <h2 className="header-title">
+            {(() => {
+              if (!inventarioActivo || inventarios.length === 0) return "Inventario";
+              const inv = inventarios.find((i) => i.id === inventarioActivo);
+              if (!inv) return "Inventario";
+              // Mostrar alias si existe, de lo contrario el nombre
+              const etiqueta = inv.alias?.trim() ? inv.alias.trim() : (inv.nombre || "Inventario");
+              return `Inventario - ${etiqueta}`;
+            })()}
+          </h2>
+          
+          {/* Menú de botones en esquina superior derecha */}
+          <div style={{ position: "relative", display: "flex", gap: "8px", alignItems: "center" }}>
+            {/* Botón directo para crear inventario */}
+            {can("inventario.crear_inventario") && (
+              <button
+                onClick={() => {
+                  setShowModalNuevoInventario(true);
+                  setShowMenuBotones(false);
+                }}
+                style={{
+                  padding: "8px 16px",
+                  background: "var(--azul-secundario, #2563eb)",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "8px",
+                  cursor: "pointer",
+                  fontSize: "0.9rem",
+                  fontWeight: "600",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  boxShadow: "0 2px 4px rgba(0,0,0,0.1)"
+                }}
+                title="Crear nuevo inventario"
+              >
+                ➕ Nuevo Inventario
+              </button>
+            )}
+            <button
+              onClick={() => setShowMenuBotones(!showMenuBotones)}
+              style={{
+                padding: "8px 16px",
+                background: "var(--azul-primario, #3b82f6)",
+                color: "white",
+                border: "none",
+                borderRadius: "8px",
+                cursor: "pointer",
+                fontSize: "0.9rem",
+                fontWeight: "500",
+                display: "flex",
+                alignItems: "center",
+                gap: "6px"
+              }}
+            >
+              ⚙️ Menú
+              {showMenuBotones ? " ▲" : " ▼"}
+            </button>
+            
+            {showMenuBotones && (
+              <div style={{
+                position: "absolute",
+                top: "100%",
+                right: 0,
+                marginTop: "8px",
+                background: "var(--fondo-card)",
+                border: "1px solid var(--borde-sutil)",
+                borderRadius: "8px",
+                boxShadow: "var(--sombra-md)",
+                padding: "8px",
+                zIndex: 1000,
+                minWidth: "200px",
+                display: "flex",
+                flexDirection: "column",
+                gap: "4px"
+              }}>
+                <button
+                  className="btn-generar-doc"
+                  onClick={() => {
+                    descargarQRsIndividuales();
+                    setShowMenuBotones(false);
+                  }}
+                  style={{
+                    width: "100%",
+                    padding: "8px 12px",
+                    background: "var(--color-secundario, #1e40af)",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "6px",
+                    cursor: "pointer",
+                    fontSize: "0.9rem",
+                    fontWeight: "500",
+                    textAlign: "left"
+                  }}
+                >
+                  📤 Descargar QRs
+                </button>
+                <button
+                  className="btn-generar-doc"
+                  onClick={() => {
+                    generarDocumentoCompleto();
+                    setShowMenuBotones(false);
+                  }}
+                  style={{
+                    width: "100%",
+                    padding: "8px 12px",
+                    background: "var(--color-primario, #3b82f6)",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "6px",
+                    cursor: "pointer",
+                    fontSize: "0.9rem",
+                    fontWeight: "500",
+                    textAlign: "left"
+                  }}
+                >
+                  📄 Generar Documento
+                </button>
+                <button
+                  className="btn-generar-doc"
+                  onClick={() => {
+                    exportarInventario();
+                    setShowMenuBotones(false);
+                  }}
+                  style={{
+                    width: "100%",
+                    padding: "8px 12px",
+                    background: "var(--color-success, #10b981)",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "6px",
+                    cursor: "pointer",
+                    fontSize: "0.9rem",
+                    fontWeight: "500",
+                    textAlign: "left"
+                  }}
+                >
+                  📥 Exportar Inventario
+                </button>
+                <button
+                  className="btn-generar-doc"
+                  onClick={() => {
+                    setShowModalImportar(true);
+                    setShowMenuBotones(false);
+                  }}
+                  style={{
+                    width: "100%",
+                    padding: "8px 12px",
+                    background: "var(--color-warning, #f59e0b)",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "6px",
+                    cursor: "pointer",
+                    fontSize: "0.9rem",
+                    fontWeight: "500",
+                    textAlign: "left"
+                  }}
+                >
+                  📤 Importar Inventario
+                </button>
+                {can("inventario.crear_inventario") && (
+                  <button
+                    onClick={() => {
+                      setShowModalNuevoInventario(true);
+                      setShowMenuBotones(false);
+                    }}
+                    style={{
+                      width: "100%",
+                      padding: "8px 12px",
+                      background: "var(--azul-secundario, #2563eb)",
+                      color: "white",
+                      border: "none",
+                      borderRadius: "6px",
+                      cursor: "pointer",
+                      fontSize: "0.9rem",
+                      fontWeight: "500",
+                      textAlign: "left",
+                      marginTop: "4px"
+                    }}
+                  >
+                    ➕ Agregar Inventario
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Pestañas de inventarios */}
+        {inventarios.length > 0 && (
+          <div style={{
+            display: "flex",
+            gap: "8px",
+            marginBottom: "15px",
+            flexWrap: "wrap",
+            borderBottom: "2px solid var(--borde-sutil)",
+            paddingBottom: "8px"
+          }}>
+            {inventarios.map((inv) => (
+              <div
+                key={inv.id}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  position: "relative"
+                }}
+              >
+                <button
+                  onClick={() => setInventarioActivo(inv.id)}
+                  style={{
+                    padding: "8px 16px",
+                    background: inventarioActivo === inv.id ? "var(--azul-primario, #3b82f6)" : "var(--fondo-input)",
+                    color: inventarioActivo === inv.id ? "white" : "var(--texto-principal)",
+                    border: `1px solid ${inventarioActivo === inv.id ? "var(--azul-primario, #3b82f6)" : "var(--borde-sutil)"}`,
+                    borderRadius: "6px",
+                    cursor: "pointer",
+                    fontSize: "0.9rem",
+                    fontWeight: inventarioActivo === inv.id ? "600" : "500",
+                    transition: "all 0.2s ease"
+                  }}
+                >
+                  {inv.nombre}{inv.alias ? ` - ${inv.alias}` : ""}
+                </button>
+                {can("inventario.crear_inventario") && inventarios.length > 1 && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setInventarioAEliminar(inv);
+                      setShowModalEliminarInventario(true);
+                    }}
+                    style={{
+                      padding: "4px 8px",
+                      background: "transparent",
+                      color: "var(--color-danger, #ef4444)",
+                      border: "1px solid var(--color-danger, #ef4444)",
+                      borderRadius: "4px",
+                      cursor: "pointer",
+                      fontSize: "0.75rem",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      minWidth: "24px",
+                      height: "24px"
+                    }}
+                    title="Eliminar inventario"
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Contadores de productos y piezas */}
+        <div style={{ 
+          display: "flex", 
+          gap: "20px", 
+          marginBottom: "15px",
+          padding: "10px 15px",
+          background: "var(--fondo-card, #ffffff)",
+          borderRadius: "8px",
+          boxShadow: "0 2px 4px rgba(0,0,0,0.05)"
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <span style={{ fontSize: "0.9rem", color: "var(--texto-secundario, #666)", fontWeight: "500" }}>
+              Total Productos:
+            </span>
+            <span style={{ fontSize: "1.1rem", color: "var(--color-primario, #3b82f6)", fontWeight: "600" }}>
+              {filtrarProductosPorInventario(inventario).length}
+            </span>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <span style={{ fontSize: "0.9rem", color: "var(--texto-secundario, #666)", fontWeight: "500" }}>
+              Total Piezas:
+            </span>
+            <span style={{ fontSize: "1.1rem", color: "var(--color-success, #10b981)", fontWeight: "600" }}>
+              {filtrarProductosPorInventario(inventario).reduce((sum, p) => sum + (p.total_piezas_general || 0), 0).toLocaleString()}
+            </span>
+          </div>
+        </div>
 
         {/* Switches discretos y estéticos */}
         <div className="inventario-switches-container">
@@ -1824,12 +2806,13 @@ T 4 0 10 350 ${codigo}
           </div>
         </div>
 
-        <div className="search-container">
+        <div className="search-container" style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
           <input
             className="search-input"
             placeholder="Buscar (código, nombre, presentación, categoría o subcategoría)"
             value={invQuery}
             onChange={(e) => setInvQuery(e.target.value)}
+            style={{ flex: 1 }}
           />
           {!!invQuery && (
             <button onClick={() => setInvQuery("")} className="btn-limpiar">
@@ -1837,76 +2820,22 @@ T 4 0 10 350 ${codigo}
             </button>
           )}
           <button
-            className="btn-generar-doc"
-            onClick={descargarQRsIndividuales}
-            title="Descargar todos los QRs individuales con código"
+            onClick={() => setMostrarSoloAgotados(!mostrarSoloAgotados)}
             style={{
-              marginLeft: "10px",
-              padding: "8px 16px",
-              background: "var(--color-secundario, #1e40af)",
-              color: "white",
-              border: "none",
-              borderRadius: "6px",
-              cursor: "pointer",
-              fontSize: "0.9rem",
-              fontWeight: "500",
+              padding: '10px 16px',
+              background: mostrarSoloAgotados ? '#ef4444' : 'var(--fondo-input)',
+              color: mostrarSoloAgotados ? '#fff' : 'var(--texto-principal)',
+              border: `1px solid ${mostrarSoloAgotados ? '#ef4444' : 'var(--borde-medio)'}`,
+              borderRadius: 'var(--radio-full)',
+              cursor: 'pointer',
+              fontSize: '0.9rem',
+              fontWeight: '500',
+              whiteSpace: 'nowrap',
+              transition: 'all 0.2s ease'
             }}
+            title={mostrarSoloAgotados ? "Mostrar todos los productos" : "Mostrar solo productos agotados"}
           >
-            📱 Descargar QRs
-          </button>
-          <button
-            className="btn-generar-doc"
-            onClick={generarDocumentoCompleto}
-            title="Generar documento Word con todos los productos (nombre, presentación y QR)"
-            style={{
-              marginLeft: "10px",
-              padding: "8px 16px",
-              background: "var(--color-primario, #3b82f6)",
-              color: "white",
-              border: "none",
-              borderRadius: "6px",
-              cursor: "pointer",
-              fontSize: "0.9rem",
-              fontWeight: "500",
-            }}
-          >
-            📄 Generar Documento
-          </button>
-          <button
-            className="btn-generar-doc"
-            onClick={exportarInventario}
-            title="Exportar inventario a Excel"
-            style={{
-              marginLeft: "10px",
-              padding: "8px 16px",
-              background: "var(--color-success, #10b981)",
-              color: "white",
-              border: "none",
-              borderRadius: "6px",
-              cursor: "pointer",
-              fontSize: "0.9rem",
-              fontWeight: "500",
-            }}
-          >
-            📥 Exportar Inventario
-          </button>
-          <button
-            className="btn-generar-doc"
-            onClick={() => setShowModalImportar(true)}
-            title="Importar inventario desde Excel o CSV"
-            style={{
-              marginLeft: "10px",
-              padding: "8px 16px",
-              background: "var(--color-warning, #f59e0b)",
-              color: "white",
-              border: "none",
-              borderRadius: "6px",
-              cursor: "pointer",
-              fontSize: "0.9rem",
-              fontWeight: "500",
-            }}
-          >
-            📤 Importar Inventario
+            {mostrarSoloAgotados ? '✅ Agotados' : '⚠️ Agotados'}
           </button>
         </div>
 
@@ -1947,6 +2876,8 @@ T 4 0 10 350 ${codigo}
                         <th>Categoría</th>
                         <th>Pzs/Caja</th>
                         <th>Lote</th>
+                        <th style={{ textAlign: "center" }}>Pzs Lote Activo</th>
+                        <th style={{ textAlign: "center" }}>Total Pzs General</th>
                         <th style={{ textAlign: "center" }}>Mostrar</th>
                         <th>Códigos</th>
                         <th>Editar</th>
@@ -2015,13 +2946,13 @@ T 4 0 10 350 ${codigo}
                               </button>
                               <button
                                 className="btn-print"
-                                onClick={() => generarQRIndividual(p.codigo, p.nombre, p.presentacion)}
-                                title="Generar y descargar QR"
+                                onClick={() => abrirCompartir(p)}
+                                title="Compartir producto"
                                 style={{
-                                  background: "var(--color-secundario, #1e40af)",
+                                  background: "var(--color-success, #10b981)",
                                 }}
                               >
-                                📱
+                                📤
                               </button>
                             </div>
                           </td>
@@ -2036,15 +2967,97 @@ T 4 0 10 350 ${codigo}
                               {p.codigo}
                             </button>
                           </td>
-                          <td>{p.nombre}</td>
+                          <td 
+                            onClick={async () => {
+                              if (inventarios.length > 1) {
+                                setProductoTransferir(p);
+                                // Cargar lotes del producto
+                                try {
+                        const lotes = await authFetch(`${SERVER_URL}/inventario/lotes/${p.codigo}/completo?inventario_id=${inventarioActivo}`);
+                                  setLotesProductoTransferir(Array.isArray(lotes) ? lotes : []);
+                                } catch (err) {
+                                  console.error("Error cargando lotes:", err);
+                                  setLotesProductoTransferir([]);
+                                }
+                                setInventarioDestinoSeleccionado(null);
+                                setLotesSeleccionados({});
+                                setShowMenuTransferir(true);
+                              }
+                            }}
+                            style={{
+                              cursor: inventarios.length > 1 ? "pointer" : "default",
+                              color: inventarios.length > 1 ? "var(--azul-primario, #3b82f6)" : "inherit",
+                              textDecoration: inventarios.length > 1 ? "underline" : "none",
+                              fontWeight: inventarios.length > 1 ? "600" : "normal"
+                            }}
+                            title={inventarios.length > 1 ? "Clic para transferir producto a otro inventario" : ""}
+                          >
+                            {p.nombre}
+                          </td>
                           <td>{p.presentacion || "-"}</td>
                           <td>{p.categoria}</td>
                           <td>{p.piezas_por_caja || "-"}</td>
 
                           <td>
-                            <div className="lote-display-cell">
+                            <div 
+                              className="lote-display-cell"
+                              onClick={async () => {
+                                // Abrir modal de editar y cambiar a pestaña de lotes
+                                setEditInv({
+                                  id: p.id,
+                                  codigo: p.codigo,
+                                  nombre: p.nombre || "",
+                                  presentacion: p.presentacion || "",
+                                  categoria: p.categoria || "",
+                                  subcategoria: p.subcategoria || "",
+                                  lote: p.lote || "",
+                                  nuevoLote: "",
+                                  descripcion: p.descripcion || "",
+                                  precio: p.precio || "",
+                                  precio_compra: p.precio_compra || "",
+                                  proveedor: p.proveedor || "",
+                                  marca: p.marca || "",
+                                  codigo_barras: p.codigo_barras || "",
+                                  sku: p.sku || "",
+                                  stock_minimo: p.stock_minimo || "",
+                                  stock_maximo: p.stock_maximo || "",
+                                  ubicacion: p.ubicacion || "",
+                                  unidad_medida: p.unidad_medida || "",
+                                  peso: p.peso || "",
+                                  dimensiones: p.dimensiones || "",
+                                  fecha_vencimiento: p.fecha_vencimiento || "",
+                                  activo: p.activo !== undefined ? p.activo : true,
+                                  inventario_id: p.inventario_id || inventarioActivo || 1,
+                                });
+
+                                setPiezasActual(
+                                  p.piezas_por_caja > 0
+                                    ? p.piezas_por_caja.toString()
+                                    : ""
+                                );
+
+                                // Cambiar directamente a la pestaña de lotes
+                                setTabActivaModal("lotes");
+                                setFotosProducto([]);
+                                setImagenPrincipal(null);
+                                setNuevoLote({ lote: "", cantidad_piezas: "", laboratorio: "", caducidad: "" });
+                                setLotesProducto([]);
+                                setShowEditInv(true);
+                                
+                                // Cargar lotes del servidor automáticamente
+                                await cargarLotesDelProducto(p.codigo, inventarioActivo);
+                              }}
+                              style={{ cursor: "pointer", userSelect: "none" }}
+                              title="Clic para ver/editar lotes"
+                            >
                               {p.lote || "- Sin lote -"}
                             </div>
+                          </td>
+                          <td style={{ textAlign: "center", fontWeight: "600", color: "var(--color-primario, #3b82f6)", fontSize: "0.95rem" }}>
+                            {p.piezas_lote_activo || 0}
+                          </td>
+                          <td style={{ textAlign: "center", fontWeight: "600", color: "var(--texto-principal, #333)", fontSize: "0.95rem" }}>
+                            {p.total_piezas_general || 0}
                           </td>
 
                           <td style={{ textAlign: "center" }}>
@@ -2181,6 +3194,7 @@ T 4 0 10 350 ${codigo}
                                   dimensiones: p.dimensiones || "",
                                   fecha_vencimiento: p.fecha_vencimiento || "",
                                   activo: p.activo !== undefined ? p.activo : true,
+                                  inventario_id: p.inventario_id || inventarioActivo || 1,
                                 });
 
                                 setPiezasActual(
@@ -2197,7 +3211,7 @@ T 4 0 10 350 ${codigo}
                                 setShowEditInv(true);
                                 
                                 // Cargar lotes del servidor automáticamente
-                                cargarLotesDelProducto(p.codigo);
+                                cargarLotesDelProducto(p.codigo, inventarioActivo);
                               }}
                             >
                               Editar
@@ -2343,10 +3357,6 @@ T 4 0 10 350 ${codigo}
               </button>
             </div>
             <div className="modal-body modal-qr-body">
-              <div className="modal-qr-info">
-                <div className="modal-qr-codigo">{qrModalCodigo}</div>
-                {qrModalNombre && <div className="modal-qr-nombre">{qrModalNombre}</div>}
-              </div>
               <div className="modal-qr-box">
                 {qrModalLoading ? (
                   <div className="modal-qr-loading">Generando QR…</div>
@@ -2356,16 +3366,230 @@ T 4 0 10 350 ${codigo}
                   <div className="modal-qr-error">No se pudo cargar el QR</div>
                 )}
               </div>
+              <div className="modal-qr-info">
+                <div className="modal-qr-codigo">{qrModalCodigo}</div>
+                {qrModalNombre && <div className="modal-qr-nombre">{qrModalNombre}</div>}
+              </div>
               {qrModalUrl && (
                 <button
                   className="btn-primary"
-                  onClick={() => {
-                    const a = document.createElement("a");
-                    a.href = qrModalUrl;
-                    a.download = `QR_${qrModalCodigo}.png`;
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
+                  onClick={async () => {
+                    try {
+                      // Crear canvas con QR, código y nombre
+                      const img = new Image();
+                      img.crossOrigin = "anonymous";
+                      
+                      await new Promise((resolve, reject) => {
+                        img.onload = resolve;
+                        img.onerror = reject;
+                        img.src = qrModalUrl;
+                      });
+                      
+                      const canvas = document.createElement("canvas");
+                      const qrSize = 400;
+                      const paddingBottom = 180; // Espacio extra para nombre (2 líneas) y presentación
+                      const borderRadius = 20; // Bordes redondeados
+                      canvas.width = qrSize;
+                      canvas.height = qrSize + paddingBottom;
+                      const ctx = canvas.getContext("2d");
+                      
+                      // Función helper para dibujar rectángulo redondeado
+                      const drawRoundedRect = (x, y, width, height, radius) => {
+                        ctx.beginPath();
+                        ctx.moveTo(x + radius, y);
+                        ctx.lineTo(x + width - radius, y);
+                        ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+                        ctx.lineTo(x + width, y + height - radius);
+                        ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+                        ctx.lineTo(x + radius, y + height);
+                        ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+                        ctx.lineTo(x, y + radius);
+                        ctx.quadraticCurveTo(x, y, x + radius, y);
+                        ctx.closePath();
+                      };
+                      
+                      // Fondo blanco con bordes redondeados
+                      ctx.fillStyle = "#FFFFFF";
+                      drawRoundedRect(0, 0, canvas.width, canvas.height, borderRadius);
+                      ctx.fill();
+                      
+                      // Dibujar QR con bordes redondeados
+                      ctx.save();
+                      drawRoundedRect(0, 0, qrSize, qrSize, borderRadius);
+                      ctx.clip();
+                      ctx.drawImage(img, 0, 0, qrSize, qrSize);
+                      ctx.restore();
+                      
+                      // Agregar nombre del producto debajo del QR (negro, máximo 2 líneas si es necesario)
+                      const nombreModal = (qrModalNombre || "").trim();
+                      if (nombreModal && nombreModal.length > 0) {
+                        ctx.fillStyle = "#000000";
+                        ctx.textAlign = "center";
+                        
+                        const maxWidth = qrSize * 1.15; // Permitir que sea un poco más ancho que el QR
+                        let fontSize = 24; // Tamaño inicial más pequeño
+                        let text = nombreModal;
+                        
+                        // Función para dividir texto en líneas
+                        const wrapText = (text, maxWidth, fontSize) => {
+                          if (!text || text.trim().length === 0) return [];
+                          ctx.font = `bold ${fontSize}px Arial, sans-serif`;
+                          const words = text.trim().split(' ').filter(w => w.length > 0);
+                          if (words.length === 0) return [];
+                          const lines = [];
+                          let currentLine = words[0] || "";
+                          
+                          for (let i = 1; i < words.length; i++) {
+                            const word = words[i];
+                            const testLine = currentLine + ' ' + word;
+                            const metrics = ctx.measureText(testLine);
+                            
+                            if (metrics.width > maxWidth && currentLine.length > 0) {
+                              lines.push(currentLine);
+                              currentLine = word;
+                            } else {
+                              currentLine = testLine;
+                            }
+                          }
+                          lines.push(currentLine);
+                          return lines;
+                        };
+                        
+                        // Función para verificar que las líneas quepan en el ancho
+                        const checkLinesFit = (lines, maxWidth, fontSize) => {
+                          ctx.font = `bold ${fontSize}px Arial, sans-serif`;
+                          return lines.every(line => ctx.measureText(line).width <= maxWidth);
+                        };
+                        
+                        // Intentar con tamaño inicial
+                        let lines = wrapText(text, maxWidth, fontSize);
+                        
+                        // Si necesita más de 2 líneas, reducir el tamaño de fuente
+                        while (lines.length > 2 && fontSize > 14) {
+                          fontSize -= 1;
+                          lines = wrapText(text, maxWidth, fontSize);
+                        }
+                        
+                        // Si aún necesita más de 2 líneas, forzar a 2 líneas dividiendo por la mitad
+                        if (lines.length > 2) {
+                          const midPoint = Math.floor(text.length / 2);
+                          // Buscar el espacio más cercano al punto medio
+                          let splitIndex = midPoint;
+                          for (let i = 0; i < text.length; i++) {
+                            if (text[i] === ' ' && Math.abs(i - midPoint) < Math.abs(splitIndex - midPoint)) {
+                              splitIndex = i;
+                            }
+                          }
+                          lines = [
+                            text.substring(0, splitIndex).trim(),
+                            text.substring(splitIndex).trim()
+                          ];
+                        }
+                        
+                        // Verificar que las líneas quepan, reducir tamaño si es necesario
+                        while (!checkLinesFit(lines, maxWidth, fontSize) && fontSize > 14) {
+                          fontSize -= 1;
+                          ctx.font = `bold ${fontSize}px Arial, sans-serif`;
+                          // Re-dividir con el nuevo tamaño si es necesario
+                          if (lines.some(line => ctx.measureText(line).width > maxWidth)) {
+                            lines = wrapText(text, maxWidth, fontSize);
+                            // Si vuelve a ser más de 2 líneas, forzar a 2 de nuevo
+                            if (lines.length > 2) {
+                              const midPoint = Math.floor(text.length / 2);
+                              let splitIndex = midPoint;
+                              for (let i = 0; i < text.length; i++) {
+                                if (text[i] === ' ' && Math.abs(i - midPoint) < Math.abs(splitIndex - midPoint)) {
+                                  splitIndex = i;
+                                }
+                              }
+                              lines = [
+                                text.substring(0, splitIndex).trim(),
+                                text.substring(splitIndex).trim()
+                              ];
+                            }
+                          }
+                        }
+                        
+                        // Dibujar las líneas del nombre y guardar dónde termina
+                        ctx.font = `bold ${fontSize}px Arial, sans-serif`;
+                        const lineHeight = fontSize * 1.2;
+                        let startY = qrSize + 60;
+                        
+                        lines.forEach((line, index) => {
+                          ctx.fillText(line, qrSize / 2, startY + (index * lineHeight));
+                        });
+                        
+                        // Calcular dónde terminó el nombre para la presentación
+                        const nombreEndY = startY + (lines.length * lineHeight);
+                        
+                        // Agregar presentación debajo del nombre (negro, más pequeño)
+                        const presentacionModal = (qrModalPresentacion || "").trim();
+                        if (presentacionModal && presentacionModal.length > 0) {
+                          try {
+                            ctx.fillStyle = "#000000"; // Negro
+                            ctx.textAlign = "center";
+                            
+                            const maxWidth = qrSize * 1.15;
+                            let fontSizePres = 28;
+                            let text = presentacionModal;
+                            
+                            // Si la presentación es muy larga, reducir el tamaño
+                            ctx.font = `bold ${fontSizePres}px Arial, sans-serif`;
+                            while (ctx.measureText(text).width > maxWidth && fontSizePres > 16) {
+                              fontSizePres -= 1;
+                              ctx.font = `bold ${fontSizePres}px Arial, sans-serif`;
+                            }
+                            
+                            // Posición Y después del nombre con un poco de espacio
+                            const presentacionY = nombreEndY + 15;
+                            
+                            ctx.fillText(text, qrSize / 2, presentacionY);
+                          } catch (err) {
+                            console.error("Error dibujando presentación en modal:", err);
+                          }
+                        }
+                      } else {
+                        // Si no hay nombre, mostrar solo la presentación
+                        const presentacionModal = (qrModalPresentacion || "").trim();
+                        if (presentacionModal && presentacionModal.length > 0) {
+                          try {
+                            ctx.fillStyle = "#000000"; // Negro
+                            ctx.textAlign = "center";
+                            ctx.font = "bold 28px Arial, sans-serif";
+                            
+                            const maxWidth = qrSize * 1.15;
+                            let fontSizePres = 28;
+                            let text = presentacionModal;
+                            
+                            ctx.font = `bold ${fontSizePres}px Arial, sans-serif`;
+                            while (ctx.measureText(text).width > maxWidth && fontSizePres > 16) {
+                              fontSizePres -= 1;
+                              ctx.font = `bold ${fontSizePres}px Arial, sans-serif`;
+                            }
+                            
+                            ctx.fillText(text, qrSize / 2, qrSize + 60);
+                          } catch (err) {
+                            console.error("Error dibujando presentación sin nombre en modal:", err);
+                          }
+                        }
+                      }
+                      
+                      // Descargar
+                      canvas.toBlob((blob) => {
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement("a");
+                        a.href = url;
+                        a.download = `QR_${qrModalCodigo}.png`;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                        pushToast("✅ QR descargado correctamente", "ok");
+                      }, "image/png");
+                    } catch (err) {
+                      console.error("Error generando QR con texto:", err);
+                      pushToast("❌ Error al generar QR", "err");
+                    }
                   }}
                 >
                   Descargar QR
@@ -2387,6 +3611,7 @@ T 4 0 10 350 ${codigo}
           setInventario={setInventario}
           pushToast={pushToast}
           setShowAddInv={setShowAddInv}
+          inventarioActivo={inventarioActivo}
         />
       )}
 
@@ -2583,14 +3808,22 @@ T 4 0 10 350 ${codigo}
                     {/* Formulario para agregar nuevo lote */}
                     <div className="form-group" style={{ marginBottom: "20px", padding: "15px", background: "var(--fondo-card)", borderRadius: "8px" }}>
                       <h5 style={{ marginBottom: "10px" }}>Agregar nuevo lote</h5>
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: "10px", alignItems: "end" }}>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr auto", gap: "10px", alignItems: "end" }}>
                         <div>
                           <label>Lote:</label>
                           <input
                             type="text"
                             placeholder="Ej: L001"
-                            value={nuevoLote.lote}
-                            onChange={(e) => setNuevoLote({ ...nuevoLote, lote: e.target.value })}
+                            value={nuevoLote.lote || ""}
+                            onChange={(e) => setNuevoLote({ ...nuevoLote, lote: e.target.value || "" })}
+                          />
+                        </div>
+                        <div>
+                          <label>Caducidad:</label>
+                          <input
+                            type="date"
+                            value={nuevoLote.caducidad || ""}
+                            onChange={(e) => setNuevoLote({ ...nuevoLote, caducidad: e.target.value || "" })}
                           />
                         </div>
                         <div>
@@ -2598,8 +3831,18 @@ T 4 0 10 350 ${codigo}
                           <input
                             type="text"
                             placeholder="Laboratorio"
-                            value={nuevoLote.laboratorio}
-                            onChange={(e) => setNuevoLote({ ...nuevoLote, laboratorio: e.target.value })}
+                            value={nuevoLote.laboratorio || ""}
+                            onChange={(e) => setNuevoLote({ ...nuevoLote, laboratorio: e.target.value || "" })}
+                          />
+                        </div>
+                        <div>
+                          <label>Piezas:</label>
+                          <input
+                            type="number"
+                            placeholder="Cantidad"
+                            min="0"
+                            value={nuevoLote.cantidad_piezas || ""}
+                            onChange={(e) => setNuevoLote({ ...nuevoLote, cantidad_piezas: e.target.value || "" })}
                           />
                         </div>
                         <button
@@ -2614,24 +3857,34 @@ T 4 0 10 350 ${codigo}
                               setCargandoLotes(true);
                               // Guardar el valor del lote antes de resetear
                               const loteAgregado = nuevoLote.lote.trim();
-                              // 🔥 SOLO AGREGAR EL LOTE SIN PIEZAS (como pidió el usuario)
+                              const cantidadPiezas = parseInt(nuevoLote.cantidad_piezas) || 0;
                               await authFetch(`${SERVER_URL}/inventario/lotes/${editInv.codigo}/nuevo`, {
                                 method: "POST",
                                 body: JSON.stringify({
                                   lote: loteAgregado,
-                                  cantidad_piezas: 0, // 🔥 Siempre 0 - solo agregar el lote, no piezas
+                                  cantidad_piezas: cantidadPiezas,
+                                  caducidad: (nuevoLote.caducidad && nuevoLote.caducidad.trim()) || null,
                                   laboratorio: (nuevoLote.laboratorio && nuevoLote.laboratorio.trim()) || null,
                                   activo: true, // Al agregar desde aquí, se marca como activo
+                                  inventario_id: inventarioActivo || editInv?.inventario_id || 1,
                                 }),
                               });
                               
                               pushToast("✅ Lote agregado y marcado como activo", "ok");
                               
                               // Recargar todos los lotes del servidor para asegurar que tenemos los datos correctos
-                              await cargarLotesDelProducto(editInv.codigo);
+          await cargarLotesDelProducto(editInv.codigo, editInv?.inventario_id || inventarioActivo);
+                              
+                              // Recargar productos del inventario activo
+                              if (inventarioActivo) {
+      const productosData = await authFetch(`${SERVER_URL}/inventario/inventarios/${inventarioActivo}/productos`);
+      if (Array.isArray(productosData)) {
+        setInventario(filtrarProductosPorInventario(productosData));
+      }
+                              }
                               
                               // Limpiar el formulario
-                              setNuevoLote({ lote: "", cantidad_piezas: "", laboratorio: "" });
+                              setNuevoLote({ lote: "", cantidad_piezas: "", laboratorio: "", caducidad: "" });
                               
                               // Actualizar el lote en editInv usando el valor guardado
                               setEditInv({ ...editInv, lote: loteAgregado });
@@ -2671,6 +3924,7 @@ T 4 0 10 350 ${codigo}
                                 <th>Lote</th>
                                 <th>Activo</th>
                                 <th>Cantidad</th>
+                                <th>Caducidad</th>
                                 <th>Laboratorio</th>
                                 <th>Fecha ingreso</th>
                                 <th>Acciones</th>
@@ -2711,7 +3965,15 @@ T 4 0 10 350 ${codigo}
                                             pushToast(`✅ Lote ${nuevoEstado ? 'activado' : 'desactivado'} correctamente`, "ok");
                                             
                                             // Recargar lotes del servidor para asegurar sincronización
-                                            await cargarLotesDelProducto(editInv.codigo);
+                              await cargarLotesDelProducto(editInv.codigo, editInv?.inventario_id || inventarioActivo);
+                                            
+                                            // Recargar productos del inventario activo
+                                            if (inventarioActivo) {
+      const productosData = await authFetch(`${SERVER_URL}/inventario/inventarios/${inventarioActivo}/productos`);
+      if (Array.isArray(productosData)) {
+        setInventario(filtrarProductosPorInventario(productosData));
+      }
+                                            }
                                           } catch (err) {
                                             console.error("Error actualizando lote:", err);
                                             const errorMsg = err.message || "Error al actualizar lote";
@@ -2775,12 +4037,23 @@ T 4 0 10 350 ${codigo}
                                             body: JSON.stringify({
                                               lote: l.lote,
                                               cantidad_piezas: nuevaCantidad,
+                                              caducidad: l.caducidad || null,
+                                              laboratorio: l.laboratorio || null,
                                               activo: l.activo === 1,
+                                              inventario_id: editInv?.inventario_id || inventarioActivo || 1,
                                             }),
                                           });
                                           
                                           // Recargar lotes desde el servidor para asegurar sincronización
-                                          await cargarLotesDelProducto(editInv.codigo);
+                                          await cargarLotesDelProducto(editInv.codigo, editInv?.inventario_id || inventarioActivo);
+                                          
+                                          // Recargar productos del inventario activo
+                                          if (inventarioActivo) {
+      const productosData = await authFetch(`${SERVER_URL}/inventario/inventarios/${inventarioActivo}/productos`);
+      if (Array.isArray(productosData)) {
+        setInventario(filtrarProductosPorInventario(productosData));
+      }
+                                          }
                                           
                                           pushToast("✅ Cantidad actualizada", "ok");
                                         } catch (err) {
@@ -2803,6 +4076,70 @@ T 4 0 10 350 ${codigo}
                                       placeholder="0"
                                     />
                                   </td>
+                                  <td className="lote-caducidad-cell">
+                                    <input
+                                      type="date"
+                                      value={l.caducidad ? l.caducidad.split('T')[0] : ""}
+                                      onChange={(e) => {
+                                        const nuevaCaducidad = e.target.value;
+                                        setLotesProducto(prev => prev.map(item => 
+                                          item.id === l.id ? { ...item, caducidad: nuevaCaducidad } : item
+                                        ));
+                                      }}
+                                      onBlur={async (e) => {
+                                        const nuevaCaducidad = e.target.value.trim();
+                                        const caducidadActual = l.caducidad ? l.caducidad.split('T')[0] : "";
+                                        if (nuevaCaducidad === caducidadActual) return;
+                                        
+                                        try {
+                                          await authFetch(`${SERVER_URL}/inventario/lotes/${editInv.codigo}/${l.id}`, {
+                                            method: "PUT",
+                                            body: JSON.stringify({
+                                              lote: l.lote,
+                                              cantidad_piezas: l.cantidad_piezas || 0,
+                                              caducidad: nuevaCaducidad || null,
+                                              laboratorio: l.laboratorio || null,
+                                              activo: l.activo === 1,
+                                            }),
+                                          });
+                                          pushToast("✅ Caducidad actualizada", "ok");
+                                          
+                                          // Actualizar el estado local
+                                          setLotesProducto(prev => prev.map(item => 
+                                            item.id === l.id ? { ...item, caducidad: nuevaCaducidad || null } : item
+                                          ));
+                                          
+                                          // Recargar para sincronizar
+                                          await cargarLotesDelProducto(editInv.codigo, editInv?.inventario_id || inventarioActivo);
+                                          
+                                          // Recargar productos del inventario activo
+                                          if (inventarioActivo) {
+      const productosData = await authFetch(`${SERVER_URL}/inventario/inventarios/${inventarioActivo}/productos`);
+      if (Array.isArray(productosData)) {
+        setInventario(filtrarProductosPorInventario(productosData));
+      }
+                                          }
+                                        } catch (err) {
+                                          console.error("Error actualizando caducidad:", err);
+                                          pushToast("❌ Error al actualizar caducidad", "err");
+                                          
+                                          // Restaurar valor original
+                                          setLotesProducto(prev => prev.map(item => 
+                                            item.id === l.id ? { ...item, caducidad: l.caducidad } : item
+                                          ));
+                                        }
+                                      }}
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Enter") {
+                                          e.target.blur();
+                                        }
+                                      }}
+                                      className="input-caducidad-inline"
+                                      disabled={cargandoLotes}
+                                      style={{ width: '140px', fontSize: '0.9rem', padding: '7px 10px' }}
+                                      placeholder="Caducidad"
+                                    />
+                                  </td>
                                   <td className="lote-laboratorio-cell">
                                     <input
                                       type="text"
@@ -2823,6 +4160,7 @@ T 4 0 10 350 ${codigo}
                                             body: JSON.stringify({
                                               lote: l.lote,
                                               cantidad_piezas: l.cantidad_piezas || 0,
+                                              caducidad: l.caducidad || null,
                                               laboratorio: nuevoLaboratorio,
                                               activo: l.activo === 1,
                                             }),
@@ -2864,34 +4202,67 @@ T 4 0 10 350 ${codigo}
                                     </div>
                                   </td>
                                   <td className="lote-acciones-cell">
-                                    <button
-                                      className="btn-delete-row"
-                                      onClick={async () => {
-                                        const confirmado = await showConfirm(`¿Eliminar el lote "${l.lote}"?`, "Confirmar eliminación");
-                                        if (!confirmado) return;
-                                        
-                                        try {
-                                          setCargandoLotes(true);
-                                          await authFetch(`${SERVER_URL}/inventario/lotes/${editInv.codigo}/${l.id}/eliminar`, {
-                                            method: "DELETE",
-                                          });
+                                    <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                                      <button
+                                        className="btn-edit-row"
+                                        onClick={() => {
+                                          setLoteEditando({ ...l });
+                                          setShowModalEditarLote(true);
+                                        }}
+                                        disabled={cargandoLotes}
+                                        title="Editar lote"
+                                        style={{ padding: "6px 10px", fontSize: "0.85rem" }}
+                                      >
+                                        ✏️ Editar
+                                      </button>
+                                      <button
+                                        className="btn-info-row"
+                                        onClick={async () => {
+                                          setLoteHistorial(l);
+                                          try {
+                                            const historial = await authFetch(`${SERVER_URL}/inventario/lotes/${l.id}/historial`);
+                                            setHistorialLote(historial || []);
+                                            setShowModalHistorialLote(true);
+                                          } catch (err) {
+                                            console.error("Error cargando historial:", err);
+                                            pushToast("❌ Error al cargar historial", "err");
+                                          }
+                                        }}
+                                        disabled={cargandoLotes}
+                                        title="Ver historial"
+                                        style={{ padding: "6px 10px", fontSize: "0.85rem" }}
+                                      >
+                                        📋 Historial
+                                      </button>
+                                      <button
+                                        className="btn-delete-row"
+                                        onClick={async () => {
+                                          const confirmado = await showConfirm(`¿Eliminar el lote "${l.lote}"?`, "Confirmar eliminación");
+                                          if (!confirmado) return;
                                           
-                                          pushToast("✅ Lote eliminado", "ok");
-                                          
-                                          // Recargar lotes del servidor para asegurar sincronización
-                                          await cargarLotesDelProducto(editInv.codigo);
-                                        } catch (err) {
-                                          console.error("Error eliminando lote:", err);
-                                          pushToast("❌ Error al eliminar lote", "err");
-                                        } finally {
-                                          setCargandoLotes(false);
-                                        }
-                                      }}
-                                      disabled={cargandoLotes}
-                                      title="Eliminar lote"
-                                    >
-                                      🗑️
-                                    </button>
+                                          try {
+                                            setCargandoLotes(true);
+                                            await authFetch(`${SERVER_URL}/inventario/lotes/${editInv.codigo}/${l.id}/eliminar`, {
+                                              method: "DELETE",
+                                            });
+                                            
+                                            pushToast("✅ Lote eliminado", "ok");
+                                            
+                                            // Recargar lotes del servidor para asegurar sincronización
+                                            await cargarLotesDelProducto(editInv.codigo);
+                                          } catch (err) {
+                                            console.error("Error eliminando lote:", err);
+                                            pushToast("❌ Error al eliminar lote", "err");
+                                          } finally {
+                                            setCargandoLotes(false);
+                                          }
+                                        }}
+                                        disabled={cargandoLotes}
+                                        title="Eliminar lote"
+                                      >
+                                        🗑️
+                                      </button>
+                                    </div>
                                   </td>
                                 </tr>
                               ))}
@@ -3104,6 +4475,200 @@ T 4 0 10 350 ${codigo}
         </div>
       )}
 
+      {/* ========== MODAL EDITAR LOTE ========== */}
+      {showModalEditarLote && loteEditando && (
+        <div className="modal-overlay" onClick={() => {
+          setShowModalEditarLote(false);
+          setLoteEditando(null);
+        }}>
+          <div className="modal modal-sm" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>✏️ Editar Lote: {loteEditando.lote}</h3>
+              <button className="modal-close" onClick={() => {
+                setShowModalEditarLote(false);
+                setLoteEditando(null);
+              }}>×</button>
+            </div>
+            <div className="modal-body">
+              <label>
+                Cantidad de Piezas Actual:
+                <input
+                  type="number"
+                  min="0"
+                  value={loteEditando.cantidad_piezas || 0}
+                  onChange={(e) => setLoteEditando({
+                    ...loteEditando,
+                    cantidad_piezas: parseInt(e.target.value) || 0
+                  })}
+                  style={{ width: "100%", padding: "8px", marginTop: "8px" }}
+                />
+              </label>
+              <label style={{ marginTop: "15px" }}>
+                Motivo del Cambio *
+                <select
+                  value={loteEditando.motivo || ""}
+                  onChange={(e) => setLoteEditando({
+                    ...loteEditando,
+                    motivo: e.target.value
+                  })}
+                  style={{ width: "100%", padding: "8px", marginTop: "8px" }}
+                >
+                  <option value="">Selecciona un motivo</option>
+                  <option value="Agregar piezas">Agregar piezas</option>
+                  <option value="Descontar piezas">Descontar piezas</option>
+                  <option value="Transferencia">Transferencia</option>
+                  <option value="Ajuste">Ajuste</option>
+                  <option value="Corrección">Corrección</option>
+                </select>
+              </label>
+              <label style={{ marginTop: "15px" }}>
+                Observaciones (opcional)
+                <textarea
+                  value={loteEditando.observaciones || ""}
+                  onChange={(e) => setLoteEditando({
+                    ...loteEditando,
+                    observaciones: e.target.value
+                  })}
+                  placeholder="Notas adicionales sobre el cambio..."
+                  style={{ width: "100%", padding: "8px", marginTop: "8px", minHeight: "80px", resize: "vertical" }}
+                />
+              </label>
+            </div>
+            <div className="modal-actions">
+              <button onClick={() => {
+                setShowModalEditarLote(false);
+                setLoteEditando(null);
+              }}>Cancelar</button>
+              <button
+                className="btn-primary"
+                onClick={async () => {
+                  if (!loteEditando.motivo) {
+                    pushToast("❌ Debes seleccionar un motivo", "err");
+                    return;
+                  }
+                  
+                  try {
+                    setCargandoLotes(true);
+                    const cantidadAnterior = lotesProducto.find(l => l.id === loteEditando.id)?.cantidad_piezas || 0;
+                    const cantidadNueva = loteEditando.cantidad_piezas || 0;
+                    
+                    await authFetch(`${SERVER_URL}/inventario/lotes/${editInv.codigo}/${loteEditando.id}`, {
+                      method: "PUT",
+                      body: JSON.stringify({
+                        lote: loteEditando.lote,
+                        cantidad_piezas: cantidadNueva,
+                        caducidad: loteEditando.caducidad || null,
+                        laboratorio: loteEditando.laboratorio || null,
+                        activo: loteEditando.activo === 1,
+                        inventario_id: editInv?.inventario_id || inventarioActivo || 1,
+                        motivo: loteEditando.motivo,
+                        observaciones: loteEditando.observaciones || null
+                      }),
+                    });
+                    
+                    pushToast(`✅ Lote actualizado (${cantidadAnterior} → ${cantidadNueva} piezas)`, "ok");
+                    
+                    // Recargar lotes del servidor
+                    await cargarLotesDelProducto(editInv.codigo, editInv?.inventario_id || inventarioActivo);
+                    
+                    // Recargar productos del inventario activo
+                    if (inventarioActivo) {
+      const productosData = await authFetch(`${SERVER_URL}/inventario/inventarios/${inventarioActivo}/productos`);
+      if (Array.isArray(productosData)) {
+        setInventario(filtrarProductosPorInventario(productosData));
+      }
+                    }
+                    
+                    setShowModalEditarLote(false);
+                    setLoteEditando(null);
+                  } catch (err) {
+                    console.error("Error actualizando lote:", err);
+                    pushToast("❌ Error al actualizar lote: " + (err.message || "Error desconocido"), "err");
+                  } finally {
+                    setCargandoLotes(false);
+                  }
+                }}
+                disabled={cargandoLotes || !loteEditando.motivo}
+              >
+                {cargandoLotes ? "Guardando..." : "Guardar Cambios"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========== MODAL HISTORIAL LOTE ========== */}
+      {showModalHistorialLote && loteHistorial && (
+        <div className="modal-overlay" onClick={() => {
+          setShowModalHistorialLote(false);
+          setLoteHistorial(null);
+          setHistorialLote([]);
+        }}>
+          <div className="modal modal-lg" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>📋 Historial del Lote: {loteHistorial.lote}</h3>
+              <button className="modal-close" onClick={() => {
+                setShowModalHistorialLote(false);
+                setLoteHistorial(null);
+                setHistorialLote([]);
+              }}>×</button>
+            </div>
+            <div className="modal-body">
+              {historialLote.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "40px", color: "var(--texto-secundario)" }}>
+                  <p>No hay historial registrado para este lote</p>
+                </div>
+              ) : (
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                    <thead>
+                      <tr style={{ background: "var(--fondo-secundario)" }}>
+                        <th style={{ padding: "10px", textAlign: "left", borderBottom: "2px solid var(--borde-sutil)" }}>Fecha</th>
+                        <th style={{ padding: "10px", textAlign: "left", borderBottom: "2px solid var(--borde-sutil)" }}>Hora</th>
+                        <th style={{ padding: "10px", textAlign: "left", borderBottom: "2px solid var(--borde-sutil)" }}>Usuario</th>
+                        <th style={{ padding: "10px", textAlign: "left", borderBottom: "2px solid var(--borde-sutil)" }}>Motivo</th>
+                        <th style={{ padding: "10px", textAlign: "center", borderBottom: "2px solid var(--borde-sutil)" }}>Cantidad Anterior</th>
+                        <th style={{ padding: "10px", textAlign: "center", borderBottom: "2px solid var(--borde-sutil)" }}>Cantidad Nueva</th>
+                        <th style={{ padding: "10px", textAlign: "center", borderBottom: "2px solid var(--borde-sutil)" }}>Diferencia</th>
+                        <th style={{ padding: "10px", textAlign: "left", borderBottom: "2px solid var(--borde-sutil)" }}>Observaciones</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {historialLote.map((h, idx) => (
+                        <tr key={h.id || idx} style={{ borderBottom: "1px solid var(--borde-sutil)" }}>
+                          <td style={{ padding: "10px" }}>{h.fecha || "-"}</td>
+                          <td style={{ padding: "10px" }}>{h.hora || "-"}</td>
+                          <td style={{ padding: "10px" }}>{h.usuario || "-"}</td>
+                          <td style={{ padding: "10px" }}>{h.motivo || "-"}</td>
+                          <td style={{ padding: "10px", textAlign: "center", fontWeight: "600" }}>{h.cantidad_anterior ?? 0}</td>
+                          <td style={{ padding: "10px", textAlign: "center", fontWeight: "600", color: "var(--azul-primario)" }}>{h.cantidad_nueva ?? 0}</td>
+                          <td style={{ 
+                            padding: "10px", 
+                            textAlign: "center", 
+                            fontWeight: "600",
+                            color: h.diferencia > 0 ? "var(--exito)" : h.diferencia < 0 ? "var(--color-danger, #ef4444)" : "var(--texto-secundario)"
+                          }}>
+                            {h.diferencia > 0 ? `+${h.diferencia}` : h.diferencia}
+                          </td>
+                          <td style={{ padding: "10px", fontSize: "0.9rem", color: "var(--texto-secundario)" }}>{h.observaciones || "-"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+            <div className="modal-actions">
+              <button onClick={() => {
+                setShowModalHistorialLote(false);
+                setLoteHistorial(null);
+                setHistorialLote([]);
+              }}>Cerrar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ========== MODAL IMPORTAR INVENTARIO ========== */}
       {showModalImportar && (
         <div className="modal-overlay" onClick={() => {
@@ -3122,7 +4687,7 @@ T 4 0 10 350 ${codigo}
             }
           }
         }}>
-          <div className="modal-content modal-importar" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "900px", maxHeight: "90vh", overflow: "auto" }}>
+          <div className="modal-content modal-importar modal-lg" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3>Importar Inventario</h3>
               <button 
@@ -3388,9 +4953,6 @@ T 4 0 10 350 ${codigo}
               {archivoImportar && datosImportar.length > 0 && (
                 <button
                   onClick={() => {
-                    console.log("🔵 BOTÓN CLICKEADO - Iniciando importación");
-                    console.log("🔵 Estado actual - importando:", importando);
-                    console.log("🔵 Datos a importar:", datosImportar.length);
                     procesarImportacion();
                   }}
                   disabled={importando}
@@ -3449,12 +5011,451 @@ T 4 0 10 350 ${codigo}
           </div>
         </div>
       )}
+
+      {/* Modal para crear nuevo inventario */}
+      {showModalNuevoInventario && (
+        <div className="modal-overlay" onClick={() => setShowModalNuevoInventario(false)}>
+          <div className="modal modal-md" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>➕ Crear Nuevo Inventario</h3>
+              <button className="modal-close" onClick={() => setShowModalNuevoInventario(false)}>×</button>
+            </div>
+            <div className="modal-body">
+              <label>
+                Tipo de Inventario *
+                <div style={{ display: "flex", gap: "12px", marginTop: "8px" }}>
+                  <label style={{ display: "flex", alignItems: "center", gap: "6px", cursor: "pointer" }}>
+                    <input
+                      type="radio"
+                      name="tipoInventario"
+                      value="nuevo"
+                      checked={formNuevoInventario.tipo === "nuevo"}
+                      onChange={(e) => setFormNuevoInventario({ ...formNuevoInventario, tipo: e.target.value, inventario_origen_id: null })}
+                    />
+                    <span>Nuevo (Vacío)</span>
+                  </label>
+                  <label style={{ display: "flex", alignItems: "center", gap: "6px", cursor: "pointer" }}>
+                    <input
+                      type="radio"
+                      name="tipoInventario"
+                      value="copia"
+                      checked={formNuevoInventario.tipo === "copia"}
+                      onChange={(e) => setFormNuevoInventario({ ...formNuevoInventario, tipo: e.target.value, inventario_origen_id: 1 })}
+                    />
+                    <span>Copia de CEDIS (Sincronizado)</span>
+                  </label>
+                </div>
+                <p style={{ fontSize: "0.85rem", color: "var(--texto-secundario)", marginTop: "8px" }}>
+                  {formNuevoInventario.tipo === "copia" 
+                    ? "⚠️ Los productos agregados a CEDIS se sincronizarán automáticamente con este inventario."
+                    : "✅ Inventario independiente y vacío. Podrás agregar productos manualmente."}
+                </p>
+              </label>
+
+              {formNuevoInventario.tipo === "copia" && (
+                <label>
+                  Inventario Origen (CEDIS)
+                  <input
+                    type="text"
+                    value="Inventario (CEDIS)"
+                    readOnly
+                    disabled
+                    style={{
+                      width: "100%",
+                      padding: "8px",
+                      marginTop: "8px",
+                      background: "var(--fondo-secundario)",
+                      color: "var(--texto-secundario)",
+                      cursor: "not-allowed",
+                      borderRadius: "8px",
+                      border: "1px solid var(--borde-sutil)"
+                    }}
+                  />
+                </label>
+              )}
+
+              <label>
+                Nombre del Inventario *
+                <input
+                  type="text"
+                  value={formNuevoInventario.nombre}
+                  onChange={(e) => setFormNuevoInventario({ ...formNuevoInventario, nombre: e.target.value })}
+                  placeholder="Ej: Inventario 1"
+                  autoFocus
+                />
+              </label>
+              <label>
+                Alias (Opcional)
+                <input
+                  type="text"
+                  value={formNuevoInventario.alias}
+                  onChange={(e) => setFormNuevoInventario({ ...formNuevoInventario, alias: e.target.value })}
+                  placeholder="Ej: Sucursal Centro"
+                />
+              </label>
+            </div>
+            <div className="modal-actions">
+              <button onClick={() => {
+                setShowModalNuevoInventario(false);
+                setFormNuevoInventario({ nombre: "", alias: "", tipo: "nuevo", inventario_origen_id: null });
+              }}>Cancelar</button>
+              <button className="btn-primary" onClick={crearNuevoInventario}>
+                {formNuevoInventario.tipo === "copia" ? "Crear Inventario Copia de CEDIS" : "Crear Inventario Nuevo"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal para eliminar inventario */}
+      {showModalEliminarInventario && inventarioAEliminar && (
+        <div className="modal-overlay" onClick={() => {
+          setShowModalEliminarInventario(false);
+          setInventarioAEliminar(null);
+          setPasswordEliminar("");
+        }}>
+          <div className="modal modal-sm" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>🗑️ Eliminar Inventario</h3>
+              <button className="modal-close" onClick={() => {
+                setShowModalEliminarInventario(false);
+                setInventarioAEliminar(null);
+                setPasswordEliminar("");
+              }}>×</button>
+            </div>
+            <div className="modal-body">
+              <p style={{ marginBottom: "15px", color: "var(--color-warning, #f59e0b)", fontWeight: "600" }}>
+                ⚠️ Esta acción no se puede deshacer
+              </p>
+              <p style={{ marginBottom: "15px" }}>
+                Estás a punto de eliminar el inventario: <strong>{inventarioAEliminar.nombre}{inventarioAEliminar.alias ? ` (${inventarioAEliminar.alias})` : ""}</strong>
+              </p>
+              <p style={{ marginBottom: "20px", fontSize: "0.9rem", color: "var(--texto-secundario)" }}>
+                Todos los productos de este inventario también serán eliminados permanentemente.
+              </p>
+              <label>
+                Contraseña de Administrador *
+                <input
+                  type="password"
+                  value={passwordEliminar}
+                  onChange={(e) => setPasswordEliminar(e.target.value)}
+                  placeholder="Ingresa tu contraseña para confirmar"
+                  autoFocus
+                  style={{ width: "100%", padding: "8px", marginTop: "8px" }}
+                />
+              </label>
+            </div>
+            <div className="modal-actions">
+              <button onClick={() => {
+                setShowModalEliminarInventario(false);
+                setInventarioAEliminar(null);
+                setPasswordEliminar("");
+              }}>Cancelar</button>
+              <button 
+                className="btn-primary" 
+                onClick={eliminarInventario}
+                style={{ background: "var(--color-danger, #ef4444)" }}
+              >
+                Eliminar Inventario
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Menú de transferencia de productos */}
+      {showMenuTransferir && productoTransferir && (
+        <div className="modal-overlay" onClick={() => {
+          setShowMenuTransferir(false);
+          setProductoTransferir(null);
+          setLotesProductoTransferir([]);
+          setInventarioDestinoSeleccionado(null);
+          setLotesSeleccionados({});
+        }}>
+          <div className="modal modal-lg" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>🔄 Transferir Producto</h3>
+              <button className="modal-close" onClick={() => {
+                setShowMenuTransferir(false);
+                setProductoTransferir(null);
+                setLotesProductoTransferir([]);
+                setInventarioDestinoSeleccionado(null);
+                setLotesSeleccionados({});
+              }}>×</button>
+            </div>
+            <div className="modal-body">
+              <p style={{ marginBottom: "15px" }}>
+                <strong>Producto:</strong> {productoTransferir.nombre} ({productoTransferir.codigo})
+              </p>
+
+              {!inventarioDestinoSeleccionado ? (
+                <>
+                  <p style={{ marginBottom: "15px", fontSize: "0.9rem", color: "var(--texto-secundario)" }}>
+                    Selecciona el inventario destino:
+                  </p>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                    {inventarios
+                      .filter(inv => inv.id !== inventarioActivo)
+                      .map((inv) => (
+                        <button
+                          key={inv.id}
+                          onClick={() => setInventarioDestinoSeleccionado(inv)}
+                          style={{
+                            padding: "12px 16px",
+                            background: "var(--fondo-input)",
+                            border: "1px solid var(--borde-sutil)",
+                            borderRadius: "6px",
+                            cursor: "pointer",
+                            fontSize: "0.9rem",
+                            fontWeight: "500",
+                            textAlign: "left",
+                            transition: "all 0.2s ease"
+                          }}
+                          onMouseEnter={(e) => {
+                            e.target.style.background = "var(--azul-primario)";
+                            e.target.style.color = "white";
+                          }}
+                          onMouseLeave={(e) => {
+                            e.target.style.background = "var(--fondo-input)";
+                            e.target.style.color = "var(--texto-principal)";
+                          }}
+                        >
+                          {inv.nombre}{inv.alias ? ` - ${inv.alias}` : ""}
+                        </button>
+                      ))}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "15px" }}>
+                    <p style={{ fontSize: "0.9rem", color: "var(--texto-secundario)" }}>
+                      Inventario destino: <strong>{inventarioDestinoSeleccionado.nombre}{inventarioDestinoSeleccionado.alias ? ` (${inventarioDestinoSeleccionado.alias})` : ""}</strong>
+                    </p>
+                    <button
+                      onClick={() => setInventarioDestinoSeleccionado(null)}
+                      style={{
+                        padding: "6px 12px",
+                        background: "transparent",
+                        border: "1px solid var(--borde-sutil)",
+                        borderRadius: "4px",
+                        cursor: "pointer",
+                        fontSize: "0.85rem"
+                      }}
+                    >
+                      Cambiar
+                    </button>
+                  </div>
+
+                  {lotesProductoTransferir.length > 0 ? (
+                    <>
+                      <p style={{ marginBottom: "15px", fontSize: "0.9rem", color: "var(--texto-secundario)" }}>
+                        Selecciona los lotes y cantidad de piezas a transferir:
+                      </p>
+                      <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginBottom: "15px" }}>
+                        {lotesProductoTransferir.map((lote) => {
+                          const cantidadSeleccionada = lotesSeleccionados[lote.id] || 0;
+                          const tieneVigenciaProxima = lote.caducidad && new Date(lote.caducidad) <= new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+                          
+                          return (
+                            <div
+                              key={lote.id}
+                              style={{
+                                padding: "12px",
+                                background: tieneVigenciaProxima ? "var(--color-warning, #fef3c7)" : "var(--fondo-input)",
+                                border: `1px solid ${tieneVigenciaProxima ? "var(--color-warning, #f59e0b)" : "var(--borde-sutil)"}`,
+                                borderRadius: "6px"
+                              }}
+                            >
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                                <div>
+                                  <strong>Lote:</strong> {lote.lote || "Sin lote"}
+                                  {lote.caducidad && (
+                                    <span style={{ marginLeft: "8px", fontSize: "0.85rem", color: tieneVigenciaProxima ? "var(--color-danger, #ef4444)" : "var(--texto-secundario)" }}>
+                                      (Cad: {new Date(lote.caducidad).toLocaleDateString()})
+                                      {tieneVigenciaProxima && " ⚠️ Próxima"}
+                                    </span>
+                                  )}
+                                </div>
+                                <div style={{ fontSize: "0.9rem", color: "var(--texto-secundario)" }}>
+                                  Disponible: <strong>{lote.cantidad_piezas || 0} pz</strong>
+                                </div>
+                              </div>
+                              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max={lote.cantidad_piezas || 0}
+                                  value={cantidadSeleccionada}
+                                  onChange={(e) => {
+                                    const cantidad = parseInt(e.target.value) || 0;
+                                    setLotesSeleccionados(prev => ({
+                                      ...prev,
+                                      [lote.id]: Math.min(cantidad, lote.cantidad_piezas || 0)
+                                    }));
+                                  }}
+                                  style={{
+                                    width: "100px",
+                                    padding: "6px 8px",
+                                    border: "1px solid var(--borde-sutil)",
+                                    borderRadius: "4px"
+                                  }}
+                                  placeholder="0"
+                                />
+                                <span style={{ fontSize: "0.85rem", color: "var(--texto-secundario)" }}>piezas</span>
+                                <button
+                                  onClick={() => {
+                                    setLotesSeleccionados(prev => ({
+                                      ...prev,
+                                      [lote.id]: lote.cantidad_piezas || 0
+                                    }));
+                                  }}
+                                  style={{
+                                    padding: "4px 8px",
+                                    background: "var(--fondo-secundario)",
+                                    border: "1px solid var(--borde-sutil)",
+                                    borderRadius: "4px",
+                                    cursor: "pointer",
+                                    fontSize: "0.8rem"
+                                  }}
+                                >
+                                  Todo
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </>
+                  ) : (
+                    <p style={{ marginBottom: "15px", fontSize: "0.9rem", color: "var(--texto-secundario)" }}>
+                      Este producto no tiene lotes registrados. Se transferirá el producto completo.
+                    </p>
+                  )}
+                </>
+              )}
+            </div>
+            <div className="modal-actions">
+              <button onClick={() => {
+                setShowMenuTransferir(false);
+                setProductoTransferir(null);
+                setLotesProductoTransferir([]);
+                setInventarioDestinoSeleccionado(null);
+                setLotesSeleccionados({});
+              }}>Cancelar</button>
+              {inventarioDestinoSeleccionado && (
+                <button
+                  className="btn-primary"
+                  onClick={() => {
+                    const lotesATransferir = Object.entries(lotesSeleccionados)
+                      .filter(([_, cantidad]) => cantidad > 0)
+                      .map(([loteId, cantidad]) => {
+                        const lote = lotesProductoTransferir.find(l => l.id === parseInt(loteId));
+                        return {
+                          lote_id: parseInt(loteId),
+                          lote: lote?.lote || "",
+                          cantidad_piezas: cantidad,
+                          caducidad: lote?.caducidad || null,
+                          laboratorio: lote?.laboratorio || null,
+                          activo: lote?.activo || 0
+                        };
+                      });
+                    transferirProducto(productoTransferir.id, inventarioDestinoSeleccionado.id, lotesATransferir);
+                  }}
+                  disabled={lotesProductoTransferir.length > 0 && Object.values(lotesSeleccionados).every(c => c === 0 || !c)}
+                >
+                  {lotesProductoTransferir.length > 0 
+                    ? `Transferir ${Object.values(lotesSeleccionados).reduce((sum, c) => sum + (c || 0), 0)} piezas`
+                    : "Transferir Producto"}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
+
+    {/* ===========================================================
+        MODAL COMPARTIR POR CHAT
+    =========================================================== */}
+    {compartirOpen && (
+      <div className="modal-overlay" onClick={() => setCompartirOpen(false)}>
+        <div
+          className="modal modal-md"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="modal-header">
+            <h3>📤 Compartir producto por chat</h3>
+            <button className="modal-close" onClick={() => setCompartirOpen(false)}>×</button>
+          </div>
+          <div className="modal-body">
+            <label style={{ display: "block", marginBottom: "8px", fontWeight: "600" }}>
+              Enviar a
+            </label>
+            <select
+              value={compartirDestino}
+              onChange={(e) => setCompartirDestino(e.target.value)}
+              style={{ width: "100%" }}
+            >
+              <option value="">Selecciona un usuario</option>
+              {compartirUsuarios.map((u) => {
+                const value = u.nickname || u.name;
+                if (!value) return null;
+                const nombre = value || `Usuario ${u.id}`;
+                return (
+                  <option key={u.id} value={value}>
+                    {nombre}
+                  </option>
+                );
+              })}
+            </select>
+
+            <div style={{ marginTop: "12px", fontSize: "0.85rem", color: "var(--texto-secundario)" }}>
+              Vista previa:
+            </div>
+            <pre
+              style={{
+                marginTop: "6px",
+                background: "var(--fondo-input)",
+                border: "1px solid var(--borde-sutil)",
+                borderRadius: "8px",
+                padding: "10px",
+                fontSize: "0.85rem",
+                whiteSpace: "pre-wrap",
+                wordBreak: "break-word",
+                overflowWrap: "break-word",
+                maxWidth: "100%",
+              }}
+            >
+              {construirMensajeCompartir(compartirProducto)}
+            </pre>
+
+            <div style={{ marginTop: "12px", display: "flex", gap: "8px" }}>
+              <button
+                className="btn-secondary"
+                onClick={() => compartirPorOtrasApps(compartirProducto)}
+                style={{ flex: 1 }}
+              >
+                📱 Compartir por otras apps
+              </button>
+            </div>
+          </div>
+          <div className="modal-actions">
+            <button className="btn-secondary" onClick={() => setCompartirOpen(false)}>
+              Cancelar
+            </button>
+            <button className="btn-primary" onClick={enviarCompartir} disabled={compartiendo}>
+              {compartiendo ? "Enviando..." : "Enviar al chat"}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 }
 
 // Componente Modal Agregar
-function ModalAgregar({ formInv, setFormInv, CATS_SAFE, SERVER_URL, authFetch, setInventario, pushToast, setShowAddInv }) {
+function ModalAgregar({ formInv, setFormInv, CATS_SAFE, SERVER_URL, authFetch, setInventario, pushToast, setShowAddInv, inventarioActivo }) {
 
   return (
     <div className="modal-overlay" onClick={() => setShowAddInv(false)}>
@@ -3731,6 +5732,7 @@ function ModalAgregar({ formInv, setFormInv, CATS_SAFE, SERVER_URL, authFetch, s
                 codigo,
                 nombre,
                 piezas_por_caja: piezasPorCaja ? parseInt(piezasPorCaja, 10) : null,
+                inventario_id: inventarioActivo || 1, // Asignar al inventario activo
               };
 
               try {
@@ -3753,24 +5755,32 @@ function ModalAgregar({ formInv, setFormInv, CATS_SAFE, SERVER_URL, authFetch, s
                     });
                   } catch (loteErr) {
                     // Si falla agregar el lote, no es crítico, solo loguear
-                    console.warn("⚠️ No se pudo agregar el lote automáticamente:", loteErr);
                   }
                 }
                 
                 // Agregar al estado local SIN recargar (evita salto de scroll)
+                // IMPORTANTE: Solo agregar si el producto pertenece al inventario activo
                 if (nuevoProducto && nuevoProducto.id) {
-                  setInventario(prev => [...prev, nuevoProducto].sort((a, b) =>
-                    (a.nombre || "").localeCompare(b.nombre || "", "es")
-                  ));
+                  // Verificar que el producto pertenezca al inventario activo
+                  const productoInventarioId = nuevoProducto.inventario_id || nuevoProducto.inventarioId || 1;
+                  if (productoInventarioId === inventarioActivo) {
+                    setInventario(prev => [...prev, nuevoProducto].sort((a, b) =>
+                      (a.nombre || "").localeCompare(b.nombre || "", "es")
+                    ));
+                  }
                 } else {
                   // Si no se recibe el producto, crear uno básico con el payload
-                  setInventario(prev => [...prev, { 
-                    ...payload, 
-                    id: Date.now(), // ID temporal
-                    mostrar_en_pagina: 0
-                  }].sort((a, b) =>
-                    (a.nombre || "").localeCompare(b.nombre || "", "es")
-                  ));
+                  // Solo agregar si pertenece al inventario activo
+                  const productoInventarioId = payload.inventario_id || inventarioActivo || 1;
+                  if (productoInventarioId === inventarioActivo) {
+                    setInventario(prev => [...prev, { 
+                      ...payload, 
+                      id: Date.now(), // ID temporal
+                      mostrar_en_pagina: 0
+                    }].sort((a, b) =>
+                      (a.nombre || "").localeCompare(b.nombre || "", "es")
+                    ));
+                  }
                 }
                 
                 setShowAddInv(false);
@@ -3786,5 +5796,4 @@ function ModalAgregar({ formInv, setFormInv, CATS_SAFE, SERVER_URL, authFetch, s
         </div>
       </div>
     </div>
-  );
-}
+      )}

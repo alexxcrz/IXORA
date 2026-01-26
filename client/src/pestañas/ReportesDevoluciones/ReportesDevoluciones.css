@@ -106,13 +106,15 @@ select:focus {
   padding: 18px;
   border-radius: var(--radio-xl);
   box-shadow: var(--sombra-md);
-  margin: 10px auto;
-  width: 95%;
-  max-width: 1200px;
+  margin: 0 auto var(--espacio-lg);
+  width: 98% !important;
+  max-width: 98% !important;
   display: flex;
   flex-direction: column;
   gap: 12px;
   border: 1px solid var(--borde-sutil);
+  box-sizing: border-box !important;
+  overflow-x: auto !important;
 }
 
 .reportes-card {

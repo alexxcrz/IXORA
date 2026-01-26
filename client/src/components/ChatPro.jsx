@@ -1,14 +1,16 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Capacitor } from "@capacitor/core";
-import { Camera, CameraResultType, CameraSource } from "@capacitor/camera";
 import { authFetch, useAuth } from "../AuthContext";
 import "./ChatPro.css";
 import { useAlert } from "./AlertModal";
 import { getServerUrl, getServerUrlSync } from "../config/server";
+import ReunionesPerfilUsuario from "./ReunionesPerfilUsuario";
 
-export default function ChatPro({ socket, user, onClose }) {
+export default function ChatPro({ socket, user, onClose, solicitudPending, onSolicitudConsumida, mensajePrioritarioPending, onMensajePrioritarioConsumido }) {
   const [serverUrl, setServerUrl] = useState(null);
   const { perms, token } = useAuth();
+  const mensajePrioritarioProcessedRef = useRef(null);
+  const abriendoPerfilDesdeSidebarRef = useRef(false);
   
   // Cargar URL del servidor de forma asíncrona
   useEffect(() => {
@@ -30,12 +32,39 @@ export default function ChatPro({ socket, user, onClose }) {
       setOpen(true);
     }
   }, [onClose]);
+  
+  // Resetear estado del chat cuando se cierra
+  useEffect(() => {
+    if (!open) {
+      // Si estamos abriendo el perfil desde el sidebar, NO resetear nada
+      if (abriendoPerfilDesdeSidebarRef.current) {
+        return; // Salir completamente sin resetear nada
+      }
+      
+      console.log("🔄 Chat cerrado, reseteando estado para próxima apertura");
+      setTabPrincipal("usuarios");
+      setTipoChat(null);
+      setChatActual(null);
+      setMensajeInput("");
+      setArchivoAdjunto(null);
+      setEditandoMensaje(null);
+      setRespondiendoMensaje(null);
+      setMensajeResaltadoId(null);
+      setPerfilAbierto(false);
+      setPerfilData(null);
+      setModalSolicitud(null);
+      setGrupoMenuAbierto(null);
+      setMostrarAgregarMiembros(false);
+      mensajePrioritarioProcessedRef.current = null;
+    }
+  }, [open]);
   const [tabPrincipal, setTabPrincipal] = useState("usuarios");
   const [tipoChat, setTipoChat] = useState(null);
   const [chatActual, setChatActual] = useState(null);
+  const [mensajeResaltadoId, setMensajeResaltadoId] = useState(null);
 
   const [usuariosIxora, setUsuariosIxora] = useState([]);
-  const [usuariosActivos, setUsuariosActivos] = useState([]);
+  const [estadosUsuarios, setEstadosUsuarios] = useState({}); // { nickname: 'activo'|'ausente'|'offline' }
   const [chatsActivos, setChatsActivos] = useState([]);
   const [grupos, setGrupos] = useState([]);
 
@@ -47,12 +76,29 @@ export default function ChatPro({ socket, user, onClose }) {
   const [noLeidos, setNoLeidos] = useState(0);
   const [filtroUsuarios, setFiltroUsuarios] = useState("");
   const [perfilAbierto, setPerfilAbierto] = useState(false);
-  const [perfilTab, setPerfilTab] = useState("info");
+  const [perfilTab, setPerfilTab] = useState("acerca");
   const [perfilData, setPerfilData] = useState(null);
   const [perfilCompartidos, setPerfilCompartidos] = useState([]);
   const [perfilCargando, setPerfilCargando] = useState(false);
   const [perfilError, setPerfilError] = useState(null);
   const [perfilCompartidosTab, setPerfilCompartidosTab] = useState("imagenes");
+  const [perfilTipo, setPerfilTipo] = useState(null); // 'usuario' o 'grupo'
+  const [perfilGrupoMiembros, setPerfilGrupoMiembros] = useState([]);
+  const [perfilGrupoAdmins, setPerfilGrupoAdmins] = useState([]);
+  const [perfilGrupoRestricciones, setPerfilGrupoRestricciones] = useState({});
+  const [menuMiembroAbierto, setMenuMiembroAbierto] = useState(null); // nickname del miembro
+  const [menuMiembroPosicion, setMenuMiembroPosicion] = useState(null); // { x, y } para overlay
+  const [submenuRestriccionAbierto, setSubmenuRestriccionAbierto] = useState(null); // nickname del miembro
+  const [busquedaMiembros, setBusquedaMiembros] = useState("");
+  const [filtroMiembros, setFiltroMiembros] = useState("todos"); // todos, admins, miembros
+  const [editandoTema, setEditandoTema] = useState(false);
+  const [editandoDescripcion, setEditandoDescripcion] = useState(false);
+  const [nuevoTema, setNuevoTema] = useState("");
+  const [nuevaDescripcion, setNuevaDescripcion] = useState("");
+  // eslint-disable-next-line no-unused-vars
+  const [usuarioRestringido, setUsuarioRestringido] = useState(false);
+  // eslint-disable-next-line no-unused-vars
+  const [restriccionInfo, setRestriccionInfo] = useState(null);
   const [previewItem, setPreviewItem] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
   const [previewBlob, setPreviewBlob] = useState(null);
@@ -67,6 +113,9 @@ export default function ChatPro({ socket, user, onClose }) {
   const [mostrarAgregarMiembros, setMostrarAgregarMiembros] = useState(false);
   const [grupoAgregarMiembros, setGrupoAgregarMiembros] = useState(null);
   const [grupoMenuAbierto, setGrupoMenuAbierto] = useState(null);
+  const [modalSolicitud, setModalSolicitud] = useState(null); // { solicitudId, grupoId, usuario_nickname, fecha, groupName }
+  // eslint-disable-next-line no-unused-vars
+  const [solicitudesPendientes, setSolicitudesPendientes] = useState([]);
   // eslint-disable-next-line no-unused-vars
   const [editandoGrupo, setEditandoGrupo] = useState(null);
   // eslint-disable-next-line no-unused-vars
@@ -101,6 +150,11 @@ export default function ChatPro({ socket, user, onClose }) {
   const [emojiUso, setEmojiUso] = useState({});
   const [menuEmojiAbierto, setMenuEmojiAbierto] = useState(false);
   const [inputEmojiAbierto, setInputEmojiAbierto] = useState(false);
+  const [emojiCategoriaActiva, setEmojiCategoriaActiva] = useState("masUsados");
+  const [emojiCategoriaActivaMenu, setEmojiCategoriaActivaMenu] = useState("masUsados");
+  const [emojiBusqueda, setEmojiBusqueda] = useState("");
+  const [emojiBusquedaMenu, setEmojiBusquedaMenu] = useState("");
+  const [emojisPersonalizados, setEmojisPersonalizados] = useState([]);
   const [seleccionModo, setSeleccionModo] = useState(false);
   const [seleccionMensajes, setSeleccionMensajes] = useState(new Set());
   const [modalLinkAbierto, setModalLinkAbierto] = useState(false);
@@ -113,9 +167,20 @@ export default function ChatPro({ socket, user, onClose }) {
   const [callMuted, setCallMuted] = useState(false);
   const [callVideoOff, setCallVideoOff] = useState(false);
   const [rtcConfig, setRtcConfig] = useState({ iceServers: [] });
+  const [reuniones, setReuniones] = useState([]);
+  const [modalReunionAbierto, setModalReunionAbierto] = useState(false);
+  const [reunionEditando, setReunionEditando] = useState(null);
+  const [reunionForm, setReunionForm] = useState({
+    titulo: "",
+    descripcion: "",
+    fecha: "",
+    hora: "",
+    lugar: "",
+    esVideollamada: false,
+    participantes: []
+  });
 
   const chatBodyRef = useRef(null);
-  const audioContextRef = useRef(null);
   const cargandoChatsActivosRef = useRef(false);
   const mensajeInputRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -131,62 +196,6 @@ export default function ChatPro({ socket, user, onClose }) {
   const remoteStreamsRef = useRef({});
   const pendingCandidatesRef = useRef({});
   const callRoomRef = useRef(null);
-
-  // ===== SONIDOS ÚNICOS DE IXORA PARA CHAT =====
-  const sonidoPatterns = {
-    "ixora-pulse": { type: "sine", notes: [{ f: 520, d: 0.12 }, { f: 650, d: 0.12 }, { f: 520, d: 0.12 }] },
-    "ixora-wave": { type: "triangle", notes: [{ f: 440, d: 0.18 }, { f: 520, d: 0.18 }] },
-    "ixora-alert": { type: "square", notes: [{ f: 740, d: 0.1 }, { f: 740, d: 0.1 }, { f: 880, d: 0.18 }] },
-    "ixora-call": { type: "sine", notes: [{ f: 620, d: 0.45 }, { f: 540, d: 0.45 }, { f: 620, d: 0.45 }] },
-    "ixora-call-group": { type: "sine", notes: [{ f: 600, d: 0.5 }, { f: 520, d: 0.5 }, { f: 600, d: 0.5 }] },
-    "ixora-soft": { type: "sine", notes: [{ f: 360, d: 0.2 }, { f: 420, d: 0.2 }] },
-    "ixora-digital": { type: "square", notes: [{ f: 880, d: 0.08 }, { f: 990, d: 0.08 }, { f: 880, d: 0.08 }, { f: 1180, d: 0.12 }] },
-    "ixora-picking": { type: "triangle", notes: [{ f: 500, d: 0.1 }, { f: 600, d: 0.1 }, { f: 500, d: 0.1 }] },
-    "ixora-surtido": { type: "sine", notes: [{ f: 660, d: 0.16 }, { f: 780, d: 0.16 }, { f: 720, d: 0.18 }] },
-  };
-
-  const reproducirSonido = (soundKey = "ixora-pulse") => {
-    if (soundKey === "silencio") return;
-    const pattern = sonidoPatterns[soundKey] || sonidoPatterns["ixora-pulse"];
-    if (!pattern) return;
-    try {
-      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-      if (!AudioContextClass) return;
-      let audioCtx = audioContextRef.current;
-      if (!audioCtx || audioCtx.state === "closed") {
-        audioCtx = new AudioContextClass();
-        audioContextRef.current = audioCtx;
-      }
-      const play = () => {
-        const ctx = audioCtx;
-        const gain = ctx.createGain();
-        gain.gain.value = 0.0001;
-        gain.connect(ctx.destination);
-        let t = ctx.currentTime + 0.02;
-        pattern.notes.forEach((note, idx) => {
-          const osc = ctx.createOscillator();
-          osc.type = pattern.type;
-          osc.frequency.setValueAtTime(note.f, t);
-          osc.connect(gain);
-          const attack = 0.02;
-          const release = 0.08;
-          gain.gain.setValueAtTime(0.0001, t);
-          gain.gain.linearRampToValueAtTime(0.18, t + attack);
-          gain.gain.linearRampToValueAtTime(0.0001, t + note.d - release);
-          osc.start(t);
-          osc.stop(t + note.d);
-          t += note.d + (idx === pattern.notes.length - 1 ? 0 : 0.04);
-        });
-      };
-      if (audioCtx.state === "suspended") {
-        audioCtx.resume().then(play).catch(() => {});
-        return;
-      }
-      play();
-    } catch (_) {
-      // Ignorar errores silenciosamente
-    }
-  };
 
   const getAvatarUrl = (usuarioObj) => {
     if (!usuarioObj) {
@@ -228,50 +237,50 @@ export default function ChatPro({ socket, user, onClose }) {
     return colors[Math.abs(hash) % colors.length];
   };
 
-  // Función para activar el AudioContext (reutilizable)
-  const activarAudioContext = useRef(() => {
-    try {
-      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-      if (!AudioContextClass) return;
-      
-      if (!audioContextRef.current) {
-        const audioCtx = new AudioContextClass();
-        audioContextRef.current = audioCtx;
-      }
-      
-      // Si está suspendido, intentar resumirlo
-      if (audioContextRef.current.state === 'suspended') {
-        audioContextRef.current.resume().catch(() => {
-          // Ignorar errores silenciosamente
-        });
-      }
-    } catch (err) {
-      // Ignorar errores silenciosamente
-    }
-  }).current;
-
-  // Activar AudioContext en la primera interacción del usuario (requerido por navegadores)
+  // Cerrar menús al hacer clic fuera
   useEffect(() => {
-    let activado = false;
+    const handleClickOutside = (event) => {
+      if (menuMiembroAbierto || submenuRestriccionAbierto) {
+        const target = event.target;
+        // Verificar si el clic fue fuera de los menús
+        const isMenuClick = target.closest('.chat-member-menu') || target.closest('.chat-member-menu-overlay') || target.closest('button[title="Opciones"]');
+        if (!isMenuClick) {
+          setMenuMiembroAbierto(null);
+          setSubmenuRestriccionAbierto(null);
+        }
+      }
+    };
     
-    const activarEnInteraccion = () => {
-      if (activado) return;
-      activado = true;
-      activarAudioContext();
-    };
-
-    // Activar en cualquier interacción del usuario (solo una vez)
-    const eventos = ['click', 'touchstart', 'keydown', 'mousedown'];
-    eventos.forEach(evento => {
-      document.addEventListener(evento, activarEnInteraccion, { once: true, passive: true });
-    });
-
+    if (menuMiembroAbierto || submenuRestriccionAbierto) {
+      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('touchstart', handleClickOutside);
+    }
+    
     return () => {
-      eventos.forEach(evento => {
-        document.removeEventListener(evento, activarEnInteraccion);
-      });
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
     };
-  }, [activarAudioContext]);
+  }, [menuMiembroAbierto, submenuRestriccionAbierto]);
+
+  // ============================
+  // 👂 Escuchar evento para abrir chat desde reuniones
+  // ============================
+  useEffect(() => {
+    const handleAbrirChatDesdeReunion = (event) => {
+      const { nickname, tipo } = event.detail;
+      if (nickname) {
+        setOpen(true);
+        setTabPrincipal("chats");
+        setTipoChat(tipo || "privado");
+        setChatActual(nickname);
+      }
+    };
+
+    window.addEventListener('abrir-chat-desde-reunion', handleAbrirChatDesdeReunion);
+    return () => {
+      window.removeEventListener('abrir-chat-desde-reunion', handleAbrirChatDesdeReunion);
+    };
+  }, []);
 
   // ============================
   // 👤 Cargar usuarios de IXORA
@@ -282,13 +291,28 @@ export default function ChatPro({ socket, user, onClose }) {
     const cargarUsuarios = async () => {
       try {
         const data = await authFetch(`${SERVER_URL}/chat/usuarios`);
+        console.log(`[ChatPro] Usuarios cargados: ${(data || []).length} usuarios`);
         setUsuariosIxora(data || []);
       } catch (e) {
         console.error("Error cargando usuarios:", e);
       }
     };
 
+    const cargarEstados = async () => {
+      try {
+        const estados = await authFetch(`${SERVER_URL}/chat/usuarios/estados`);
+        setEstadosUsuarios(estados || {});
+      } catch (e) {
+        console.error("Error cargando estados:", e);
+      }
+    };
+
     cargarUsuarios();
+    cargarEstados();
+    
+    // Recargar estados cada 30 segundos para actualizaciones en tiempo real
+    const interval = setInterval(cargarEstados, 30000);
+    return () => clearInterval(interval);
   }, [open]);
 
   // ============================
@@ -306,12 +330,22 @@ export default function ChatPro({ socket, user, onClose }) {
       photo: user.photo || null,
     });
 
-    const handleUsuarios = (lista) => {
-      const filtrados = lista.filter((u) => u.nickname !== userDisplayName);
-      setUsuariosActivos(filtrados);
+    const handleUsuarios = () => {
+      // Recargar estados cuando cambian los usuarios activos (socket) - INSTANTÁNEO
+      authFetch(`${SERVER_URL}/chat/usuarios/estados`)
+        .then((estados) => setEstadosUsuarios(estados || {}))
+        .catch(() => {});
+    };
+
+    const handleEstadosActualizados = () => {
+      // Recargar estados cuando el servidor emite actualización - INSTANTÁNEO
+      authFetch(`${SERVER_URL}/chat/usuarios/estados`)
+        .then((estados) => setEstadosUsuarios(estados || {}))
+        .catch(() => {});
     };
 
     socket.on("usuarios_activos", handleUsuarios);
+    socket.on("estados_actualizados", handleEstadosActualizados);
 
     // Cargar chats activos y mensajes de IXORA cuando el usuario se loguea
     // Esto asegura que los mensajes de OTP aparezcan aunque no estuviera conectado cuando se enviaron
@@ -392,7 +426,10 @@ export default function ChatPro({ socket, user, onClose }) {
     // Cargar después de un pequeño delay para asegurar que el socket esté completamente configurado
     setTimeout(cargarChatsYOTP, 1000);
 
-    return () => socket.off("usuarios_activos", handleUsuarios);
+    return () => {
+      socket.off("usuarios_activos", handleUsuarios);
+      socket.off("estados_actualizados", handleEstadosActualizados);
+    };
   }, [socket, user, esAdmin]);
 
   // ============================
@@ -459,7 +496,11 @@ export default function ChatPro({ socket, user, onClose }) {
   // 💬 Cargar mensajes grupales
   // ============================
   useEffect(() => {
-    if (!open || tipoChat !== "grupal" || !chatActual) return;
+    if (!open || tipoChat !== "grupal" || !chatActual) {
+      setUsuarioRestringido(false);
+      setRestriccionInfo(null);
+      return;
+    }
 
     const cargarMensajes = async () => {
       try {
@@ -474,6 +515,24 @@ export default function ChatPro({ socket, user, onClose }) {
           ...prev,
           [chatActual]: mensajesOrdenados,
         }));
+        
+        // Verificar si el usuario está restringido
+        try {
+          const perfil = await authFetch(`${SERVER_URL}/chat/grupos/${chatActual}/perfil`);
+          const userDisplayName = user?.nickname || user?.name;
+          const restriccionUsuario = perfil?.restricciones?.[userDisplayName];
+          if (restriccionUsuario) {
+            setUsuarioRestringido(true);
+            setRestriccionInfo(restriccionUsuario);
+          } else {
+            setUsuarioRestringido(false);
+            setRestriccionInfo(null);
+          }
+        } catch (err) {
+          // Si no se puede cargar el perfil, asumir que no está restringido
+          setUsuarioRestringido(false);
+          setRestriccionInfo(null);
+        }
       } catch (e) {
         console.error("Error cargando mensajes grupales:", e);
       }
@@ -538,14 +597,14 @@ export default function ChatPro({ socket, user, onClose }) {
   }, [open]);
 
   // ============================
-  // 💬 Cargar grupos
+  // 💬 Cargar grupos (todos; es_miembro por usuario)
   // ============================
   useEffect(() => {
     if (!open || tabPrincipal !== "grupos") return;
 
     const cargarGrupos = async () => {
       try {
-        const data = await authFetch("/chat/grupos/mios");
+        const data = await authFetch("/chat/grupos");
         setGrupos(data || []);
       } catch (e) {
         console.error("Error cargando grupos:", e);
@@ -569,6 +628,18 @@ export default function ChatPro({ socket, user, onClose }) {
   }, [open, SERVER_URL]);
 
   useEffect(() => {
+    const handler = async () => {
+      if (!SERVER_URL) return;
+      try {
+        const config = await authFetch(`${SERVER_URL}/chat/notificaciones/config`);
+        setConfigNotificaciones(config || null);
+      } catch (_) {}
+    };
+    window.addEventListener("config-notificaciones-guardada", handler);
+    return () => window.removeEventListener("config-notificaciones-guardada", handler);
+  }, [SERVER_URL]);
+
+  useEffect(() => {
     if (!open) return;
     const cargarRtcConfig = async () => {
       try {
@@ -585,6 +656,118 @@ export default function ChatPro({ socket, user, onClose }) {
     cargarRtcConfig();
   }, [open, SERVER_URL]);
 
+  // Redirigir al chat del grupo y mostrar modal de solicitud (desde notificación)
+  useEffect(() => {
+    if (!open || !solicitudPending?.grupoId) return;
+    abrirChat("grupal", solicitudPending.grupoId);
+    setModalSolicitud({
+      solicitudId: solicitudPending.solicitudId,
+      grupoId: solicitudPending.grupoId,
+      usuario_nickname: solicitudPending.solicitanteNickname,
+      fecha: solicitudPending.fecha,
+      groupName: solicitudPending.groupName,
+    });
+    onSolicitudConsumida?.();
+  }, [open, solicitudPending?.grupoId]);
+
+  // Manejar apertura de mensaje prioritario desde notificación
+  useEffect(() => {
+    console.log("🔍 useEffect mensaje prioritario ejecutado. open:", open, "pending:", mensajePrioritarioPending);
+    
+    if (!open || !mensajePrioritarioPending) {
+      console.log("⏭️ Saliendo temprano - open:", open, "pending:", mensajePrioritarioPending);
+      return;
+    }
+    
+    const { chatType, chatTarget, mensaje_id } = mensajePrioritarioPending;
+    
+    // Crear una clave única para este mensaje prioritario
+    const mensajeKey = `${chatType}-${chatTarget}-${mensaje_id}`;
+    
+    console.log("🔑 Clave del mensaje:", mensajeKey);
+    console.log("🔑 Ref actual:", mensajePrioritarioProcessedRef.current);
+    
+    // Si ya procesamos este mensaje, no hacer nada
+    if (mensajePrioritarioProcessedRef.current === mensajeKey) {
+      console.log("⚠️ ¡MENSAJE YA PROCESADO! Ignorando:", mensajeKey);
+      return;
+    }
+    
+    console.log("✅ Mensaje nuevo, procesando:", mensajeKey);
+    
+    // Marcar como procesado INMEDIATAMENTE para evitar re-ejecuciones
+    mensajePrioritarioProcessedRef.current = mensajeKey;
+    console.log("🔒 Ref actualizado a:", mensajePrioritarioProcessedRef.current);
+    
+    // Abrir el chat correspondiente
+    console.log("🔴 Abriendo chat para mensaje prioritario:", chatType, chatTarget);
+    abrirChat(chatType, chatType === "general" ? null : chatTarget);
+    
+    // Programar scroll después de un pequeño delay para que el chat se abra primero
+    const scrollTimeout = setTimeout(() => {
+      const el = document.getElementById(`msg-${mensaje_id}`);
+      if (el) {
+        console.log("📍 Haciendo scroll al mensaje prioritario:", mensaje_id);
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        setMensajeResaltadoId(mensaje_id);
+        
+        // Consumir la notificación después de un delay
+        const consumeTimeout = setTimeout(() => {
+          console.log("✅ Consumiendo notificación de mensaje prioritario");
+          setMensajeResaltadoId(null);
+          onMensajePrioritarioConsumido?.();
+          mensajePrioritarioProcessedRef.current = null; // Resetear para permitir procesar otro mensaje
+          console.log("🔓 Ref reseteado a null");
+        }, 3500);
+        
+        return () => clearTimeout(consumeTimeout);
+      } else {
+        console.log("⚠️ No se encontró el elemento del mensaje:", mensaje_id);
+      }
+    }, 500);
+    
+    return () => {
+      console.log("🧹 Limpiando timeout de scroll");
+      clearTimeout(scrollTimeout);
+    };
+  }, [open, mensajePrioritarioPending]); // SOLO estas dos dependencias
+
+  // Limpiar modal al salir del grupo
+  useEffect(() => {
+    if (tipoChat !== "grupal" || !chatActual) {
+      setModalSolicitud(null);
+      setSolicitudesPendientes([]);
+    }
+  }, [tipoChat, chatActual]);
+
+  // Cargar solicitudes pendientes al abrir un grupo (solo admins)
+  useEffect(() => {
+    if (!open || !SERVER_URL || tipoChat !== "grupal" || !chatActual) return;
+    const cargar = async () => {
+      try {
+        const list = await authFetch(`${SERVER_URL}/chat/grupos/${chatActual}/solicitudes`);
+        const arr = Array.isArray(list) ? list : [];
+        setSolicitudesPendientes(arr);
+        if (arr.length > 0) {
+          const s = arr[0];
+          setModalSolicitud({
+            solicitudId: s.id,
+            grupoId: s.grupo_id,
+            usuario_nickname: s.usuario_nickname,
+            fecha: s.fecha,
+            groupName: "Grupo",
+          });
+        } else {
+          setModalSolicitud(null);
+        }
+      } catch {
+        setSolicitudesPendientes([]);
+        setModalSolicitud(null);
+      }
+    };
+    cargar();
+  }, [open, SERVER_URL, tipoChat, chatActual]);
+
   // ============================
   // 📨 Recibir mensajes (socket)
   // ============================
@@ -600,6 +783,8 @@ export default function ChatPro({ socket, user, onClose }) {
     socket.off("chat_grupal_nuevo");
     socket.off("chat_grupo_creado");
     socket.off("chats_activos_actualizados");
+    socket.off("chat_grupo_solicitud_nueva");
+    socket.off("chat_grupo_solicitud_respondida");
 
     // Handler para actualizar chats activos cuando hay cambios (definir primero)
     const handleChatsActivosActualizados = async () => {
@@ -670,12 +855,6 @@ export default function ChatPro({ socket, user, onClose }) {
       const esNuestroMensaje = mensaje.usuario_nickname === userDisplayName;
       if (!esNuestroMensaje && (!open || tipoChat !== "general")) {
         setNoLeidos((n) => n + 1);
-        if (
-          configNotificaciones?.sonido_activo !== 0 &&
-          estaDentroHorario(configNotificaciones)
-        ) {
-          reproducirSonido(configNotificaciones?.sonido_mensaje || "ixora-pulse");
-        }
       }
     };
 
@@ -752,14 +931,6 @@ export default function ChatPro({ socket, user, onClose }) {
         }
         
         // SIEMPRE mostrar notificación para mensajes de IXORA (todos los usuarios)
-        // Reproducir sonido de notificación
-        if (
-          configNotificaciones?.sonido_activo !== 0 &&
-          estaDentroHorario(configNotificaciones)
-        ) {
-          reproducirSonido(configNotificaciones?.sonido_mensaje || "ixora-pulse");
-        }
-        
         // Mostrar notificación del navegador si está disponible
         if ("Notification" in window && Notification.permission === "granted") {
           new Notification("📱 Mensaje de IXORA", {
@@ -844,12 +1015,6 @@ export default function ChatPro({ socket, user, onClose }) {
       if (!viendoEste || esMensajeIXORAAdmin) {
         if (esMensajeIXORAAdmin || !viendoEste) {
           setNoLeidos((n) => n + 1);
-          if (
-            configNotificaciones?.sonido_activo !== 0 &&
-            estaDentroHorario(configNotificaciones)
-          ) {
-            reproducirSonido(configNotificaciones?.sonido_mensaje || "ixora-pulse");
-          }
         }
       }
     };
@@ -899,12 +1064,6 @@ export default function ChatPro({ socket, user, onClose }) {
       const esNuestroMensaje = mensaje.usuario_nickname === userDisplayName;
       if (!esNuestroMensaje && !viendoEste) {
         setNoLeidos((n) => n + 1);
-        if (
-          configNotificaciones?.sonido_activo !== 0 &&
-          estaDentroHorario(configNotificaciones)
-        ) {
-          reproducirSonido(configNotificaciones?.sonido_mensaje || "ixora-pulse");
-        }
       }
     };
 
@@ -912,10 +1071,58 @@ export default function ChatPro({ socket, user, onClose }) {
     const handleGrupoCreado = async (grupo) => {
       // Recargar grupos
       try {
-        const data = await authFetch("/chat/grupos/mios");
+        const data = await authFetch("/chat/grupos");
         setGrupos(data || []);
       } catch (e) {
         console.error("Error recargando grupos:", e);
+      }
+    };
+
+    const handleGrupoSolicitudNueva = async (payload) => {
+      if (!payload?.grupo_id || tipoChat !== "grupal" || String(chatActual) !== String(payload.grupo_id)) return;
+      try {
+        const list = await authFetch(`${SERVER_URL}/chat/grupos/${chatActual}/solicitudes`);
+        const arr = Array.isArray(list) ? list : [];
+        setSolicitudesPendientes(arr);
+        if (arr.length > 0) {
+          const s = arr[0];
+          setModalSolicitud({
+            solicitudId: s.id,
+            grupoId: s.grupo_id,
+            usuario_nickname: s.usuario_nickname,
+            fecha: s.fecha,
+            groupName: "Grupo",
+          });
+        } else {
+          setModalSolicitud(null);
+        }
+      } catch {
+        /* ignorar */
+      }
+    };
+
+    const handleGrupoSolicitudRespondida = async (payload) => {
+      if (!payload?.grupo_id || tipoChat !== "grupal" || String(chatActual) !== String(payload.grupo_id)) return;
+      try {
+        const list = await authFetch(`${SERVER_URL}/chat/grupos/${chatActual}/solicitudes`);
+        const arr = Array.isArray(list) ? list : [];
+        setSolicitudesPendientes(arr);
+        if (arr.length > 0) {
+          const s = arr[0];
+          setModalSolicitud({
+            solicitudId: s.id,
+            grupoId: s.grupo_id,
+            usuario_nickname: s.usuario_nickname,
+            fecha: s.fecha,
+            groupName: "Grupo",
+          });
+        } else {
+          setModalSolicitud(null);
+        }
+        const data = await authFetch("/chat/grupos");
+        setGrupos(data || []);
+      } catch {
+        /* ignorar */
       }
     };
 
@@ -945,6 +1152,83 @@ export default function ChatPro({ socket, user, onClose }) {
       }));
     };
 
+    const handleGeneralActualizado = (mensaje) => {
+      if (!mensaje?.id) return;
+      setMensajesGeneral((prev) => {
+        const existe = prev.some((m) => m.id === mensaje.id);
+        if (existe) {
+          return prev.map((m) => (m.id === mensaje.id ? { ...m, ...mensaje } : m));
+        } else {
+          // Si no existe, agregarlo (por si acaso)
+          return [...prev, mensaje].sort((a, b) => {
+            const fechaA = new Date(a.fecha || 0).getTime();
+            const fechaB = new Date(b.fecha || 0).getTime();
+            return fechaA - fechaB;
+          });
+        }
+      });
+      
+    };
+
+    const handlePrivadoActualizado = (mensaje) => {
+      if (!mensaje?.id) return;
+      const userDisplayName = user?.nickname || user?.name;
+      const otroUsuario =
+        mensaje.de_nickname === userDisplayName
+          ? mensaje.para_nickname
+          : mensaje.de_nickname;
+      if (!otroUsuario) return;
+      setMensajesPrivado((prev) => {
+        const mensajesChat = prev[otroUsuario] || [];
+        const existe = mensajesChat.some((m) => m.id === mensaje.id);
+        if (existe) {
+          return {
+            ...prev,
+            [otroUsuario]: mensajesChat.map((m) =>
+              m.id === mensaje.id ? { ...m, ...mensaje } : m
+            ),
+          };
+        } else {
+          return {
+            ...prev,
+            [otroUsuario]: [...mensajesChat, mensaje].sort((a, b) => {
+              const fechaA = new Date(a.fecha || 0).getTime();
+              const fechaB = new Date(b.fecha || 0).getTime();
+              return fechaA - fechaB;
+            }),
+          };
+        }
+      });
+      
+    };
+
+    const handleGrupalActualizado = (mensaje) => {
+      if (!mensaje?.id || !mensaje?.grupo_id) return;
+      const grupoId = String(mensaje.grupo_id);
+      setMensajesGrupal((prev) => {
+        const mensajesGrupo = prev[grupoId] || [];
+        const existe = mensajesGrupo.some((m) => m.id === mensaje.id);
+        if (existe) {
+          return {
+            ...prev,
+            [grupoId]: mensajesGrupo.map((m) =>
+              m.id === mensaje.id ? { ...m, ...mensaje } : m
+            ),
+          };
+        } else {
+          return {
+            ...prev,
+            [grupoId]: [...mensajesGrupo, mensaje].sort((a, b) => {
+              const fechaA = new Date(a.fecha || 0).getTime();
+              const fechaB = new Date(b.fecha || 0).getTime();
+              return fechaA - fechaB;
+            }),
+          };
+        }
+      });
+      
+    };
+
     const handlePrivadoLeidos = (payload) => {
       if (!payload?.mensajes || !Array.isArray(payload.mensajes)) return;
       const userDisplayName = user?.nickname || user?.name;
@@ -963,22 +1247,32 @@ export default function ChatPro({ socket, user, onClose }) {
     socket.on("chat_privado_nuevo", handlePrivado);
     socket.on("chat_grupal_nuevo", handleGrupal);
     socket.on("chat_grupo_creado", handleGrupoCreado);
+    socket.on("chat_grupo_solicitud_nueva", handleGrupoSolicitudNueva);
+    socket.on("chat_grupo_solicitud_respondida", handleGrupoSolicitudRespondida);
     socket.on("chats_activos_actualizados", handleChatsActivosActualizados);
     socket.on("chat_general_borrado", handleGeneralBorrado);
     socket.on("chat_privado_borrado", handlePrivadoBorrado);
     socket.on("chat_grupal_borrado", handleGrupalBorrado);
     socket.on("chat_privado_leidos", handlePrivadoLeidos);
+    socket.on("chat_general_actualizado", handleGeneralActualizado);
+    socket.on("chat_privado_actualizado", handlePrivadoActualizado);
+    socket.on("chat_grupal_actualizado", handleGrupalActualizado);
 
     return () => {
       socket.off("chat_general_nuevo", handleGeneral);
       socket.off("chat_privado_nuevo", handlePrivado);
       socket.off("chat_grupal_nuevo", handleGrupal);
       socket.off("chat_grupo_creado", handleGrupoCreado);
+      socket.off("chat_grupo_solicitud_nueva", handleGrupoSolicitudNueva);
+      socket.off("chat_grupo_solicitud_respondida", handleGrupoSolicitudRespondida);
       socket.off("chats_activos_actualizados", handleChatsActivosActualizados);
       socket.off("chat_general_borrado", handleGeneralBorrado);
       socket.off("chat_privado_borrado", handlePrivadoBorrado);
       socket.off("chat_grupal_borrado", handleGrupalBorrado);
       socket.off("chat_privado_leidos", handlePrivadoLeidos);
+      socket.off("chat_general_actualizado", handleGeneralActualizado);
+      socket.off("chat_privado_actualizado", handlePrivadoActualizado);
+      socket.off("chat_grupal_actualizado", handleGrupalActualizado);
     };
   }, [socket, open, tipoChat, chatActual, tabPrincipal, user, SERVER_URL, esAdmin, configNotificaciones]);
 
@@ -1087,10 +1381,10 @@ export default function ChatPro({ socket, user, onClose }) {
       chatBodyRef.current.scrollTop = chatBodyRef.current.scrollHeight;
     }
     
-    // Marcar mensajes como leídos cuando se está viendo el chat
-    // Esto asegura que el badge desaparezca cuando se abre el chat
+    // Marcar mensajes como leídos automáticamente cuando se abre/ve el chat
+    // Esto asegura que el badge desaparezca inmediatamente cuando se abre el chat
     if (open && tipoChat === "privado" && chatActual) {
-      // Limpiar contador localmente primero
+      // Limpiar contador localmente primero para respuesta inmediata
       setChatsActivos((prev) =>
         prev.map((c) =>
           c.otro_usuario === chatActual ? { ...c, mensajes_no_leidos: 0 } : c
@@ -1114,13 +1408,28 @@ export default function ChatPro({ socket, user, onClose }) {
     }
 
     if (open && tipoChat === "general") {
+      // Marcar mensajes generales como leídos
       authFetch(`${SERVER_URL}/chat/general/leer`, { method: "POST" }).catch(() => {});
     }
 
     if (open && tipoChat === "grupal" && chatActual) {
+      // Marcar mensajes grupales como leídos
       authFetch(`${SERVER_URL}/chat/grupos/${chatActual}/leer`, { method: "POST" }).catch(() => {});
     }
-  }, [mensajesGeneral, mensajesPrivado, mensajesGrupal, tipoChat, chatActual, open]);
+  }, [tipoChat, chatActual, open, SERVER_URL]);
+
+  // ⬇ Scroll automático al final cuando se cargan los mensajes
+  // ============================
+  useEffect(() => {
+    if (chatBodyRef.current && open) {
+      // Usar setTimeout para asegurar que el DOM se haya actualizado
+      setTimeout(() => {
+        if (chatBodyRef.current) {
+          chatBodyRef.current.scrollTop = chatBodyRef.current.scrollHeight;
+        }
+      }, 100);
+    }
+  }, [tipoChat, chatActual, mensajesGeneral, mensajesPrivado, mensajesGrupal, open]);
 
   useEffect(() => {
     return () => {
@@ -1138,10 +1447,6 @@ export default function ChatPro({ socket, user, onClose }) {
   // 🟢 Abrir / Cerrar chat
   // ============================
   const abrirCerrarChat = () => {
-    // Activar AudioContext cuando el usuario abre el chat (gesto del usuario)
-    // Esto permite que los sonidos funcionen automáticamente cuando lleguen mensajes
-    activarAudioContext();
-    
     // Solicitar permiso para notificaciones del navegador (solo para admins)
     if (esAdmin && "Notification" in window && Notification.permission === "default") {
       Notification.requestPermission().catch(() => {
@@ -1149,13 +1454,32 @@ export default function ChatPro({ socket, user, onClose }) {
       });
     }
     
-    if (!open) setNoLeidos(0);
-    setOpen(!open);
     if (!open) {
+      setNoLeidos(0);
+    } else {
+      // Al cerrar, resetear todo el estado del chat para que se abra como nuevo la próxima vez
+      console.log("🔒 Cerrando chat y reseteando estado");
       setTabPrincipal("usuarios");
       setTipoChat(null);
       setChatActual(null);
+      setMensajeInput("");
+      setArchivoAdjunto(null);
+      setEditandoMensaje(null);
+      setRespondiendoMensaje(null);
+      setMensajeResaltadoId(null);
+      // No cerrar el perfil si estamos abriendo desde el sidebar
+      if (!abriendoPerfilDesdeSidebarRef.current) {
+        setPerfilAbierto(false);
+        setPerfilData(null);
+      }
+      setModalSolicitud(null);
+      setGrupoMenuAbierto(null);
+      setMostrarAgregarMiembros(false);
+      // Resetear el ref de mensaje prioritario procesado
+      mensajePrioritarioProcessedRef.current = null;
     }
+    
+    setOpen(!open);
   };
 
   // ============================
@@ -1212,7 +1536,39 @@ export default function ChatPro({ socket, user, onClose }) {
       .replace(/>/g, "&gt;");
 
   const formatearMensaje = (texto = "") => {
-    let html = escapeHtml(texto);
+    // Procesar stickers PRIMERO, antes de escapar HTML
+    let html = texto;
+    
+    // Detectar si el mensaje contiene HTML de img ya escapado o sin escapar
+    // Caso 1: HTML sin escapar (no debería pasar, pero por si acaso)
+    const htmlImgRegex = /<img[^>]*src=["']([^"']*\/chat\/archivo\/(\d+)[^"']*)["'][^>]*>/gi;
+    html = html.replace(htmlImgRegex, (match, url, id) => {
+      // Si ya es HTML válido, extraer el ID y regenerar con token actualizado
+      return `__STICKER_PLACEHOLDER_${id}_sticker__`;
+    });
+    
+    // Caso 2: HTML escapado (como &lt;img...&gt;)
+    const escapedImgRegex = /&lt;img[^&]*src=["']([^"']*\/chat\/archivo\/(\d+)[^"']*)["'][^&]*&gt;/gi;
+    html = html.replace(escapedImgRegex, (match, url, id) => {
+      return `__STICKER_PLACEHOLDER_${id}_sticker__`;
+    });
+    
+    // Caso 3: Patrón [sticker:id:nombre]
+    const stickerRegex = /\[sticker:(\d+):([^\]]+)\]/g;
+    html = html.replace(stickerRegex, (match, id, nombre) => {
+      return `__STICKER_PLACEHOLDER_${id}_${nombre}__`;
+    });
+    
+    // Ahora escapar el HTML del resto del texto
+    html = escapeHtml(html);
+    
+    // Reemplazar los placeholders con el HTML real del sticker (sin escapar)
+    html = html.replace(/__STICKER_PLACEHOLDER_(\d+)_([^_]+)__/g, (match, id, nombre) => {
+      const authToken = token || (typeof localStorage !== 'undefined' ? localStorage.getItem("token") : null);
+      const urlSticker = `${SERVER_URL}/chat/archivo/${id}${authToken ? `?token=${encodeURIComponent(authToken)}` : ''}`;
+      const nombreEscapado = escapeHtml(nombre === 'sticker' ? 'Sticker' : nombre);
+      return `<img src="${urlSticker}" alt="${nombreEscapado}" class="msg-sticker-inline" style="max-width: 80px; max-height: 80px; vertical-align: middle; display: inline-block; margin: 2px; cursor: pointer; image-rendering: auto;" onclick="this.style.transform='scale(1.2)'; setTimeout(() => this.style.transform='scale(1)', 200);" onerror="this.style.display='none';" />`;
+    });
     
     // Convertir URLs en enlaces clickeables (debe ir antes de otros reemplazos)
     // Regex mejorado para detectar URLs con o sin protocolo
@@ -1357,10 +1713,467 @@ export default function ChatPro({ socket, user, onClose }) {
 
   const adjuntarArchivo = (file) => {
     if (!file) return;
+    // Detectar si es un sticker por el nombre del archivo
+    const esSticker = file.name.toLowerCase().includes('sticker');
+    if (esSticker) {
+      file.esSticker = true;
+    }
     setArchivoAdjunto(file);
     if (!mensajeInput.trim()) {
-      setMensajeInput(`📎 ${file.name}\n`);
+      if (esSticker) {
+        // Para stickers, no agregar texto, se enviará como sticker
+        setMensajeInput('');
+      } else {
+        setMensajeInput(`📎 ${file.name}\n`);
+      }
     }
+  };
+
+  // Función para comprimir imágenes (preserva GIFs pequeños, comprime grandes)
+  const comprimirImagen = (file, maxWidth = 200, calidad = 0.7) => {
+    return new Promise((resolve, reject) => {
+      // Si es un GIF pequeño (< 500KB), no comprimir para preservar la animación
+      // Si es un GIF grande, comprimirlo para evitar problemas de cuota
+      if (file.type === 'image/gif' && file.size < 500 * 1024) {
+        resolve(file);
+        return;
+      }
+      
+      // Para GIFs grandes, necesitamos convertirlos a un formato comprimible
+      // Nota: Esto perderá la animación, pero es necesario para evitar problemas de cuota
+      
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+          
+          // Redimensionar si es necesario
+          if (width > maxWidth) {
+            height = (height * maxWidth) / width;
+            width = maxWidth;
+          }
+          
+          canvas.width = width;
+          canvas.height = height;
+          
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+          
+          // Preservar el tipo MIME original si no es GIF
+          const tipoMime = file.type || 'image/jpeg';
+          
+          canvas.toBlob(
+            (blob) => {
+              if (blob) {
+                const archivoComprimido = new File([blob], file.name, {
+                  type: tipoMime,
+                  lastModified: Date.now()
+                });
+                resolve(archivoComprimido);
+              } else {
+                reject(new Error('Error al comprimir imagen'));
+              }
+            },
+            tipoMime,
+            calidad
+          );
+        };
+        img.onerror = reject;
+        img.src = e.target.result;
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  };
+
+  // Función para convertir base64 a File
+  const base64ToFile = (base64String, filename) => {
+    try {
+      // Extraer el tipo MIME y los datos base64
+      const matches = base64String.match(/^data:([A-Za-z-+/]+);base64,(.+)$/);
+      if (!matches || matches.length !== 3) {
+        throw new Error('Formato base64 inválido');
+      }
+      
+      const contentType = matches[1];
+      const base64Data = matches[2];
+      
+      // Convertir base64 a bytes
+      const byteCharacters = atob(base64Data);
+      const byteArrays = [];
+      
+      for (let offset = 0; offset < byteCharacters.length; offset += 512) {
+        const slice = byteCharacters.slice(offset, offset + 512);
+        const byteNumbers = new Array(slice.length);
+        for (let i = 0; i < slice.length; i++) {
+          byteNumbers[i] = slice.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        byteArrays.push(byteArray);
+      }
+      
+      const blob = new Blob(byteArrays, { type: contentType });
+      return new File([blob], filename, { type: contentType });
+    } catch (error) {
+      console.error('Error convirtiendo base64 a File:', error);
+      return null;
+    }
+  };
+
+  // Enviar emoji personalizado como sticker
+  const enviarEmojiPersonalizado = async (emoji) => {
+    if (!emoji || !emoji.url) return;
+    
+    try {
+      let archivo;
+      
+      // Si es base64, convertir a File
+      if (emoji.url.startsWith('data:')) {
+        const extension = emoji.url.match(/data:image\/(\w+);/)?.[1] || 'png';
+        const nombreArchivo = `sticker-${emoji.nombre || 'emoji'}-${Date.now()}.${extension}`;
+        archivo = base64ToFile(emoji.url, nombreArchivo);
+        
+        if (!archivo) {
+          showAlert('Error al procesar el sticker', 'error');
+          return;
+        }
+      } else {
+        // Si es una URL externa, descargarla
+        try {
+          const response = await fetch(emoji.url);
+          const blob = await response.blob();
+          const extension = blob.type.split('/')[1] || 'png';
+          archivo = new File([blob], `sticker-${emoji.nombre || 'emoji'}-${Date.now()}.${extension}`, { 
+            type: blob.type 
+          });
+        } catch (err) {
+          console.error('Error descargando sticker desde URL:', err);
+          showAlert('Error al cargar el sticker', 'error');
+          return;
+        }
+      }
+      
+      // Agregar metadata para identificar como sticker
+      archivo.esSticker = true;
+      archivo.nombreSticker = emoji.nombre;
+      
+      // Cerrar el selector de emojis
+      setInputEmojiAbierto(false);
+      
+      // Subir archivo y enviar automáticamente
+      setArchivoSubiendo(true);
+      const archivoSubido = await subirArchivo(archivo);
+      
+      if (!archivoSubido) {
+        setArchivoSubiendo(false);
+        return;
+      }
+      
+      // Usar nickname si existe, si no usar name
+      const userDisplayName = user?.nickname || user?.name;
+      if (!userDisplayName) {
+        showAlert("No se puede enviar mensajes sin nickname o nombre. Por favor configura tu nickname en tu perfil.", "warning");
+        setArchivoSubiendo(false);
+        return;
+      }
+      
+      // Formatear mensaje como sticker
+      const nombreSticker = archivo.name?.replace(/\.(png|jpg|jpeg|gif|webp)$/i, '') || 'sticker';
+      const mensajeSticker = `[sticker:${archivoSubido.id}:${nombreSticker}]`;
+      
+      try {
+        const bodyData = {
+          mensaje: mensajeSticker,
+          tipo_mensaje: "archivo",
+          archivo_id: archivoSubido.id,
+          menciona: null,
+          enlace_compartido: null,
+        };
+
+        let respuesta;
+        if (tipoChat === "general") {
+          respuesta = await authFetch(`${SERVER_URL}/chat/general`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(bodyData),
+          });
+          if (respuesta?.mensaje) {
+            setMensajesGeneral((prev) => {
+              const existe = prev.some((m) => m.id === respuesta.mensaje.id);
+              if (existe) return prev;
+              return [...prev, respuesta.mensaje].sort((a, b) => {
+                const fechaA = new Date(a.fecha || 0).getTime();
+                const fechaB = new Date(b.fecha || 0).getTime();
+                return fechaA - fechaB;
+              });
+            });
+          }
+        } else if (tipoChat === "privado") {
+          respuesta = await authFetch(`${SERVER_URL}/chat/privado`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ...bodyData, para_nickname: chatActual }),
+          });
+          if (respuesta?.mensaje) {
+            setMensajesPrivado((prev) => {
+              const mensajesExistentes = prev[chatActual] || [];
+              const existe = mensajesExistentes.some((m) => m.id === respuesta.mensaje.id);
+              if (existe) return prev;
+              return {
+                ...prev,
+                [chatActual]: [...mensajesExistentes, respuesta.mensaje].sort((a, b) => {
+                  const fechaA = new Date(a.fecha || 0).getTime();
+                  const fechaB = new Date(b.fecha || 0).getTime();
+                  return fechaA - fechaB;
+                }),
+              };
+            });
+          }
+        } else if (tipoChat === "grupal") {
+          respuesta = await authFetch(`${SERVER_URL}/chat/grupos/${chatActual}/mensajes`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(bodyData),
+          });
+          if (respuesta?.mensaje) {
+            setMensajesGrupal((prev) => {
+              const mensajesExistentes = prev[chatActual] || [];
+              const existe = mensajesExistentes.some((m) => m.id === respuesta.mensaje.id);
+              if (existe) return prev;
+              return {
+                ...prev,
+                [chatActual]: [...mensajesExistentes, respuesta.mensaje].sort((a, b) => {
+                  const fechaA = new Date(a.fecha || 0).getTime();
+                  const fechaB = new Date(b.fecha || 0).getTime();
+                  return fechaA - fechaB;
+                }),
+              };
+            });
+          }
+        }
+        
+        setArchivoSubiendo(false);
+      } catch (err) {
+        console.error("Error enviando sticker:", err);
+        showAlert("Error al enviar el sticker", "error");
+        setArchivoSubiendo(false);
+      }
+    } catch (error) {
+      console.error('Error enviando sticker:', error);
+      showAlert('Error al enviar sticker', 'error');
+    }
+  };
+
+  // ========== SISTEMA DE REUNIONES ==========
+  
+  // Cargar reuniones desde el servidor
+  useEffect(() => {
+    const cargarReuniones = async () => {
+      try {
+        const data = await authFetch(`${SERVER_URL}/reuniones/proximas`);
+        setReuniones(data || []);
+        // Programar notificaciones para todas las reuniones
+        (data || []).forEach(reunion => programarNotificacionesReunion(reunion));
+      } catch (e) {
+        console.error('Error cargando reuniones:', e);
+        // Fallback a localStorage si falla el servidor
+        const guardadas = localStorage.getItem('ixora_reuniones');
+        if (guardadas) {
+          try {
+            const reunionesData = JSON.parse(guardadas);
+            setReuniones(reunionesData);
+            reunionesData.forEach(reunion => programarNotificacionesReunion(reunion));
+          } catch (err) {
+            console.error('Error cargando reuniones desde localStorage:', err);
+          }
+        }
+      }
+    };
+    if (open && SERVER_URL) {
+      cargarReuniones();
+    }
+    
+    // Verificar reuniones cada minuto para notificaciones próximas
+    const intervalo = setInterval(() => {
+      reuniones.forEach(reunion => {
+        if (reunion.fecha && reunion.hora) {
+          const fechaHora = new Date(`${reunion.fecha}T${reunion.hora}`);
+          const ahora = new Date();
+          const diffMinutos = (fechaHora.getTime() - ahora.getTime()) / (1000 * 60);
+          
+          // Notificar si está entre 10 y 11 minutos antes
+          if (diffMinutos >= 10 && diffMinutos < 11) {
+            mostrarNotificacionReunion(reunion, '10 minutos');
+          }
+          // Notificar si está entre 0 y 1 minuto (a la hora)
+          else if (diffMinutos >= 0 && diffMinutos < 1) {
+            mostrarNotificacionReunion(reunion, 'ahora');
+          }
+        }
+      });
+    }, 60000); // Cada minuto
+    
+    return () => clearInterval(intervalo);
+  }, [reuniones, SERVER_URL, open]);
+
+  // Programar notificaciones para una reunión
+  const programarNotificacionesReunion = (reunion) => {
+    if (!reunion.fecha || !reunion.hora) return;
+    
+    const fechaHora = new Date(`${reunion.fecha}T${reunion.hora}`);
+    const ahora = new Date();
+    
+    // Notificación 10 minutos antes
+    const notif10min = new Date(fechaHora.getTime() - 10 * 60 * 1000);
+    if (notif10min > ahora) {
+      const timeout10min = notif10min.getTime() - ahora.getTime();
+      setTimeout(() => {
+        mostrarNotificacionReunion(reunion, '10 minutos');
+      }, timeout10min);
+    }
+    
+    // Notificación a la hora exacta
+    if (fechaHora > ahora) {
+      const timeoutExacto = fechaHora.getTime() - ahora.getTime();
+      setTimeout(() => {
+        mostrarNotificacionReunion(reunion, 'ahora');
+      }, timeoutExacto);
+    }
+  };
+
+  // Mostrar notificación de reunión
+  const mostrarNotificacionReunion = (reunion, cuando) => {
+    const mensaje = cuando === 'ahora' 
+      ? `🔔 ¡La reunión "${reunion.titulo}" es ahora!`
+      : `⏰ La reunión "${reunion.titulo}" comienza en 10 minutos`;
+    
+    showAlert(mensaje, 'info');
+    
+    // Reproducir sonido de notificación si está disponible
+    if (window.sonidoIxora) {
+      try {
+        window.sonidoIxora.reproducir('notification');
+      } catch (e) {
+        console.error('Error reproduciendo sonido:', e);
+      }
+    }
+  };
+
+  // Crear o actualizar reunión
+  const guardarReunion = () => {
+    if (!reunionForm.titulo.trim() || !reunionForm.fecha || !reunionForm.hora) {
+      showAlert('Completa todos los campos obligatorios', 'warning');
+      return;
+    }
+
+    const nuevaReunion = {
+      id: reunionEditando?.id || Date.now(),
+      titulo: reunionForm.titulo.trim(),
+      descripcion: reunionForm.descripcion.trim(),
+      fecha: reunionForm.fecha,
+      hora: reunionForm.hora,
+      lugar: reunionForm.lugar.trim(),
+      esVideollamada: reunionForm.esVideollamada,
+      participantes: reunionForm.participantes,
+      creador: user?.nickname || user?.name,
+      chat_tipo: tipoChat,
+      chat_id: chatActual || 'general',
+      creada: new Date().toISOString()
+    };
+
+    let nuevasReuniones;
+    if (reunionEditando) {
+      nuevasReuniones = reuniones.map(r => r.id === reunionEditando.id ? nuevaReunion : r);
+    } else {
+      nuevasReuniones = [...reuniones, nuevaReunion];
+    }
+
+    setReuniones(nuevasReuniones);
+    localStorage.setItem('ixora_reuniones', JSON.stringify(nuevasReuniones));
+    
+    // Programar notificaciones
+    programarNotificacionesReunion(nuevaReunion);
+    
+    // Enviar mensaje al chat con la información de la reunión
+    const mensajeReunion = `📅 **Reunión: ${nuevaReunion.titulo}**\n` +
+      `📆 Fecha: ${new Date(nuevaReunion.fecha).toLocaleDateString('es-ES')}\n` +
+      `🕐 Hora: ${nuevaReunion.hora}\n` +
+      (nuevaReunion.lugar ? `📍 Lugar: ${nuevaReunion.lugar}\n` : '') +
+      (nuevaReunion.esVideollamada ? '📹 Videollamada\n' : '') +
+      (nuevaReunion.descripcion ? `\n${nuevaReunion.descripcion}` : '');
+    
+    setMensajeInput(mensajeReunion);
+    setModalReunionAbierto(false);
+    resetearFormularioReunion();
+    showAlert(reunionEditando ? 'Reunión actualizada' : 'Reunión creada', 'success');
+  };
+
+  // Resetear formulario de reunión
+  const resetearFormularioReunion = () => {
+    setReunionForm({
+      titulo: "",
+      descripcion: "",
+      fecha: "",
+      hora: "",
+      lugar: "",
+      esVideollamada: false,
+      participantes: []
+    });
+    setReunionEditando(null);
+  };
+
+  // Abrir modal de reunión
+  const abrirModalReunion = (reunion = null) => {
+    if (reunion) {
+      setReunionEditando(reunion);
+      setReunionForm({
+        titulo: reunion.titulo || "",
+        descripcion: reunion.descripcion || "",
+        fecha: reunion.fecha || "",
+        hora: reunion.hora || "",
+        lugar: reunion.lugar || "",
+        esVideollamada: reunion.esVideollamada || false,
+        participantes: reunion.participantes || []
+      });
+    } else {
+      resetearFormularioReunion();
+    }
+    setModalReunionAbierto(true);
+  };
+
+  // Eliminar reunión
+  const eliminarReunion = async (reunionId) => {
+    const confirmado = await showConfirm('¿Eliminar esta reunión?', 'Eliminar reunión');
+    if (!confirmado) return;
+    
+    const nuevasReuniones = reuniones.filter(r => r.id !== reunionId);
+    setReuniones(nuevasReuniones);
+    localStorage.setItem('ixora_reuniones', JSON.stringify(nuevasReuniones));
+    showAlert('Reunión eliminada', 'success');
+  };
+
+  // Iniciar videollamada desde reunión
+  // eslint-disable-next-line no-unused-vars
+  const iniciarReunionVideollamada = (reunion) => {
+    if (reunion.esVideollamada) {
+      abrirVideollamada();
+    }
+  };
+
+  // Obtener reuniones del chat actual
+  const obtenerReunionesChatActual = () => {
+    const chatId = tipoChat === 'general' ? 'general' : (chatActual || '');
+    return reuniones.filter(r => 
+      r.chat_tipo === tipoChat && 
+      (r.chat_id === chatId || r.chat_id === String(chatId))
+    ).sort((a, b) => {
+      const fechaA = new Date(`${a.fecha}T${a.hora}`);
+      const fechaB = new Date(`${b.fecha}T${b.hora}`);
+      return fechaA - fechaB;
+    });
   };
 
   const manejarGaleria = (files) => {
@@ -1388,11 +2201,12 @@ export default function ChatPro({ socket, user, onClose }) {
 
   const abrirCamara = async () => {
     try {
-      const foto = await Camera.getPhoto({
+      const cameraModule = await import("@capacitor/camera");
+      const foto = await cameraModule.Camera.getPhoto({
         quality: 80,
         allowEditing: false,
-        resultType: CameraResultType.Uri,
-        source: CameraSource.Camera,
+        resultType: cameraModule.CameraResultType.Uri,
+        source: cameraModule.CameraSource.Camera,
       });
       if (!foto?.webPath) return;
       const response = await fetch(foto.webPath);
@@ -1447,14 +2261,241 @@ export default function ChatPro({ socket, user, onClose }) {
   };
 
   const emojiReacciones = ["👍", "❤️", "😂", "😮", "😢", "🎉"];
-  const emojiExtra = [
-    "😀", "😃", "😄", "😁", "😅", "🤣", "😊", "😍",
-    "😘", "😎", "🤔", "😴", "😡", "😇", "🤩", "🥳",
-    "😮", "😢", "😤", "😱", "🤯", "😵", "🥶", "🥵",
-    "👍", "👎", "🙏", "👏", "💪", "🤝", "🤍", "💙",
-    "💚", "💛", "🧡", "❤️", "💜", "🖤", "💔", "💯",
-    "🔥", "✨", "⭐", "✅", "❗", "❓", "🎉", "🎯",
-  ];
+  
+  // Catálogo completo de emojis por categorías
+  const emojiCategorias = {
+    "masUsados": {
+      nombre: "Más usados",
+      icono: "⭐",
+      emojis: []
+    },
+    "emoticonos": {
+      nombre: "Emoticonos y personas",
+      icono: "😀",
+      emojis: [
+        "😀", "😃", "😄", "😁", "😅", "🤣", "😂", "🙂", "🙃", "😉",
+        "😊", "😇", "🥰", "😍", "🤩", "😘", "😗", "😚", "😙", "😋",
+        "😛", "😜", "🤪", "😝", "🤑", "🤗", "🤭", "🤫", "🤔", "🤐",
+        "🤨", "😐", "😑", "😶", "😏", "😒", "🙄", "😬", "🤥", "😌",
+        "😔", "😪", "🤤", "😴", "😷", "🤒", "🤕", "🤢", "🤮", "🤧",
+        "🥵", "🥶", "😶‍🌫️", "😵", "😵‍💫", "🤯", "🤠", "🥳", "😎", "🤓",
+        "🧐", "😕", "😟", "🙁", "😮", "😯", "😲", "😳", "🥺", "😦",
+        "😧", "😨", "😰", "😥", "😢", "😭", "😱", "😖", "😣", "😞",
+        "😓", "😩", "😫", "🥱", "😤", "😡", "😠", "🤬", "😈", "👿",
+        "💀", "☠️", "💩", "🤡", "👹", "👺", "👻", "👽", "👾", "🤖",
+        "😺", "😸", "😹", "😻", "😼", "😽", "🙀", "😿", "😾", "👋",
+        "🤚", "🖐", "✋", "🖖", "👌", "🤌", "🤏", "✌️", "🤞", "🤟",
+        "🤘", "🤙", "👈", "👉", "👆", "🖕", "👇", "☝️", "👍", "👎",
+        "✊", "👊", "🤛", "🤜", "👏", "🙌", "👐", "🤲", "🤝", "🙏",
+        "✍️", "💪", "🦾", "🦿", "🦵", "🦶", "👂", "🦻", "👃", "🧠",
+        "🫀", "🫁", "🦷", "🦴", "👀", "👁️", "👅", "👄", "💋", "💘",
+        "💝", "💖", "💗", "💓", "💞", "💕", "💟", "❣️", "💔", "❤️",
+        "🧡", "💛", "💚", "💙", "💜", "🖤", "🤍", "🤎", "💯", "💢",
+        "💥", "💫", "💦", "💨", "🕳️", "💣", "💬", "👁️‍🗨️", "🗨️", "🗯️",
+        "💭", "💤", "👶", "🧒", "👦", "👧", "🧑", "👱", "👨", "🧔",
+        "👨‍🦰", "👨‍🦱", "👨‍🦳", "👨‍🦲", "👩", "👩‍🦰", "🧓", "👴", "👵", "🙍",
+        "🙍‍♂️", "🙍‍♀️", "🙎", "🙎‍♂️", "🙎‍♀️", "🙅", "🙅‍♂️", "🙅‍♀️", "🙆", "🙆‍♂️",
+        "🙆‍♀️", "💁", "💁‍♂️", "💁‍♀️", "🙋", "🙋‍♂️", "🙋‍♀️", "🧏", "🧏‍♂️", "🧏‍♀️",
+        "🤦", "🤦‍♂️", "🤦‍♀️", "🤷", "🤷‍♂️", "🤷‍♀️", "🧑‍⚕️", "👨‍⚕️", "👩‍⚕️", "🧑‍🎓",
+        "👨‍🎓", "👩‍🎓", "🧑‍🏫", "👨‍🏫", "👩‍🏫", "🧑‍⚖️", "👨‍⚖️", "👩‍⚖️", "🧑‍🌾", "👨‍🌾",
+        "👩‍🌾", "🧑‍🍳", "👨‍🍳", "👩‍🍳", "🧑‍🔧", "👨‍🔧", "👩‍🔧", "🧑‍🏭", "👨‍🏭", "👩‍🏭",
+        "🧑‍💼", "👨‍💼", "👩‍💼", "🧑‍🔬", "👨‍🔬", "👩‍🔬", "🧑‍💻", "👨‍💻", "👩‍💻", "🧑‍🎤",
+        "👨‍🎤", "👩‍🎤", "🧑‍🎨", "👨‍🎨", "👩‍🎨", "🧑‍✈️", "👨‍✈️", "👩‍✈️", "🧑‍🚀", "👨‍🚀",
+        "👩‍🚀", "🧑‍🚒", "👨‍🚒", "👩‍🚒", "👮", "👮‍♂️", "👮‍♀️", "🕵️", "🕵️‍♂️", "🕵️‍♀️",
+        "💂", "💂‍♂️", "💂‍♀️", "🥷", "👷", "👷‍♂️", "👷‍♀️", "🤴", "👸", "👳",
+        "👳‍♂️", "👳‍♀️", "👲", "🧕", "🤵", "🤵‍♂️", "🤵‍♀️", "👰", "👰‍♂️", "👰‍♀️",
+        "🤰", "🤱", "👼", "🎅", "🤶", "🦸", "🦸‍♂️", "🦸‍♀️", "🦹", "🦹‍♂️",
+        "🦹‍♀️", "🧙", "🧙‍♂️", "🧙‍♀️", "🧚", "🧚‍♂️", "🧚‍♀️", "🧛", "🧛‍♂️", "🧛‍♀️",
+        "🧜", "🧜‍♂️", "🧜‍♀️", "🧝", "🧝‍♂️", "🧝‍♀️", "🧞", "🧞‍♂️", "🧞‍♀️", "🧟",
+        "🧟‍♂️", "🧟‍♀️", "💆", "💆‍♂️", "💆‍♀️", "💇", "💇‍♂️", "💇‍♀️", "🚶", "🚶‍♂️",
+        "🚶‍♀️", "🧍", "🧍‍♂️", "🧍‍♀️", "🧎", "🧎‍♂️", "🧎‍♀️", "🏃", "🏃‍♂️", "🏃‍♀️",
+        "💃", "🕺", "🕴️", "👯", "👯‍♂️", "👯‍♀️", "🧘", "🧘‍♂️", "🧘‍♀️", "🛀",
+        "🛌", "👭", "👫", "👬", "💏", "💑", "👪", "👨‍👩‍👦", "👨‍👩‍👧", "👨‍👩‍👧‍👦",
+        "👨‍👩‍👦‍👦", "👨‍👩‍👧‍👧", "👨‍👨‍👦", "👨‍👨‍👧", "👨‍👨‍👧‍👦", "👨‍👨‍👦‍👦", "👩‍👩‍👦", "👩‍👩‍👧",
+        "👩‍👩‍👧‍👦", "👩‍👩‍👦‍👦", "👩‍👩‍👧‍👧", "👨‍👦", "👨‍👦‍👦", "👨‍👧", "👨‍👧‍👦", "👨‍👧‍👧", "👩‍👦",
+        "👩‍👦‍👦", "👩‍👧", "👩‍👧‍👦", "👩‍👧‍👧", "🗣️", "👤", "👥", "👣"
+      ]
+    },
+    "animales": {
+      nombre: "Animales y naturaleza",
+      icono: "🐶",
+      emojis: [
+        "🐶", "🐱", "🐭", "🐹", "🐰", "🦊", "🐻", "🐼", "🐨", "🐯",
+        "🦁", "🐮", "🐷", "🐽", "🐸", "🐵", "🙈", "🙉", "🙊", "🐒",
+        "🐔", "🐧", "🐦", "🐤", "🐣", "🐥", "🦆", "🦅", "🦉", "🦇",
+        "🐺", "🐗", "🐴", "🦄", "🐝", "🐛", "🦋", "🐌", "🐞", "🐜",
+        "🦟", "🦗", "🕷️", "🦂", "🐢", "🐍", "🦎", "🦖", "🦕", "🐙",
+        "🦑", "🦐", "🦞", "🦀", "🐡", "🐠", "🐟", "🐬", "🐳", "🐋",
+        "🦈", "🐊", "🐅", "🐆", "🦓", "🦍", "🦧", "🐘", "🦛", "🦏",
+        "🐪", "🐫", "🦒", "🦘", "🦬", "🐃", "🐂", "🐄", "🐎", "🐖",
+        "🐏", "🐑", "🦙", "🐐", "🦌", "🐕", "🐩", "🦮", "🐕‍🦺", "🐈",
+        "🐈‍⬛", "🐓", "🦃", "🦤", "🦚", "🦜", "🦢", "🦩", "🕊️", "🐇",
+        "🦝", "🦨", "🦡", "🦫", "🦦", "🦥", "🐁", "🐀", "🐿️", "🌲",
+        "🌳", "🌴", "🌵", "🌶️", "🌷", "🌹", "🥀", "🌺", "🌻", "🌼",
+        "🌽", "🌾", "🌿", "☘️", "🍀", "🍁", "🍂", "🍃", "🍄", "🌰",
+        "🦀", "🦞", "🦐", "🦑", "🌍", "🌎", "🌏", "🌐", "🗺️", "🧭",
+        "🏔️", "⛰️", "🌋", "🗻", "🏕️", "🏖️", "🏜️", "🏝️", "🏞️", "🏟️",
+        "🏛️", "🏗️", "🧱", "🏘️", "🏚️", "🏠", "🏡", "🏢", "🏣", "🏤",
+        "🏥", "🏦", "🏨", "🏩", "🏪", "🏫", "🏬", "🏭", "🏯", "🏰",
+        "💒", "🗼", "🗽", "⛪", "🕌", "🛕", "🕍", "⛩️", "🕋", "⛲",
+        "⛺", "🌁", "🌃", "🌄", "🌅", "🌆", "🌇", "🌉", "♨️", "🎠",
+        "🎡", "🎢", "💈", "🎪", "🚂", "🚃", "🚄", "🚅", "🚆", "🚇",
+        "🚈", "🚉", "🚊", "🚝", "🚞", "🚋", "🚌", "🚍", "🚎", "🚐",
+        "🚑", "🚒", "🚓", "🚔", "🚕", "🚖", "🚗", "🚘", "🚙", "🚚",
+        "🚛", "🚜", "🏎️", "🏍️", "🛵", "🦽", "🦼", "🛴", "🚲", "🛺",
+        "🚁", "🛸", "✈️", "🛫", "🛬", "🪂", "💺", "🚀", "🚟", "🚠",
+        "🚡", "🛰️", "🚢", "⛵", "🛶", "🛥️", "🛳️", "⛴️", "🛟", "🚤",
+        "🛩️", "🛫", "🛬", "🪂", "💺", "🚀", "🚟", "🚠", "🚡", "🛰️"
+      ]
+    },
+    "comida": {
+      nombre: "Comida y bebida",
+      icono: "🍕",
+      emojis: [
+        "🍇", "🍈", "🍉", "🍊", "🍋", "🍌", "🍍", "🥭", "🍎", "🍏",
+        "🍐", "🍑", "🍒", "🍓", "🥝", "🍅", "🥥", "🥑", "🍆", "🥔",
+        "🥕", "🌽", "🌶️", "🥒", "🥬", "🥦", "🧄", "🧅", "🍄", "🥜",
+        "🌰", "🍞", "🥐", "🥖", "🫓", "🥨", "🥯", "🥞", "🧇", "🧈",
+        "🧀", "🍖", "🍗", "🥩", "🥓", "🍔", "🍟", "🍕", "🌭", "🥪",
+        "🌮", "🌯", "🫔", "🥙", "🧆", "🥚", "🍳", "🥘", "🍲", "🫕",
+        "🥣", "🥗", "🍿", "🧈", "🧂", "🥫", "🍱", "🍘", "🍙", "🍚",
+        "🍛", "🍜", "🍝", "🍠", "🍢", "🍣", "🍤", "🍥", "🥮", "🍡",
+        "🥟", "🥠", "🥡", "🦀", "🦞", "🦐", "🦑", "🦪", "🍦", "🍧",
+        "🍨", "🍩", "🍪", "🎂", "🍰", "🧁", "🍫", "🍬", "🍭", "🍮",
+        "🍯", "🍼", "🥛", "☕", "🫖", "🍵", "🍶", "🍾", "🍷", "🍸",
+        "🍹", "🍺", "🍻", "🥂", "🥃", "🥤", "🧋", "🧃", "🧉", "🧊"
+      ]
+    },
+    "viajes": {
+      nombre: "Viajes y lugares",
+      icono: "✈️",
+      emojis: [
+        "🌍", "🌎", "🌏", "🌐", "🗺️", "🧭", "🏔️", "⛰️", "🌋", "🗻",
+        "🏕️", "🏖️", "🏜️", "🏝️", "🏞️", "🏟️", "🏛️", "🏗️", "🧱", "🏘️",
+        "🏚️", "🏠", "🏡", "🏢", "🏣", "🏤", "🏥", "🏦", "🏨", "🏩",
+        "🏪", "🏫", "🏬", "🏭", "🏯", "🏰", "💒", "🗼", "🗽", "⛪",
+        "🕌", "🛕", "🕍", "⛩️", "🕋", "⛲", "⛺", "🌁", "🌃", "🌄",
+        "🌅", "🌆", "🌇", "🌉", "♨️", "🎠", "🎡", "🎢", "💈", "🎪",
+        "🚂", "🚃", "🚄", "🚅", "🚆", "🚇", "🚈", "🚉", "🚊", "🚝",
+        "🚞", "🚋", "🚌", "🚍", "🚎", "🚐", "🚑", "🚒", "🚓", "🚔",
+        "🚕", "🚖", "🚗", "🚘", "🚙", "🚚", "🚛", "🚜", "🏎️", "🏍️",
+        "🛵", "🦽", "🦼", "🛴", "🚲", "🛺", "🚁", "🛸", "✈️", "🛫",
+        "🛬", "🪂", "💺", "🚀", "🚟", "🚠", "🚡", "🛰️", "🚢", "⛵",
+        "🛶", "🛥️", "🛳️", "⛴️", "🛟", "🚤", "🛩️", "🛫", "🛬", "🪂"
+      ]
+    },
+    "actividades": {
+      nombre: "Actividades",
+      icono: "⚽",
+      emojis: [
+        "🎃", "🎄", "🎆", "🎇", "✨", "🎈", "🎉", "🎊", "🎋", "🎍",
+        "🎎", "🎏", "🎐", "🎑", "🧧", "🎀", "🎁", "🎗️", "🎟️", "🎫",
+        "🎖️", "🏆", "🏅", "🥇", "🥈", "🥉", "⚽", "⚾", "🥎", "🏀",
+        "🏐", "🏈", "🏉", "🎾", "🥏", "🎳", "🏏", "🏑", "🏒", "🥍",
+        "🏓", "🏸", "🥊", "🥋", "🥅", "⛳", "⛸️", "🎣", "🤿", "🎽",
+        "🎿", "🛷", "🥌", "🎯", "🎮", "🕹️", "🎰", "🎲", "🧩", "🧸",
+        "🪀", "🪁", "🪃", "🪄", "🪅", "🪆", "🎨", "🖼️", "🎭", "🩰",
+        "🎪", "🎤", "🎧", "🎼", "🎹", "🥁", "🎷", "🎺", "🎸", "🪕",
+        "🎻", "🎬", "🎮", "🕹️", "🎰", "🎲", "🧩", "🧸", "🪀", "🪁",
+        "🪃", "🪄", "🪅", "🪆", "🎨", "🖼️", "🎭", "🩰", "🎪", "🎤",
+        "🎧", "🎼", "🎹", "🥁", "🎷", "🎺", "🎸", "🪕", "🎻", "🎬"
+      ]
+    },
+    "objetos": {
+      nombre: "Objetos",
+      icono: "💡",
+      emojis: [
+        "👓", "🕶️", "🥽", "🥼", "🦺", "👔", "👕", "👖", "🧣", "🧤",
+        "🧥", "🧦", "👗", "👘", "🥻", "🩱", "🩲", "🩳", "👙", "👚",
+        "👛", "👜", "👝", "🛍️", "🎒", "👞", "👟", "🥾", "🥿", "👠",
+        "👡", "🩰", "👢", "👑", "👒", "🎩", "🎓", "🧢", "⛑️", "🪖",
+        "💄", "💍", "💎", "🔇", "🔈", "🔉", "🔊", "📢", "📣", "📯",
+        "🔔", "🔕", "📻", "📱", "📲", "☎️", "📞", "📟", "📠", "🔋",
+        "🔌", "💻", "🖥️", "🖨️", "⌨️", "🖱️", "🖲️", "🕹️", "🗜️", "💾",
+        "💿", "📀", "📼", "📷", "📸", "📹", "📽️", "🎞️", "📞", "☎️",
+        "📟", "📠", "🔋", "🔌", "💻", "🖥️", "🖨️", "⌨️", "🖱️", "🖲️",
+        "🕹️", "🗜️", "💾", "💿", "📀", "📼", "📷", "📸", "📹", "📽️",
+        "🎞️", "📞", "☎️", "📟", "📠", "🔋", "🔌", "💻", "🖥️", "🖨️"
+      ]
+    },
+    "simbolos": {
+      nombre: "Símbolos",
+      icono: "🔣",
+      emojis: [
+        "❤️", "🧡", "💛", "💚", "💙", "💜", "🖤", "🤍", "🤎", "💔",
+        "❣️", "💕", "💞", "💓", "💗", "💖", "💘", "💝", "💟", "☮️",
+        "✝️", "☪️", "🕉️", "☸️", "✡️", "🔯", "🕎", "☯️", "☦️", "🛐",
+        "⛎", "♈", "♉", "♊", "♋", "♌", "♍", "♎", "♏", "♐",
+        "♑", "♒", "♓", "🆔", "⚛️", "🉑", "☢️", "☣️", "📴", "📳",
+        "🈶", "🈚", "🈸", "🈺", "🈷️", "✴️", "🆚", "💮", "🉐", "㊙️",
+        "㊗️", "🈴", "🈵", "🈹", "🈲", "🅰️", "🅱️", "🆎", "🆑", "🅾️",
+        "🆘", "❌", "⭕", "🛑", "⛔", "📛", "🚫", "💯", "💢", "♨️",
+        "🚷", "🚯", "🚳", "🚱", "🔞", "📵", "🚭", "❗", "❓", "❕",
+        "❔", "‼️", "⁉️", "🔅", "🔆", "〽️", "⚠️", "🚸", "🔱", "⚜️",
+        "🔰", "♻️", "✅", "🈯", "💹", "❇️", "✳️", "❎", "🌐", "💠",
+        "Ⓜ️", "🌀", "💤", "🏧", "🚾", "♿", "🅿️", "🈳", "🈂️", "🛂",
+        "🛃", "🛄", "🛅", "🚹", "🚺", "🚼", "🚻", "🚮", "🎦", "📶",
+        "🈁", "🔣", "🔤", "🔡", "🔠", "🆖", "🆗", "🆙", "🆒", "🆕",
+        "🆓", "0️⃣", "1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣",
+        "9️⃣", "🔟", "🔢", "#️⃣", "*️⃣", "▶️", "⏸️", "⏯️", "⏹️", "⏺️",
+        "⏭️", "⏮️", "⏩", "⏪", "⏫", "⏬", "◀️", "🔼", "🔽", "➡️",
+        "⬅️", "⬆️", "⬇️", "↗️", "↘️", "↙️", "↖️", "↕️", "↔️", "↪️",
+        "↩️", "⤴️", "⤵️", "🔀", "🔁", "🔂", "🔄", "🔃", "🎵", "🎶",
+        "➕", "➖", "➗", "✖️", "♾️", "💲", "💱", "™️", "©️", "®️",
+        "〰️", "➰", "➿", "🔚", "🔙", "🔛", "🔜", "🔝", "⌛", "⏳",
+        "📐", "📏", "🧮", "🔍", "🔎", "🔏", "🔐", "🔒", "🔓", "🔑",
+        "🗝️", "🔨", "🪓", "⛏️", "⚒️", "🛠️", "🗡️", "⚔️", "🔫", "🪃",
+        "🏹", "🛡️", "🪚", "🔧", "🪛", "🔩", "⚙️", "🗜️", "⚖️", "🦯",
+        "🔗", "⛓️", "🧰", "🧲", "🪜", "⚗️", "🧪", "🧫", "🦠", "💊",
+        "💉", "🩸", "🩹", "🩺", "🔬", "🔭", "📡", "🛰️", "🧯", "🛢️",
+        "🛎️", "🧳", "⌚", "📱", "📲", "💻", "⌨️", "🖥️", "🖨️", "🖱️",
+        "🖲️", "🕹️", "🗜️", "💾", "💿", "📀", "📼", "📷", "📸", "📹",
+        "📽️", "🎞️", "📞", "☎️", "📟", "📠", "🔋", "🔌", "💡", "🔦",
+        "🕯️", "🧯", "🛢️", "🛎️", "🧳", "⌚", "📱", "📲", "💻", "⌨️"
+      ]
+    },
+    "banderas": {
+      nombre: "Banderas",
+      icono: "🏳️",
+      emojis: [
+        "🏳️", "🏴", "🏁", "🚩", "🏳️‍🌈", "🏳️‍⚧️", "🇺🇳", "🇦🇫", "🇦🇽", "🇦🇱",
+        "🇩🇿", "🇦🇸", "🇦🇩", "🇦🇴", "🇦🇮", "🇦🇶", "🇦🇬", "🇦🇷", "🇦🇲", "🇦🇼",
+        "🇦🇺", "🇦🇹", "🇦🇿", "🇧🇸", "🇧🇭", "🇧🇩", "🇧🇧", "🇧🇾", "🇧🇪", "🇧🇿",
+        "🇧🇯", "🇧🇲", "🇧🇹", "🇧🇴", "🇧🇦", "🇧🇼", "🇧🇷", "🇮🇴", "🇻🇬", "🇧🇳",
+        "🇧🇬", "🇧🇫", "🇧🇮", "🇰🇭", "🇨🇲", "🇨🇦", "🇮🇨", "🇨🇻", "🇧🇶", "🇰🇾",
+        "🇨🇫", "🇹🇩", "🇨🇱", "🇨🇳", "🇨🇽", "🇨🇨", "🇨🇴", "🇰🇲", "🇨🇬", "🇨🇩",
+        "🇨🇰", "🇨🇷", "🇨🇮", "🇭🇷", "🇨🇺", "🇨🇼", "🇨🇾", "🇨🇿", "🇩🇰", "🇩🇯",
+        "🇩🇲", "🇩🇴", "🇪🇨", "🇪🇬", "🇸🇻", "🇬🇶", "🇪🇷", "🇪🇪", "🇸🇿", "🇪🇹",
+        "🇪🇺", "🇫🇰", "🇫🇴", "🇫🇯", "🇫🇮", "🇫🇷", "🇬🇫", "🇵🇫", "🇹🇫", "🇬🇦",
+        "🇬🇲", "🇬🇪", "🇩🇪", "🇬🇭", "🇬🇮", "🇬🇷", "🇬🇱", "🇬🇩", "🇬🇵", "🇬🇺",
+        "🇬🇹", "🇬🇬", "🇬🇳", "🇬🇼", "🇬🇾", "🇭🇹", "🇭🇳", "🇭🇰", "🇭🇺", "🇮🇸",
+        "🇮🇳", "🇮🇩", "🇮🇷", "🇮🇶", "🇮🇪", "🇮🇲", "🇮🇹", "🇯🇲", "🇯🇵", "🇯🇪",
+        "🇯🇴", "🇰🇿", "🇰🇪", "🇰🇮", "🇽🇰", "🇰🇼", "🇰🇬", "🇱🇦", "🇱🇻", "🇱🇧",
+        "🇱🇸", "🇱🇷", "🇱🇾", "🇱🇮", "🇱🇹", "🇱🇺", "🇲🇴", "🇲🇬", "🇲🇼", "🇲🇾",
+        "🇲🇻", "🇲🇱", "🇲🇹", "🇲🇭", "🇲🇶", "🇲🇷", "🇲🇺", "🇾🇹", "🇲🇽", "🇫🇲",
+        "🇲🇩", "🇲🇨", "🇲🇳", "🇲🇪", "🇲🇸", "🇲🇦", "🇲🇿", "🇲🇲", "🇳🇦", "🇳🇷",
+        "🇳🇵", "🇳🇱", "🇳🇨", "🇳🇿", "🇳🇮", "🇳🇪", "🇳🇬", "🇳🇺", "🇳🇫", "🇰🇵",
+        "🇲🇰", "🇲🇵", "🇳🇴", "🇴🇲", "🇵🇰", "🇵🇼", "🇵🇸", "🇵🇦", "🇵🇬", "🇵🇾",
+        "🇵🇪", "🇵🇭", "🇵🇳", "🇵🇱", "🇵🇹", "🇵🇷", "🇶🇦", "🇷🇪", "🇷🇴", "🇷🇺",
+        "🇷🇼", "🇼🇸", "🇸🇲", "🇸🇦", "🇸🇳", "🇷🇸", "🇸🇨", "🇸🇱", "🇸🇬", "🇸🇽",
+        "🇸🇰", "🇸🇮", "🇸🇧", "🇸🇴", "🇿🇦", "🇬🇸", "🇰🇷", "🇸🇸", "🇪🇸", "🇱🇰",
+        "🇧🇱", "🇸🇭", "🇰🇳", "🇱🇨", "🇵🇲", "🇻🇨", "🇸🇩", "🇸🇷", "🇸🇪", "🇨🇭",
+        "🇸🇾", "🇹🇼", "🇹🇯", "🇹🇿", "🇹🇭", "🇹🇱", "🇹🇬", "🇹🇰", "🇹🇴", "🇹🇹",
+        "🇹🇳", "🇹🇷", "🇹🇲", "🇹🇨", "🇹🇻", "🇺🇬", "🇺🇦", "🇦🇪", "🇬🇧", "🇺🇸",
+        "🇻🇮", "🇺🇾", "🇺🇿", "🇻🇺", "🇻🇦", "🇻🇪", "🇻🇳", "🇼🇫", "🇪🇭", "🇾🇪",
+        "🇿🇲", "🇿🇼"
+      ]
+    },
+    "personalizados": {
+      nombre: "Personalizados",
+      icono: "🎨",
+      emojis: []
+    }
+  };
+
+  // Emojis extra para compatibilidad (se actualizarán con los más usados)
+  // eslint-disable-next-line no-unused-vars
+  const emojiExtra = emojiCategorias.emoticonos.emojis.slice(0, 48);
 
   const ordenarEmojis = (lista) =>
     [...lista].sort(
@@ -1462,6 +2503,63 @@ export default function ChatPro({ socket, user, onClose }) {
     );
 
   const emojiOrdenados = ordenarEmojis(emojiReacciones);
+
+  // Cargar emojis personalizados desde localStorage
+  useEffect(() => {
+    const guardados = localStorage.getItem('ixora_emojis_personalizados');
+    if (guardados) {
+      try {
+        setEmojisPersonalizados(JSON.parse(guardados));
+      } catch (e) {
+        console.error('Error cargando emojis personalizados:', e);
+      }
+    }
+  }, []);
+
+  // Actualizar emojis más usados
+  useEffect(() => {
+    const todosEmojis = Object.values(emojiCategorias).flatMap(cat => cat.emojis);
+    const masUsados = ordenarEmojis(todosEmojis).slice(0, 50);
+    emojiCategorias.masUsados.emojis = masUsados;
+  }, [emojiUso]);
+
+  // Obtener emojis de la categoría activa o filtrados por búsqueda (para input)
+  const obtenerEmojisMostrar = () => {
+    if (emojiBusqueda.trim()) {
+      // Buscar en todas las categorías
+      const todosEmojis = Object.values(emojiCategorias)
+        .filter(cat => cat.nombre !== "Personalizados")
+        .flatMap(cat => cat.emojis);
+      return todosEmojis.filter(emoji => {
+        return typeof emoji === 'string' && emoji.includes(emojiBusqueda);
+      });
+    }
+    
+    if (emojiCategoriaActiva === "personalizados") {
+      return emojisPersonalizados;
+    }
+    
+    return emojiCategorias[emojiCategoriaActiva]?.emojis || [];
+  };
+
+  // Obtener emojis para el menú de mensajes
+  const obtenerEmojisMostrarMenu = () => {
+    if (emojiBusquedaMenu.trim()) {
+      // Buscar en todas las categorías
+      const todosEmojis = Object.values(emojiCategorias)
+        .filter(cat => cat.nombre !== "Personalizados")
+        .flatMap(cat => cat.emojis);
+      return todosEmojis.filter(emoji => {
+        return typeof emoji === 'string' && emoji.includes(emojiBusquedaMenu);
+      });
+    }
+    
+    if (emojiCategoriaActivaMenu === "personalizados") {
+      return emojisPersonalizados;
+    }
+    
+    return emojiCategorias[emojiCategoriaActivaMenu]?.emojis || [];
+  };
 
   const toggleReaccion = (msgId, emoji) => {
     setReacciones((prev) => {
@@ -1566,6 +2664,12 @@ export default function ChatPro({ socket, user, onClose }) {
   const cerrarMenuMensaje = () => {
     setMenuMensaje(null);
     setMenuEmojiAbierto(false);
+  };
+
+  const cerrarMenuMiembro = () => {
+    setMenuMiembroAbierto(null);
+    setMenuMiembroPosicion(null);
+    setSubmenuRestriccionAbierto(null);
   };
 
   const activarSeleccion = (mensaje) => {
@@ -1701,7 +2805,13 @@ export default function ChatPro({ socket, user, onClose }) {
       }
       showAlert("Mensaje eliminado", "success");
     } catch (err) {
-      showAlert("No se pudo borrar el mensaje", "error");
+      console.error("Error eliminando mensaje:", err);
+      const errorMsg = err?.message || err?.error || "No se pudo borrar el mensaje";
+      if (err?.status === 403) {
+        showAlert("No puedes eliminar mensajes de otros usuarios", "error");
+      } else {
+        showAlert(errorMsg, "error");
+      }
     }
   };
 
@@ -1844,6 +2954,7 @@ export default function ChatPro({ socket, user, onClose }) {
     }
   };
 
+  // eslint-disable-next-line no-unused-vars
   const toggleDestacarMensaje = async (mensaje) => {
     if (!mensaje?.id) return;
     const chatId = getChatIdActual();
@@ -1869,6 +2980,81 @@ export default function ChatPro({ socket, user, onClose }) {
       });
     } catch (e) {
       showAlert("No se pudo destacar el mensaje.", "error");
+    }
+  };
+
+  const togglePrioridadMensaje = async (mensaje) => {
+    if (!mensaje?.id) return;
+    try {
+      const nuevaPrioridad = mensaje.prioridad === 1 ? 0 : 1;
+      
+      // Determinar si el mensaje tiene etiquetas (menciones)
+      const tieneEtiqueta = mensaje.menciona && mensaje.menciona.trim();
+      const usuarioActual = user?.nickname || user?.name;
+      
+      // En grupos: si el mensaje tiene etiqueta y no es para el usuario actual, no permitir marcar
+      if (tipoChat === "grupal" && nuevaPrioridad === 0 && tieneEtiqueta && mensaje.menciona !== usuarioActual) {
+        showAlert("Solo la persona etiquetada puede marcar este mensaje como realizado", "warning");
+        return;
+      }
+      
+      const res = await authFetch(`${SERVER_URL}/chat/mensaje/${tipoChat}/${mensaje.id}/prioridad`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          prioridad: nuevaPrioridad,
+          menciona: mensaje.menciona || null
+        }),
+      });
+      
+      if (res?.ok || res?.success) {
+        // Actualizar el mensaje en el estado local
+        if (tipoChat === "general") {
+          setMensajesGeneral((prev) =>
+            prev.map((m) => (m.id === mensaje.id ? { ...m, prioridad: nuevaPrioridad } : m))
+          );
+        } else if (tipoChat === "privado") {
+          setMensajesPrivado((prev) => ({
+            ...prev,
+            [chatActual]: (prev[chatActual] || []).map((m) =>
+              m.id === mensaje.id ? { ...m, prioridad: nuevaPrioridad } : m
+            ),
+          }));
+        } else if (tipoChat === "grupal") {
+          setMensajesGrupal((prev) => ({
+            ...prev,
+            [chatActual]: (prev[chatActual] || []).map((m) =>
+              m.id === mensaje.id ? { ...m, prioridad: nuevaPrioridad } : m
+            ),
+          }));
+        }
+        
+        showAlert(
+          nuevaPrioridad === 1
+            ? "Mensaje marcado como prioritario"
+            : "Marcado como realizado. Todos pueden eliminar la notificación.",
+          "success"
+        );
+        
+        // Si se marcó como realizado, notificar al servidor para limpiar notificaciones
+        if (nuevaPrioridad === 0 && tipoChat === "grupal") {
+          try {
+            await authFetch(`${SERVER_URL}/chat/mensaje/${tipoChat}/${mensaje.id}/limpiar-notificacion`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ 
+                grupoId: chatActual,
+                tieneEtiqueta: !!tieneEtiqueta
+              }),
+            });
+          } catch (err) {
+            console.error("Error limpiando notificaciones:", err);
+          }
+        }
+      }
+    } catch (e) {
+      console.error("Error marcando prioridad:", e);
+      showAlert("No se pudo cambiar la prioridad del mensaje.", "error");
     }
   };
 
@@ -1912,7 +3098,13 @@ export default function ChatPro({ socket, user, onClose }) {
           {(!mensaje.enlace_compartido || mensaje.mensaje !== mensaje.enlace_compartido) && (
             <span
               className="msg-texto-html"
-              dangerouslySetInnerHTML={{ __html: formatearMensaje(mensaje.mensaje || "") }}
+              dangerouslySetInnerHTML={{ 
+                __html: formatearMensaje(
+                  mensaje.menciona 
+                    ? (mensaje.mensaje || "").replace(new RegExp(`@${mensaje.menciona}\\b`, 'gi'), '').trim()
+                    : (mensaje.mensaje || "")
+                )
+              }}
             />
           )}
           {mensaje.archivo_nombre && (
@@ -1994,6 +3186,7 @@ export default function ChatPro({ socket, user, onClose }) {
 
     // Subir archivo si existe
     let archivoId = null;
+    const esSticker = archivoAdjunto?.esSticker || (archivoAdjunto?.name?.toLowerCase().includes('sticker'));
     if (archivoAdjunto) {
       const archivoSubido = await subirArchivo(archivoAdjunto);
       if (archivoSubido) {
@@ -2017,6 +3210,13 @@ export default function ChatPro({ socket, user, onClose }) {
         }
       : {};
 
+    // Si es sticker, formatear el mensaje como sticker
+    let mensajeFinal = texto || archivoAdjunto?.name || "Archivo";
+    if (esSticker && archivoId) {
+      const nombreSticker = archivoAdjunto?.name?.replace(/\.(png|jpg|jpeg|gif|webp)$/i, '') || 'sticker';
+      mensajeFinal = `[sticker:${archivoId}:${nombreSticker}]`;
+    }
+
     // Limpiar inputs antes de enviar
     setMensajeInput("");
     setArchivoAdjunto(null);
@@ -2024,7 +3224,7 @@ export default function ChatPro({ socket, user, onClose }) {
 
     try {
       const bodyData = {
-        mensaje: texto || archivoAdjunto?.name || "Archivo",
+        mensaje: mensajeFinal,
         tipo_mensaje: tipoMensaje,
         archivo_id: archivoId,
         menciona,
@@ -2106,7 +3306,33 @@ export default function ChatPro({ socket, user, onClose }) {
       }
     } catch (e) {
       console.error("Error enviando mensaje:", e);
-      showAlert("No se pudo enviar el mensaje. Por favor intenta de nuevo.", "error");
+      
+      // Manejar errores de restricción
+      if (e?.restriccion) {
+        if (e?.indefinida) {
+          showAlert("No puedes enviar mensajes en este grupo (restricción indefinida)", "error");
+        } else if (e?.minutos_restantes) {
+          const horas = Math.floor(e.minutos_restantes / 60);
+          const minutos = e.minutos_restantes % 60;
+          const tiempoRestante = horas > 0 
+            ? `${horas}h ${minutos}m`
+            : `${minutos}m`;
+          showAlert(`No puedes enviar mensajes en este grupo. Tiempo restante: ${tiempoRestante}`, "error");
+        } else {
+          showAlert("No puedes enviar mensajes en este grupo", "error");
+        }
+      } else {
+        showAlert(e?.message || "No se pudo enviar el mensaje. Por favor intenta de nuevo.", "error");
+      }
+      
+      // Restaurar inputs si falló
+      setMensajeInput(texto);
+      if (archivoAdjunto) {
+        setArchivoAdjunto(archivoAdjunto);
+      }
+      if (respondiendoMensaje) {
+        setRespondiendoMensaje(respondiendoMensaje);
+      }
     }
   };
 
@@ -2149,6 +3375,7 @@ export default function ChatPro({ socket, user, onClose }) {
   // ============================
   // 🗑 Borrar grupo (SOLO ADMIN)
   // ============================
+  // eslint-disable-next-line no-unused-vars
   const borrarGrupo = async (grupoId) => {
     if (!esAdmin) {
       showAlert("Solo los administradores pueden borrar grupos", "warning");
@@ -2161,7 +3388,7 @@ export default function ChatPro({ socket, user, onClose }) {
     try {
       await authFetch(`/chat/grupos/${grupoId}`, { method: "DELETE" });
       // Recargar grupos
-      const data = await authFetch("/chat/grupos/mios");
+      const data = await authFetch("/chat/grupos");
       setGrupos(data || []);
       // Si estaba viendo ese grupo, cerrarlo
       if (tipoChat === "grupal" && String(chatActual) === String(grupoId)) {
@@ -2196,7 +3423,7 @@ export default function ChatPro({ socket, user, onClose }) {
       setNuevoGrupoEsPublico(true);
       setMostrarCrearGrupo(false);
       // Recargar grupos
-      const data = await authFetch("/chat/grupos/mios");
+      const data = await authFetch("/chat/grupos");
       setGrupos(data || []);
     } catch (e) {
       console.error("Error creando grupo:", e);
@@ -2315,19 +3542,34 @@ export default function ChatPro({ socket, user, onClose }) {
     }
   };
 
-  // Función para calcular la edad desde una fecha
+  // Función para calcular la edad desde una fecha (años y meses)
   const calcularEdad = (fecha) => {
     if (!fecha) return null;
     try {
       const fechaNac = new Date(`${fecha}T00:00:00`);
       if (Number.isNaN(fechaNac.getTime())) return null;
       const hoy = new Date();
-      let edad = hoy.getFullYear() - fechaNac.getFullYear();
-      const m = hoy.getMonth() - fechaNac.getMonth();
-      if (m < 0 || (m === 0 && hoy.getDate() < fechaNac.getDate())) {
-        edad -= 1;
+      
+      let años = hoy.getFullYear() - fechaNac.getFullYear();
+      let meses = hoy.getMonth() - fechaNac.getMonth();
+      let días = hoy.getDate() - fechaNac.getDate();
+      
+      // Ajustar si aún no ha cumplido años
+      if (meses < 0 || (meses === 0 && días < 0)) {
+        años -= 1;
+        meses += 12;
       }
-      return edad >= 0 ? edad : null;
+      
+      // Ajustar meses si el día aún no ha llegado este mes
+      if (días < 0) {
+        meses -= 1;
+        if (meses < 0) {
+          meses += 12;
+          años -= 1;
+        }
+      }
+      
+      return años >= 0 ? { años, meses } : null;
     } catch (e) {
       return null;
     }
@@ -2335,6 +3577,7 @@ export default function ChatPro({ socket, user, onClose }) {
 
   const abrirPerfilUsuario = async (nickname) => {
     if (!nickname) return;
+    setPerfilTipo("usuario");
     setPerfilAbierto(true);
     setPerfilTab("info");
     setPerfilData(null);
@@ -2357,8 +3600,56 @@ export default function ChatPro({ socket, user, onClose }) {
     }
   };
 
+  const abrirPerfilGrupo = async (grupoId) => {
+    if (!grupoId) return;
+    setPerfilTipo("grupo");
+    setPerfilAbierto(true);
+    setPerfilTab("acerca");
+    setPerfilData(null);
+    setPerfilCompartidos([]);
+      setPerfilGrupoMiembros([]);
+      setPerfilGrupoAdmins([]);
+      setPerfilGrupoRestricciones({});
+      setMenuMiembroAbierto(null);
+      setSubmenuRestriccionAbierto(null);
+      setPerfilError(null);
+    setPerfilCargando(true);
+
+    try {
+      const perfil = await authFetch(`${SERVER_URL}/chat/grupos/${grupoId}/perfil`);
+      setPerfilData(perfil || null);
+      setPerfilGrupoMiembros(perfil?.miembros || []);
+      setPerfilGrupoAdmins(perfil?.administradores || []);
+      setPerfilGrupoRestricciones(perfil?.restricciones || {});
+      
+      // Verificar si el usuario actual está restringido (solo si estamos viendo este grupo en el chat)
+      if (tipoChat === "grupal" && String(chatActual) === String(grupoId)) {
+        const userDisplayName = user?.nickname || user?.name;
+        const restriccionUsuario = perfil?.restricciones?.[userDisplayName];
+        if (restriccionUsuario) {
+          setUsuarioRestringido(true);
+          setRestriccionInfo(restriccionUsuario);
+        } else {
+          setUsuarioRestringido(false);
+          setRestriccionInfo(null);
+        }
+      }
+      
+      // Cargar compartidos (todos los tipos)
+      const compartidos = await authFetch(`${SERVER_URL}/chat/grupos/${grupoId}/compartidos`);
+      setPerfilCompartidos(Array.isArray(compartidos) ? compartidos : []);
+    } catch (err) {
+      setPerfilError(err?.message || "Error cargando información del grupo");
+    } finally {
+      setPerfilCargando(false);
+    }
+  };
+
   const cerrarPerfilUsuario = () => {
+    // No cerrar si estamos abriendo desde el sidebar
+    if (abriendoPerfilDesdeSidebarRef.current) return;
     setPerfilAbierto(false);
+    setPerfilTipo(null);
   };
 
   // Función auxiliar para obtener token de forma robusta
@@ -2397,6 +3688,16 @@ export default function ChatPro({ socket, user, onClose }) {
           // Es un archivo del chat, usar la ruta del endpoint
           const archivoId = archivoIdMatch[1];
           url = `${SERVER_URL}/chat/archivo/${archivoId}`;
+        } else if (/^\d+:\d+$/.test(archivo.archivo_url)) {
+          // Formato antiguo: "63:1" -> convertir a "/chat/archivo/63"
+          const archivoId = archivo.archivo_url.split(':')[0];
+          url = `${SERVER_URL}/chat/archivo/${archivoId}`;
+          console.log("⚠️ Formato antiguo de archivo_url detectado, convirtiendo:", archivo.archivo_url, "->", url);
+        } else if (/^\d+:\d+$/.test(archivo.archivo_url)) {
+          // Formato antiguo: "63:1" -> convertir a "/chat/archivo/63" (ya manejado arriba, pero por si acaso)
+          const archivoId = archivo.archivo_url.split(':')[0];
+          url = `${SERVER_URL}/chat/archivo/${archivoId}`;
+          console.log("⚠️ Formato antiguo de archivo_url detectado (else), convirtiendo:", archivo.archivo_url, "->", url);
         } else {
           // Es una URL directa (por ejemplo, uploads/perfiles)
           if (archivo.archivo_url.startsWith("http")) {
@@ -2817,8 +4118,10 @@ export default function ChatPro({ socket, user, onClose }) {
         body: JSON.stringify({ usuario_nickname: usuarioNickname }),
       });
       
+      // Mostrar mensaje de éxito (el modal se actualizará automáticamente)
+      
       // Recargar grupos para actualizar la lista de miembros
-      const data = await authFetch("/chat/grupos/mios");
+      const data = await authFetch("/chat/grupos");
       setGrupos(data || []);
       
       // Si estamos viendo ese grupo, recargar también los mensajes
@@ -2829,6 +4132,8 @@ export default function ChatPro({ socket, user, onClose }) {
           [grupoId]: mensajesData || [],
         }));
       }
+      
+      // NO cerrar el modal, permitir agregar más usuarios
     } catch (e) {
       console.error("Error agregando miembro:", e);
       showAlert("Error agregando miembro: " + (e.message || "Error desconocido"), "error");
@@ -2846,34 +4151,47 @@ export default function ChatPro({ socket, user, onClose }) {
     setNoLeidos(0);
     setMostrarAgregarMiembros(false);
     setGrupoMenuAbierto(null);
-    setPerfilAbierto(false);
-    setPerfilTab("info");
+    // No cerrar el perfil si estamos abriendo desde el sidebar
+    if (!abriendoPerfilDesdeSidebarRef.current) {
+      setPerfilAbierto(false);
+    }
+    setPerfilTab("acerca");
     setPerfilData(null);
     setPerfilCompartidos([]);
     setPerfilError(null);
     setPerfilCargando(false);
     
-    // Limpiar contador de mensajes no leídos para este chat privado inmediatamente
-    if (tipo === "privado" && destino) {
-      // Limpiar localmente primero para respuesta inmediata
-      setChatsActivos((prev) =>
-        prev.map((c) =>
-          c.otro_usuario === destino ? { ...c, mensajes_no_leidos: 0 } : c
-        )
-      );
-      
-      // Marcar mensajes como leídos en el servidor
-      try {
+    // Marcar mensajes como leídos automáticamente al abrir el chat
+    try {
+      if (tipo === "privado" && destino) {
+        // Limpiar contador localmente primero para respuesta inmediata
+        setChatsActivos((prev) =>
+          prev.map((c) =>
+            c.otro_usuario === destino ? { ...c, mensajes_no_leidos: 0 } : c
+          )
+        );
+        
+        // Marcar mensajes como leídos en el servidor
         await authFetch(`${SERVER_URL}/chat/privado/${destino}/leer`, {
           method: "POST",
         });
+        
         // Recargar chats activos para sincronizar con el servidor
         const data = await authFetch(`${SERVER_URL}/chat/activos`);
         setChatsActivos(data || []);
-      } catch (e) {
-        console.error("Error marcando mensajes como leídos:", e);
-        // Si falla, mantener el estado local limpio
+      } else if (tipo === "general") {
+        // Marcar mensajes generales como leídos
+        await authFetch(`${SERVER_URL}/chat/general/leer`, {
+          method: "POST",
+        });
+      } else if (tipo === "grupal" && destino) {
+        // Marcar mensajes grupales como leídos
+        await authFetch(`${SERVER_URL}/chat/grupos/${destino}/leer`, {
+          method: "POST",
+        });
       }
+    } catch (e) {
+      console.error("Error marcando mensajes como leídos:", e);
     }
   };
 
@@ -2966,6 +4284,66 @@ export default function ChatPro({ socket, user, onClose }) {
                   </button>
                 </div>
                 
+                {/* HEADER DEL USUARIO ACTUAL */}
+                <div className="chat-user-header">
+                  <div className="chat-user-header-avatar">
+                    <img
+                      src={getAvatarUrl(user)}
+                      alt={user?.nickname || user?.name || "Usuario"}
+                      className="chat-user-avatar-img"
+                      onError={(e) => {
+                        e.target.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='16' fill='%23e0e0e0'/%3E%3Ctext x='16' y='22' font-size='20' text-anchor='middle' fill='%23999'%3E👤%3C/text%3E%3C/svg%3E";
+                      }}
+                    />
+                  </div>
+                  <div className="chat-user-header-info">
+                    <span className="chat-user-header-name" style={{ color: getColorForName(user?.nickname || user?.name || "Usuario") }}>
+                      {user?.nickname || user?.name || "Usuario"}
+                    </span>
+                  </div>
+                  <div className="chat-user-header-actions">
+                    <button
+                      className="chat-user-header-btn"
+                      onClick={() => {
+                        const userNickname = user?.nickname || user?.name;
+                        if (!userNickname) return;
+                        
+                        // Marcar que estamos abriendo el perfil desde el sidebar
+                        abriendoPerfilDesdeSidebarRef.current = true;
+                        
+                        // Asegurar que el chat esté abierto
+                        if (!open) {
+                          setOpen(true);
+                        }
+                        
+                        // NO cambiar tabPrincipal - mantener en "usuarios" para que se vea la lista
+                        // Solo abrir el perfil como overlay
+                        abrirPerfilUsuario(userNickname);
+                        
+                        // Mantener el flag activo por un tiempo para proteger contra resets
+                        setTimeout(() => {
+                          abriendoPerfilDesdeSidebarRef.current = false;
+                        }, 500);
+                      }}
+                      title="Ver mi perfil"
+                    >
+                      👤
+                    </button>
+                    <button
+                      className="chat-user-header-btn"
+                      onClick={() => {
+                        const userNickname = user?.nickname || user?.name;
+                        if (userNickname) {
+                          abrirChat("privado", userNickname);
+                        }
+                      }}
+                      title="Mi chat personal"
+                    >
+                      💬
+                    </button>
+                  </div>
+                </div>
+                
                 {/* TABS PRINCIPALES */}
                 <div className="chat-tabs">
             <div
@@ -2983,6 +4361,14 @@ export default function ChatPro({ socket, user, onClose }) {
               onClick={() => setTabPrincipal("chats")}
             >
               Chats
+              {(() => {
+                const totalNoLeidos = chatsActivos.reduce((total, chat) => {
+                  return total + (chat.mensajes_no_leidos || 0);
+                }, 0);
+                return totalNoLeidos > 0 ? (
+                  <span className="tab-badge-count">{totalNoLeidos > 99 ? "99+" : totalNoLeidos}</span>
+                ) : null;
+              })()}
             </div>
             <div
               className={`tab ${tabPrincipal === "grupos" ? "active" : ""}`}
@@ -2994,6 +4380,48 @@ export default function ChatPro({ socket, user, onClose }) {
                 
                 {/* CONTENIDO DEL SIDEBAR */}
                 <div className="chat-sidebar-content">
+                  {/* REUNIONES PRÓXIMAS */}
+                  {tipoChat && obtenerReunionesChatActual().length > 0 && (
+                    <div className="reuniones-proximas-sidebar">
+                      <div className="reuniones-proximas-header">
+                        <span>📅 Reuniones próximas</span>
+                      </div>
+                      {obtenerReunionesChatActual().slice(0, 3).map(reunion => {
+                        const fechaHora = new Date(`${reunion.fecha}T${reunion.hora}`);
+                        const ahora = new Date();
+                        const esHoy = fechaHora.toDateString() === ahora.toDateString();
+                        const esProxima = fechaHora > ahora;
+                        
+                        return (
+                          <div key={reunion.id} className="reunion-item-sidebar">
+                            <div className="reunion-item-info">
+                              <div className="reunion-item-titulo">{reunion.titulo}</div>
+                              <div className="reunion-item-fecha">
+                                {esHoy ? 'Hoy' : fechaHora.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })} 
+                                {' '}a las {reunion.hora}
+                              </div>
+                              {reunion.lugar && (
+                                <div className="reunion-item-lugar">📍 {reunion.lugar}</div>
+                              )}
+                              {reunion.esVideollamada && (
+                                <div className="reunion-item-video">📹 Videollamada</div>
+                              )}
+                            </div>
+                            {esProxima && (
+                              <button
+                                className="reunion-item-btn"
+                                onClick={() => abrirModalReunion(reunion)}
+                                title="Editar reunión"
+                              >
+                                ✏️
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                  
                   {/* USUARIOS */}
                   {tabPrincipal === "usuarios" && (
                     <div className="usuarios-list-pro">
@@ -3014,19 +4442,31 @@ export default function ChatPro({ socket, user, onClose }) {
               </div>
               {usuariosIxora
                 .filter((u) => {
+                  // Excluir el usuario actual de la lista
+                  const userNickname = user?.nickname || user?.name;
+                  const uNickname = u.nickname || u.name;
+                  if (userNickname && uNickname && userNickname === uNickname) {
+                    return false;
+                  }
+                  // Aplicar filtro de búsqueda
                   const displayName = (u.nickname || u.name || "").toLowerCase();
                   const query = filtroUsuarios.trim().toLowerCase();
                   return !query || displayName.includes(query);
                 })
                 .map((u) => {
                   const displayName = u.nickname || u.name || "Usuario";
-                  // Verificar si está activo: busca por nickname o por name
-                  const isActive = usuariosActivos.some(
-                    (ua) => 
-                      (u.nickname && ua.nickname === u.nickname) ||
-                      (!u.nickname && ua.nickname === u.name)
-                  );
+                  const estado = estadosUsuarios[displayName] || 'offline';
                   const isUserActive = u.active === 1;
+                  
+                  // Determinar título del estado
+                  let statusTitle = 'Usuario offline';
+                  if (estado === 'activo') {
+                    statusTitle = 'Usuario activo (en la app)';
+                  } else if (estado === 'ausente') {
+                    statusTitle = 'Usuario ausente (salió de la app o más de 10 min sin actividad)';
+                  } else {
+                    statusTitle = 'Usuario offline (sesión cerrada - más de 8 horas)';
+                  }
                   
                   return (
                     <div
@@ -3042,7 +4482,7 @@ export default function ChatPro({ socket, user, onClose }) {
                         }
                       }}
                     >
-                      <div className="avatar-container">
+                      <div className={`avatar-container status-${estado}`} title={statusTitle}>
                         <img
                           src={getAvatarUrl(u)}
                           alt={displayName}
@@ -3051,9 +4491,6 @@ export default function ChatPro({ socket, user, onClose }) {
                             e.target.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='16' fill='%23e0e0e0'/%3E%3Ctext x='16' y='22' font-size='20' text-anchor='middle' fill='%23999'%3E👤%3C/text%3E%3C/svg%3E";
                           }}
                         />
-                        {isActive && (
-                          <span className="status-online-dot" title="Activo en IXORA"></span>
-                        )}
                       </div>
                       <span style={{ color: getColorForName(displayName) }}>
                         {displayName}
@@ -3077,63 +4514,75 @@ export default function ChatPro({ socket, user, onClose }) {
                         <span className="grupo-icon">🌐</span>
                         <span>Chat General</span>
                       </div>
-                      {chatsActivos.map((chat) => {
+                      {[...chatsActivos].sort((a, b) => {
+                        // Ordenar: primero el chat del usuario actual (si existe)
+                        const userDisplayName = user?.nickname || user?.name;
+                        const aEsMio = a.otro_usuario === userDisplayName;
+                        const bEsMio = b.otro_usuario === userDisplayName;
+                        
+                        if (aEsMio && !bEsMio) return -1;
+                        if (!aEsMio && bEsMio) return 1;
+                        
+                        // Si ambos son del usuario o ninguno, ordenar por fecha del último mensaje
+                        const fechaA = a.ultima_fecha ? new Date(a.ultima_fecha) : new Date(0);
+                        const fechaB = b.ultima_fecha ? new Date(b.ultima_fecha) : new Date(0);
+                        return fechaB - fechaA; // Más reciente primero
+                      }).map((chat) => {
                 const userDisplayName = user?.nickname || user?.name;
                 const esMioUltimoMensaje = chat.ultimo_remitente === userDisplayName;
-                // Verificar si el usuario está en línea
-                const usuarioEnLinea = usuariosActivos.some(
-                  (ua) => ua.nickname === chat.otro_usuario
-                );
+                // Obtener estado del usuario
+                const estado = estadosUsuarios[chat.otro_usuario] || 'offline';
+                
+                // Determinar título del estado
+                let statusTitle = 'Usuario offline';
+                if (estado === 'activo') {
+                  statusTitle = 'Usuario activo (en la app)';
+                } else if (estado === 'ausente') {
+                  statusTitle = 'Usuario ausente (salió de la app o más de 10 min sin actividad)';
+                } else {
+                  statusTitle = 'Usuario offline (sesión cerrada - más de 8 horas)';
+                }
                 
                 return (
                   <div
                     key={chat.otro_usuario}
-                    className="usuario-item-pro"
+                    className={`usuario-item-pro chat-activo-item ${chat.mensajes_no_leidos > 0 ? "chat-con-mensajes-no-leidos" : ""}`}
                     onClick={() => abrirChat("privado", chat.otro_usuario)}
                   >
-                    <div className="chat-item-header">
-                      <div className="avatar-container" style={{ position: 'relative', display: 'inline-block' }}>
-                        <img
-                          src={getAvatarUrl(
-                            usuariosIxora.find((u) => u.nickname === chat.otro_usuario)
-                          )}
-                          alt={chat.otro_usuario}
-                          className="chat-avatar"
-                          style={{ width: '28px', height: '28px', borderRadius: '50%' }}
-                          onError={(e) => {
-                            e.target.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='16' fill='%23e0e0e0'/%3E%3Ctext x='16' y='22' font-size='20' text-anchor='middle' fill='%23999'%3E👤%3C/text%3E%3C/svg%3E";
-                          }}
-                        />
-                        {usuarioEnLinea && (
-                          <span className="status-online-dot" title="Activo en IXORA"></span>
+                    <div className={`avatar-container status-${estado} chat-activo-avatar-wrap`} title={statusTitle}>
+                      <img
+                        src={getAvatarUrl(
+                          usuariosIxora.find((u) => u.nickname === chat.otro_usuario)
                         )}
-                      </div>
-                      <span style={{ color: getColorForName(chat.otro_usuario || "Usuario"), fontWeight: '600', fontSize: '13px' }}>
-                        {chat.otro_usuario}
-                      </span>
-                      {/* Mostrar badge solo cuando hay mensajes no leídos */}
+                        alt={chat.otro_usuario}
+                        className="chat-avatar"
+                        onError={(e) => {
+                          e.target.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='16' fill='%23e0e0e0'/%3E%3Ctext x='16' y='22' font-size='20' text-anchor='middle' fill='%23999'%3E👤%3C/text%3E%3C/svg%3E";
+                        }}
+                      />
                       {chat.mensajes_no_leidos > 0 && (
-                        <span className="chat-badge-small">
+                        <span className="chat-badge-bolita">
                           {chat.mensajes_no_leidos > 99 ? "99+" : chat.mensajes_no_leidos}
                         </span>
                       )}
                     </div>
-                    {chat.ultimo_mensaje && (
-                      <div className="ultimo-mensaje-container">
-                        {esMioUltimoMensaje ? (
-                          <span className="ultimo-mensaje-indicador" style={{ color: '#0aa36c', fontWeight: '600' }}>Tú:</span>
-                        ) : chat.ultimo_remitente ? (
-                          <span className="ultimo-mensaje-indicador" style={{ color: '#666', fontWeight: '600' }}>
-                            {chat.ultimo_remitente}:
-                          </span>
-                        ) : (
-                          <span className="ultimo-mensaje-indicador" style={{ color: '#666', fontWeight: '600' }}>
-                            {chat.otro_usuario}:
-                          </span>
-                        )}
-                        <span className="ultimo-mensaje">{chat.ultimo_mensaje}</span>
+                    <div className="chat-activo-content">
+                      <div className="chat-activo-header">
+                        <span className="chat-activo-nombre" style={{ color: getColorForName(chat.otro_usuario || "Usuario") }}>
+                          {chat.otro_usuario}
+                        </span>
                       </div>
-                    )}
+                      {chat.ultimo_mensaje && (
+                        <div className="chat-activo-mensaje">
+                          {esMioUltimoMensaje ? (
+                            <span className="chat-mensaje-prefijo">Tú:</span>
+                          ) : (
+                            <span className="chat-mensaje-prefijo">{chat.otro_usuario}:</span>
+                          )}
+                          <span className="chat-mensaje-texto">{chat.ultimo_mensaje}</span>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 );
                       })}
@@ -3199,13 +4648,16 @@ export default function ChatPro({ socket, user, onClose }) {
                         </div>
                       )}
                       {Array.isArray(grupos) && grupos.map((g) => {
-                        const esCreador = g.creado_por === (user?.nickname || user?.name);
                         const esPublico = g.es_publico !== 0;
+                        const esMiembro = g.es_miembro === true;
                         return (
                           <div
                             key={g.id}
-                            className="usuario-item-pro grupo-item"
-                            onClick={() => abrirChat("grupal", g.id)}
+                            className={`usuario-item-pro grupo-item ${!esMiembro ? "grupo-no-miembro" : ""}`}
+                            onClick={() => {
+                              if (!esMiembro) return;
+                              abrirChat("grupal", g.id);
+                            }}
                           >
                             <span className="grupo-icon">👥</span>
                             <div className="grupo-info">
@@ -3235,51 +4687,35 @@ export default function ChatPro({ socket, user, onClose }) {
                               </button>
                               {grupoMenuAbierto === g.id && (
                                 <div className="grupo-menu" onClick={(e) => e.stopPropagation()}>
-                                  <button onClick={() => abrirChat("grupal", g.id)}>Abrir</button>
-                                  <button
-                                    onClick={() => {
-                                      showAlert(
-                                        `${g.nombre}\n\n${g.descripcion || "Sin descripción"}\n\n${g.miembros?.length || 0} miembros`,
-                                        "info"
-                                      );
-                                      setGrupoMenuAbierto(null);
-                                    }}
-                                  >
-                                    Ver info
-                                  </button>
-                                  <button
-                                    onClick={() => {
-                                      setGrupoAgregarMiembros(g.id);
-                                      setMostrarAgregarMiembros(true);
-                                      setGrupoMenuAbierto(null);
-                                    }}
-                                  >
-                                    Agregar miembros
-                                  </button>
-                                  {esCreador && (
+                                  {esMiembro ? (
                                     <button
                                       onClick={() => {
-                                        setEditandoGrupo(g);
-                                        setGrupoEditNombre(g.nombre);
-                                        setGrupoEditDesc(g.descripcion || "");
-                                        setGrupoEditPublico(esPublico);
+                                        abrirPerfilGrupo(g.id);
                                         setGrupoMenuAbierto(null);
                                       }}
                                     >
-                                      Editar
+                                      Ver info
                                     </button>
-                                  )}
-                                  {esAdmin && (
+                                  ) : !esPublico ? (
                                     <button
-                                      onClick={() => {
-                                        borrarGrupo(g.id);
+                                      onClick={async () => {
                                         setGrupoMenuAbierto(null);
+                                        try {
+                                          await authFetch(`${SERVER_URL}/chat/grupos/${g.id}/solicitar-acceso`, {
+                                            method: "POST",
+                                          });
+                                          showAlert("Solicitud de acceso enviada.", "success");
+                                          const data = await authFetch("/chat/grupos");
+                                          setGrupos(data || []);
+                                        } catch (err) {
+                                          const msg = err?.message || "Error al solicitar acceso.";
+                                          showAlert(msg, "error");
+                                        }
                                       }}
-                                      className="menu-danger"
                                     >
-                                      Borrar
+                                      Solicitar acceso
                                     </button>
-                                  )}
+                                  ) : null}
                                 </div>
                               )}
                             </div>
@@ -3287,7 +4723,7 @@ export default function ChatPro({ socket, user, onClose }) {
                         );
                       })}
                       {Array.isArray(grupos) && grupos.length === 0 && !mostrarCrearGrupo && (
-                        <div className="chat-empty-pro">No tienes grupos</div>
+                        <div className="chat-empty-pro">No hay grupos</div>
                       )}
                     </div>
                   )}
@@ -3295,9 +4731,82 @@ export default function ChatPro({ socket, user, onClose }) {
               </div>
             )}
 
-            {/* PANEL PRINCIPAL - CHAT ABIERTO */}
-            {tipoChat && (
+            {/* PANEL PRINCIPAL - CHAT ABIERTO O PERFIL ABIERTO */}
+            {(tipoChat || perfilAbierto) && (
               <div className="chat-main-panel">
+                {tipoChat === "grupal" && modalSolicitud && (
+                  <div className="chat-modal-solicitud-overlay">
+                    <div className="chat-modal-solicitud">
+                      <p className="chat-modal-solicitud-texto">
+                        <strong>{modalSolicitud.usuario_nickname}</strong> solicita acceso al grupo.
+                      </p>
+                      <p className="chat-modal-solicitud-fecha">
+                        {modalSolicitud.fecha
+                          ? new Date(modalSolicitud.fecha).toLocaleString("es", {
+                              dateStyle: "short",
+                              timeStyle: "short",
+                            })
+                          : ""}
+                      </p>
+                      <div className="chat-modal-solicitud-actions">
+                        <button
+                          className="chat-modal-solicitud-btn aceptar"
+                          onClick={async () => {
+                            const sol = { ...modalSolicitud };
+                            setModalSolicitud(null);
+                            try {
+                              await authFetch(
+                                `${SERVER_URL}/chat/grupos/${sol.grupoId}/solicitudes/${sol.solicitudId}/responder`,
+                                { method: "POST", body: JSON.stringify({ aceptar: true }) }
+                              );
+                              const list = await authFetch(`${SERVER_URL}/chat/grupos/${chatActual}/solicitudes`);
+                              const arr = Array.isArray(list) ? list : [];
+                              setSolicitudesPendientes(arr);
+                              if (arr.length > 0) {
+                                const s = arr[0];
+                                setModalSolicitud({ solicitudId: s.id, grupoId: s.grupo_id, usuario_nickname: s.usuario_nickname, fecha: s.fecha, groupName: "Grupo" });
+                              }
+                              showAlert("Solicitud aceptada. El usuario se unió al grupo.", "success");
+                              const data = await authFetch("/chat/grupos");
+                              setGrupos(data || []);
+                            } catch (e) {
+                              setModalSolicitud(sol);
+                              showAlert(e?.message || "Error al aceptar.", "error");
+                            }
+                          }}
+                        >
+                          Aceptar
+                        </button>
+                        <button
+                          className="chat-modal-solicitud-btn rechazar"
+                          onClick={async () => {
+                            const sol = { ...modalSolicitud };
+                            setModalSolicitud(null);
+                            try {
+                              await authFetch(
+                                `${SERVER_URL}/chat/grupos/${sol.grupoId}/solicitudes/${sol.solicitudId}/responder`,
+                                { method: "POST", body: JSON.stringify({ aceptar: false }) }
+                              );
+                              const list = await authFetch(`${SERVER_URL}/chat/grupos/${chatActual}/solicitudes`);
+                              const arr = Array.isArray(list) ? list : [];
+                              setSolicitudesPendientes(arr);
+                              if (arr.length > 0) {
+                                const s = arr[0];
+                                setModalSolicitud({ solicitudId: s.id, grupoId: s.grupo_id, usuario_nickname: s.usuario_nickname, fecha: s.fecha, groupName: "Grupo" });
+                              }
+                              showAlert("Solicitud rechazada.", "info");
+                            } catch (e) {
+                              setModalSolicitud(sol);
+                              showAlert(e?.message || "Error al rechazar.", "error");
+                            }
+                          }}
+                        >
+                          Rechazar
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
                 <div className="chat-inner">
                   {perfilAbierto ? (
                     <div className="chat-profile-panel">
@@ -3309,98 +4818,405 @@ export default function ChatPro({ socket, user, onClose }) {
                         >
                           ←
                         </button>
-                        <span>Perfil</span>
+                        <span style={{ flex: 1, textAlign: "center" }}>Perfil</span>
+                        <button
+                          className="chat-profile-share-btn"
+                          onClick={async () => {
+                            try {
+                              // Construir URL con información del perfil
+                              const baseUrl = new URL(window.location.origin);
+                              if (perfilTipo === "usuario" && perfilData?.nickname) {
+                                baseUrl.searchParams.set("tab", "chat");
+                                baseUrl.searchParams.set("perfil", "usuario");
+                                baseUrl.searchParams.set("nickname", perfilData.nickname);
+                              } else if (perfilTipo === "grupo" && perfilData?.id) {
+                                baseUrl.searchParams.set("tab", "chat");
+                                baseUrl.searchParams.set("perfil", "grupo");
+                                baseUrl.searchParams.set("grupoId", String(perfilData.id));
+                              } else {
+                                // Si no hay datos del perfil, usar URL actual
+                                baseUrl.href = window.location.href;
+                              }
+                              
+                              const urlToShare = baseUrl.toString();
+                              
+                              // Intentar Web Share API primero
+                              if (navigator.share && typeof navigator.share === 'function') {
+                                try {
+                                  await navigator.share({
+                                    title: perfilTipo === "usuario" 
+                                      ? `Perfil de ${perfilData?.name || perfilData?.nickname || "Usuario"}`
+                                      : `Grupo: ${perfilData?.nombre || "Grupo"}`,
+                                    text: perfilTipo === "usuario"
+                                      ? `Mira el perfil de ${perfilData?.name || perfilData?.nickname || "este usuario"}`
+                                      : `Únete al grupo ${perfilData?.nombre || "este grupo"}`,
+                                    url: urlToShare
+                                  });
+                                  return; // Éxito, salir
+                                } catch (shareErr) {
+                                  // Si el usuario cancela, no mostrar error
+                                  if (shareErr.name === "AbortError") {
+                                    return;
+                                  }
+                                  // Si falla, continuar con clipboard
+                                }
+                              }
+                              
+                              // Fallback: copiar al portapapeles
+                              if (navigator.clipboard && navigator.clipboard.writeText) {
+                                await navigator.clipboard.writeText(urlToShare);
+                                showAlert("Enlace copiado al portapapeles", "success");
+                              } else {
+                                // Fallback para navegadores antiguos
+                                const textArea = document.createElement("textarea");
+                                textArea.value = urlToShare;
+                                textArea.style.position = "fixed";
+                                textArea.style.left = "-999999px";
+                                document.body.appendChild(textArea);
+                                textArea.select();
+                                try {
+                                  document.execCommand('copy');
+                                  showAlert("Enlace copiado al portapapeles", "success");
+                                } catch (e) {
+                                  showAlert("No se pudo copiar el enlace. Por favor, cópialo manualmente: " + urlToShare, "warning");
+                                }
+                                document.body.removeChild(textArea);
+                              }
+                            } catch (err) {
+                              console.error("Error al compartir perfil:", err);
+                              showAlert("Error al compartir. Por favor, intenta de nuevo.", "error");
+                            }
+                          }}
+                          title="Compartir"
+                        >
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <circle cx="18" cy="5" r="3"></circle>
+                            <circle cx="6" cy="12" r="3"></circle>
+                            <circle cx="18" cy="19" r="3"></circle>
+                            <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
+                            <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+                          </svg>
+                        </button>
                       </div>
                       <div className="chat-profile-tabs">
-                        <button
-                          className={`chat-profile-tab ${perfilTab === "info" ? "active" : ""}`}
-                          onClick={() => setPerfilTab("info")}
-                        >
-                          Información
-                        </button>
-                        <button
-                          className={`chat-profile-tab ${perfilTab === "archivos" ? "active" : ""}`}
-                          onClick={() => setPerfilTab("archivos")}
-                        >
-                          Compartidos
-                        </button>
+                        {perfilTipo === "grupo" ? (
+                          <>
+                            <button
+                              className={`chat-profile-tab ${perfilTab === "acerca" ? "active" : ""}`}
+                              onClick={() => setPerfilTab("acerca")}
+                            >
+                              Acerca de
+                            </button>
+                            <button
+                              className={`chat-profile-tab ${perfilTab === "miembros" ? "active" : ""}`}
+                              onClick={() => setPerfilTab("miembros")}
+                            >
+                              Miembros {perfilGrupoMiembros.length > 0 && ` ${perfilGrupoMiembros.length}`}
+                            </button>
+                            <button
+                              className={`chat-profile-tab ${perfilTab === "configuracion" ? "active" : ""}`}
+                              onClick={() => setPerfilTab("configuracion")}
+                            >
+                              Configuración
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button
+                              className={`chat-profile-tab ${perfilTab === "info" ? "active" : ""}`}
+                              onClick={() => setPerfilTab("info")}
+                            >
+                              Información
+                            </button>
+                            <button
+                              className={`chat-profile-tab ${perfilTab === "archivos" ? "active" : ""}`}
+                              onClick={() => setPerfilTab("archivos")}
+                            >
+                              Compartidos
+                            </button>
+                            {/* Solo mostrar pestaña de reuniones si es el perfil propio */}
+                            {(() => {
+                              const userNickname = user?.nickname || user?.name;
+                              const perfilNickname = perfilData?.nickname || perfilData?.name;
+                              const esMiPerfil = userNickname && perfilNickname && userNickname === perfilNickname;
+                              return esMiPerfil ? (
+                                <button
+                                  className={`chat-profile-tab ${perfilTab === "reuniones" ? "active" : ""}`}
+                                  onClick={() => setPerfilTab("reuniones")}
+                                >
+                                  Reuniones
+                                </button>
+                              ) : null;
+                            })()}
+                          </>
+                        )}
                       </div>
                       <div className="chat-profile-modal-body">
                         {perfilCargando && <div className="chat-empty-pro">Cargando...</div>}
                         {!perfilCargando && perfilError && (
                           <div className="chat-empty-pro">{perfilError}</div>
                         )}
-                        {!perfilCargando && !perfilError && perfilTab === "info" && (
-                          <div className="chat-profile-info">
-                            <div className="chat-profile-hero-card">
-                              <div className="chat-profile-hero-photo">
-                                <img
-                                  src={getAvatarUrl({
-                                    photo: perfilData?.photo,
-                                    id: perfilData?.id,
-                                  })}
-                                  alt={perfilData?.name || "Usuario"}
+                        {!perfilCargando && !perfilError && perfilTab === "acerca" && perfilTipo === "grupo" && (
+                          <div className="chat-profile-info" style={{ padding: "16px" }}>
+                            {/* Tema */}
+                            <div style={{ marginBottom: "24px", borderBottom: "1px solid var(--chat-border)", paddingBottom: "16px" }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                                <div style={{ fontWeight: 600, fontSize: "0.9rem", color: "var(--chat-text)" }}>Tema</div>
+                                {perfilData?.es_admin && (
+                                  <button
+                                    onClick={() => {
+                                      if (editandoTema) {
+                                        // Guardar tema
+                                        // TODO: Implementar endpoint para actualizar tema
+                                        setEditandoTema(false);
+                                      } else {
+                                        setNuevoTema(perfilData?.tema || "");
+                                        setEditandoTema(true);
+                                      }
+                                    }}
+                                    style={{
+                                      background: "transparent",
+                                      border: "none",
+                                      color: "var(--azul-primario)",
+                                      cursor: "pointer",
+                                      fontSize: "0.85rem"
+                                    }}
+                                  >
+                                    {editandoTema ? "Guardar" : "Editar"}
+                                  </button>
+                                )}
+                              </div>
+                              {editandoTema ? (
+                                <input
+                                  type="text"
+                                  value={nuevoTema}
+                                  onChange={(e) => setNuevoTema(e.target.value)}
+                                  placeholder="Agregar un tema"
+                                  style={{
+                                    width: "100%",
+                                    padding: "8px",
+                                    background: "var(--fondo-input)",
+                                    border: "1px solid var(--chat-border)",
+                                    borderRadius: "6px",
+                                    color: "var(--chat-text)",
+                                    fontSize: "0.9rem"
+                                  }}
+                                  onBlur={() => {
+                                    setEditandoTema(false);
+                                    // TODO: Guardar tema
+                                  }}
+                                  autoFocus
                                 />
+                              ) : (
+                                <div style={{ fontSize: "0.9rem", color: "var(--chat-muted)" }}>
+                                  {perfilData?.tema || "Agregar un tema"}
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Descripción */}
+                            <div style={{ marginBottom: "24px", borderBottom: "1px solid var(--chat-border)", paddingBottom: "16px" }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                                <div style={{ fontWeight: 600, fontSize: "0.9rem", color: "var(--chat-text)" }}>Descripción</div>
+                                {perfilData?.es_admin && (
+                                  <button
+                                    onClick={() => {
+                                      if (editandoDescripcion) {
+                                        // Guardar descripción
+                                        // TODO: Implementar endpoint para actualizar descripción
+                                        setEditandoDescripcion(false);
+                                      } else {
+                                        setNuevaDescripcion(perfilData?.descripcion || "");
+                                        setEditandoDescripcion(true);
+                                      }
+                                    }}
+                                    style={{
+                                      background: "transparent",
+                                      border: "none",
+                                      color: "var(--azul-primario)",
+                                      cursor: "pointer",
+                                      fontSize: "0.85rem"
+                                    }}
+                                  >
+                                    {editandoDescripcion ? "Guardar" : "Editar"}
+                                  </button>
+                                )}
                               </div>
-                              <div className="chat-profile-hero-data">
-                                <div className="chat-profile-hero-name">
-                                  {perfilData?.name || "No definido"}
+                              {editandoDescripcion ? (
+                                <textarea
+                                  value={nuevaDescripcion}
+                                  onChange={(e) => setNuevaDescripcion(e.target.value)}
+                                  placeholder="Agregar una descripción"
+                                  style={{
+                                    width: "100%",
+                                    padding: "8px",
+                                    background: "var(--fondo-input)",
+                                    border: "1px solid var(--chat-border)",
+                                    borderRadius: "6px",
+                                    color: "var(--chat-text)",
+                                    fontSize: "0.9rem",
+                                    minHeight: "80px",
+                                    resize: "vertical"
+                                  }}
+                                  onBlur={() => {
+                                    setEditandoDescripcion(false);
+                                    // TODO: Guardar descripción
+                                  }}
+                                  autoFocus
+                                />
+                              ) : (
+                                <div style={{ fontSize: "0.9rem", color: "var(--chat-muted)" }}>
+                                  {perfilData?.descripcion || "Agregar una descripción"}
                                 </div>
-                                <div className="chat-profile-hero-subtitle">
-                                  {perfilData?.puesto || "Puesto no definido"}
-                                </div>
-                                <div className="chat-profile-hero-nick">
-                                  @{perfilData?.nickname || "sin-nickname"}
-                                </div>
-                                <div className="chat-profile-hero-status">
-                                  <span
-                                    className={`chat-profile-status-dot ${
-                                      estaDentroHorario(configNotificaciones) ? "active" : "inactive"
-                                    }`}
-                                  />
-                                  <span>
-                                    {estaDentroHorario(configNotificaciones)
-                                      ? "Disponible"
-                                      : "Notificaciones pospuestas"}
-                                  </span>
-                                </div>
-                                <div className="chat-profile-hero-time">
-                                  {new Date().toLocaleTimeString("es-MX", {
-                                    hour: "2-digit",
-                                    minute: "2-digit",
-                                  })}{" "}
-                                  hora local
-                                </div>
+                              )}
+                            </div>
+
+                            {/* Administrado por */}
+                            <div style={{ marginBottom: "24px", borderBottom: "1px solid var(--chat-border)", paddingBottom: "16px" }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px" }}>
+                                <div style={{ fontWeight: 600, fontSize: "0.9rem", color: "var(--chat-text)" }}>Administrado por</div>
+                                <span style={{ fontSize: "0.75rem", color: "var(--chat-muted)", cursor: "help" }} title="Los administradores pueden gestionar el grupo">ⓘ</span>
+                              </div>
+                              <div style={{ fontSize: "0.9rem", color: "var(--azul-primario)" }}>
+                                {perfilGrupoAdmins.length > 0 
+                                  ? perfilGrupoAdmins.map((admin, idx) => (
+                                      <span key={admin}>
+                                        {admin}{idx < perfilGrupoAdmins.length - 1 ? ", " : ""}
+                                      </span>
+                                    ))
+                                  : perfilData?.creado_por || "Sin administradores"}
                               </div>
                             </div>
 
-                            <div className="chat-profile-section">
-                              <div className="chat-profile-section-title">Información de contacto</div>
-                              <div className="chat-profile-card">
-                                <span>Correo</span>
-                                <strong>{perfilData?.correo || "No definido"}</strong>
+                            {/* Creado por */}
+                            <div style={{ marginBottom: "24px", borderBottom: "1px solid var(--chat-border)", paddingBottom: "16px" }}>
+                              <div style={{ fontWeight: 600, fontSize: "0.9rem", color: "var(--chat-text)", marginBottom: "8px" }}>Creado por</div>
+                              <div style={{ fontSize: "0.9rem", color: "var(--chat-muted)" }}>
+                                {perfilData?.creado_por || "Desconocido"} el {new Date(perfilData?.fecha_creacion || Date.now()).toLocaleDateString("es-MX", { 
+                                  day: "numeric", 
+                                  month: "long", 
+                                  year: "numeric" 
+                                })}
                               </div>
                             </div>
 
-                            <div className="chat-profile-section">
-                              <div className="chat-profile-section-title">Acerca de mí</div>
-                              <div className="chat-profile-card">
-                                <span>Teléfono</span>
-                                <strong>
-                                  {perfilData?.telefono_visible
-                                    ? perfilData?.telefono || "No definido"
-                                    : "No visible"}
-                                </strong>
-                              </div>
-                              <div className="chat-profile-card">
-                                <span>Cumpleaños</span>
-                                <strong>
-                                  {perfilData?.birthday 
-                                    ? `${perfilData.birthday}${calcularEdad(perfilData.birthday) ? ` (${calcularEdad(perfilData.birthday)} años)` : ""}`
-                                    : "No definido"}
-                                </strong>
-                              </div>
+                            {/* Dejar el grupo */}
+                            <div style={{ marginTop: "24px" }}>
+                              <button
+                                onClick={async () => {
+                                  if (await showConfirm("Dejar el grupo", `¿Estás seguro de que quieres dejar el grupo "${perfilData?.nombre}"?`) === true) {
+                                    try {
+                                      const userDisplayName = user?.nickname || user?.name;
+                                      await authFetch(`${SERVER_URL}/chat/grupos/${chatActual}/miembros/${userDisplayName}`, {
+                                        method: "DELETE",
+                                      });
+                                      showAlert("Has dejado el grupo", "success");
+                                      cerrarPerfilUsuario();
+                                      // Recargar grupos
+                                      const data = await authFetch("/chat/grupos");
+                                      setGrupos(data || []);
+                                    } catch (err) {
+                                      showAlert("Error al dejar el grupo", "error");
+                                    }
+                                  }
+                                }}
+                                style={{
+                                  width: "100%",
+                                  padding: "12px",
+                                  background: "transparent",
+                                  border: "1px solid #ef4444",
+                                  borderRadius: "8px",
+                                  color: "#ef4444",
+                                  cursor: "pointer",
+                                  fontSize: "0.9rem",
+                                  fontWeight: 600
+                                }}
+                              >
+                                Dejar el grupo
+                              </button>
                             </div>
+                          </div>
+                        )}
+                        {!perfilCargando && !perfilError && perfilTab === "info" && perfilTipo === "usuario" && (
+                          <div className="chat-profile-info">
+                                <div className="chat-profile-hero-card">
+                                  <div className="chat-profile-hero-photo">
+                                    <img
+                                      src={getAvatarUrl({
+                                        photo: perfilData?.photo,
+                                        id: perfilData?.id,
+                                      })}
+                                      alt={perfilData?.name || "Usuario"}
+                                    />
+                                  </div>
+                                  <div className="chat-profile-hero-data">
+                                    <div className="chat-profile-hero-name">
+                                      {perfilData?.name || "No definido"}
+                                    </div>
+                                    <div className="chat-profile-hero-subtitle">
+                                      {perfilData?.puesto || "Puesto no definido"}
+                                    </div>
+                                    <div className="chat-profile-hero-nick">
+                                      @{perfilData?.nickname || "sin-nickname"}
+                                    </div>
+                                    <div className="chat-profile-hero-status">
+                                      <span
+                                        className={`chat-profile-status-dot ${
+                                          estaDentroHorario(configNotificaciones) ? "active" : "inactive"
+                                        }`}
+                                      />
+                                      <span>
+                                        {estaDentroHorario(configNotificaciones)
+                                          ? "Disponible"
+                                          : "Notificaciones pospuestas"}
+                                      </span>
+                                    </div>
+                                    <div className="chat-profile-hero-time">
+                                      {new Date().toLocaleTimeString("es-MX", {
+                                        hour: "2-digit",
+                                        minute: "2-digit",
+                                      })}{" "}
+                                      hora local
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="chat-profile-section">
+                                  <div className="chat-profile-section-title">Información de contacto</div>
+                                  <div className="chat-profile-card">
+                                    <span>Correo</span>
+                                    <strong>{perfilData?.correo || "No definido"}</strong>
+                                  </div>
+                                </div>
+
+                                <div className="chat-profile-section">
+                                  <div className="chat-profile-section-title">Acerca de mí</div>
+                                  <div className="chat-profile-card">
+                                    <span>Teléfono</span>
+                                    <strong>
+                                      {perfilData?.telefono_visible
+                                        ? perfilData?.telefono || "No definido"
+                                        : "No visible"}
+                                    </strong>
+                                  </div>
+                                  <div className="chat-profile-card">
+                                    <span>Cumpleaños</span>
+                                    <strong>
+                                      {perfilData?.birthday 
+                                        ? (() => {
+                                            const edad = calcularEdad(perfilData.birthday);
+                                            if (edad) {
+                                              const edadTexto = edad.meses > 0 
+                                                ? `${edad.años} años y ${edad.meses} ${edad.meses === 1 ? 'mes' : 'meses'}`
+                                                : `${edad.años} años`;
+                                              return `${perfilData.birthday} (${edadTexto})`;
+                                            }
+                                            return perfilData.birthday;
+                                          })()
+                                        : "No definido"}
+                                    </strong>
+                                  </div>
+                                </div>
                           </div>
                         )}
                         {!perfilCargando && !perfilError && perfilTab === "archivos" && (
@@ -3446,7 +5262,7 @@ export default function ChatPro({ socket, user, onClose }) {
                                         🖼️ {archivo.archivo_nombre || "Imagen"}
                                       </div>
                                       <div className="chat-profile-file-meta">
-                                        {archivo.de_nickname} · {new Date(archivo.fecha).toLocaleDateString("es-MX")}
+                                        {perfilTipo === "grupo" ? archivo.usuario_nickname : archivo.de_nickname} · {new Date(archivo.fecha).toLocaleDateString("es-MX")}
                                       </div>
                                     </button>
                                   ))
@@ -3468,7 +5284,7 @@ export default function ChatPro({ socket, user, onClose }) {
                                         🎞️ {archivo.archivo_nombre || "Video"}
                                       </div>
                                       <div className="chat-profile-file-meta">
-                                        {archivo.de_nickname} · {new Date(archivo.fecha).toLocaleDateString("es-MX")}
+                                        {perfilTipo === "grupo" ? archivo.usuario_nickname : archivo.de_nickname} · {new Date(archivo.fecha).toLocaleDateString("es-MX")}
                                       </div>
                                     </button>
                                   ))
@@ -3490,7 +5306,7 @@ export default function ChatPro({ socket, user, onClose }) {
                                         📎 {archivo.archivo_nombre || "Archivo"}
                                       </div>
                                       <div className="chat-profile-file-meta">
-                                        {archivo.de_nickname} ·{" "}
+                                        {perfilTipo === "grupo" ? archivo.usuario_nickname : archivo.de_nickname} ·{" "}
                                         {archivo.archivo_tamaño
                                           ? `${(archivo.archivo_tamaño / 1024).toFixed(1)} KB`
                                           : "Tamaño desconocido"}{" "}
@@ -3518,13 +5334,756 @@ export default function ChatPro({ socket, user, onClose }) {
                                         🔗 {item.enlace_compartido}
                                       </div>
                                       <div className="chat-profile-file-meta">
-                                        {item.de_nickname} · {new Date(item.fecha).toLocaleDateString("es-MX")}
+                                        {perfilTipo === "grupo" ? item.usuario_nickname : item.de_nickname} · {new Date(item.fecha).toLocaleDateString("es-MX")}
                                       </div>
                                     </a>
                                   ))
                                 )}
                               </>
                             )}
+                          </div>
+                        )}
+                        {!perfilCargando && !perfilError && perfilTab === "reuniones" && perfilTipo === "usuario" && (() => {
+                          // Verificar que es el perfil propio antes de mostrar reuniones
+                          const userNickname = user?.nickname || user?.name;
+                          const perfilNickname = perfilData?.nickname || perfilData?.name;
+                          const esMiPerfil = userNickname && perfilNickname && userNickname === perfilNickname;
+                          
+                          if (!esMiPerfil) {
+                            return (
+                              <div className="chat-empty-pro">
+                                Solo puedes ver tus propias reuniones
+                              </div>
+                            );
+                          }
+                          
+                          return (
+                            <ReunionesPerfilUsuario 
+                              reuniones={reuniones}
+                              serverUrl={SERVER_URL}
+                              authFetch={authFetch}
+                              user={user}
+                              setReuniones={setReuniones}
+                            />
+                          );
+                        })()}
+                        {!perfilCargando && !perfilError && perfilTab === "miembros" && perfilTipo === "grupo" && (
+                          <div className="chat-profile-files" style={{ padding: "16px" }}>
+                            {/* Búsqueda y filtros - Sticky */}
+                            <div style={{ 
+                              display: "flex", 
+                              gap: "8px", 
+                              marginBottom: "16px",
+                              position: "sticky",
+                              top: "0",
+                              zIndex: 10,
+                              background: "var(--chat-surface)",
+                              padding: "8px 0",
+                              marginTop: "-8px",
+                              marginLeft: "-16px",
+                              marginRight: "-16px",
+                              paddingLeft: "16px",
+                              paddingRight: "16px"
+                            }}>
+                              <div style={{ flex: "3" }}>
+                                <input
+                                  type="text"
+                                  placeholder="Buscar miembros"
+                                  value={busquedaMiembros}
+                                  onChange={(e) => setBusquedaMiembros(e.target.value)}
+                                  style={{
+                                    width: "100%",
+                                    padding: "8px 12px",
+                                    background: "var(--fondo-input)",
+                                    border: "1px solid var(--chat-border)",
+                                    borderRadius: "6px",
+                                    color: "var(--chat-text)",
+                                    fontSize: "0.9rem"
+                                  }}
+                                />
+                              </div>
+                              <select
+                                value={filtroMiembros}
+                                onChange={(e) => setFiltroMiembros(e.target.value)}
+                                style={{
+                                  flex: "1",
+                                  padding: "8px 12px",
+                                  background: "var(--fondo-input)",
+                                  border: "1px solid var(--chat-border)",
+                                  borderRadius: "6px",
+                                  color: "var(--chat-text)",
+                                  fontSize: "0.9rem",
+                                  cursor: "pointer"
+                                }}
+                              >
+                                <option value="todos">Todos</option>
+                                <option value="admins">Administradores</option>
+                                <option value="miembros">Miembros</option>
+                              </select>
+                            </div>
+
+                            {/* Lista de miembros filtrada */}
+                            {(() => {
+                              let miembrosFiltrados = perfilGrupoMiembros;
+                              
+                              // Filtrar por búsqueda
+                              if (busquedaMiembros.trim()) {
+                                miembrosFiltrados = miembrosFiltrados.filter(nickname => 
+                                  nickname.toLowerCase().includes(busquedaMiembros.toLowerCase())
+                                );
+                              }
+                              
+                              // Filtrar por tipo
+                              if (filtroMiembros === "admins") {
+                                miembrosFiltrados = miembrosFiltrados.filter(nickname => 
+                                  perfilGrupoAdmins.includes(nickname) || perfilData?.creado_por === nickname
+                                );
+                              } else if (filtroMiembros === "miembros") {
+                                miembrosFiltrados = miembrosFiltrados.filter(nickname => 
+                                  !perfilGrupoAdmins.includes(nickname) && perfilData?.creado_por !== nickname
+                                );
+                              }
+                              
+                              return miembrosFiltrados.length === 0 ? (
+                                <div className="chat-empty-pro">No se encontraron miembros</div>
+                              ) : (
+                                miembrosFiltrados.map((nickname) => {
+                                const usuario = usuariosIxora.find(u => (u.nickname || u.name) === nickname);
+                                const esAdmin = perfilGrupoAdmins.includes(nickname);
+                                const esCreador = perfilData?.creado_por === nickname;
+                                const userDisplayName = user?.nickname || user?.name;
+                                const esYo = nickname === userDisplayName;
+                                const puedoGestionar = perfilData?.es_admin && !esYo;
+                                const restriccion = perfilGrupoRestricciones[nickname];
+                                const tieneRestriccionIndefinida = restriccion?.indefinida === true;
+                                const menuAbierto = menuMiembroAbierto === nickname;
+                                const submenuAbierto = submenuRestriccionAbierto === nickname;
+                                
+                                return (
+                                  <div key={nickname} className="chat-profile-card" style={{ marginBottom: "8px" }}>
+                                    <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: menuAbierto ? "8px" : "0" }}>
+                                      <img
+                                        src={getAvatarUrl(usuario)}
+                                        alt={nickname}
+                                        className="chat-avatar"
+                                        style={{ width: "40px", height: "40px" }}
+                                      />
+                                      <div style={{ flex: 1 }}>
+                                        <div style={{ fontWeight: 600 }}>{nickname}</div>
+                                        <div style={{ fontSize: "0.75rem", color: "var(--chat-muted)" }}>
+                                          {esCreador ? "Creador" : esAdmin ? "Administrador" : "Miembro"}
+                                          {restriccion && (
+                                            <span style={{ marginLeft: "6px", color: "#ef4444" }}>
+                                              🔒 {restriccion.indefinida ? "Restringido (indefinido)" : "Restringido"}
+                                            </span>
+                                          )}
+                                        </div>
+                                      </div>
+                                      {!esYo && (
+                                        <button
+                                          className="chat-profile-action-btn"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            if (menuAbierto) {
+                                              setMenuMiembroAbierto(null);
+                                              setMenuMiembroPosicion(null);
+                                              setSubmenuRestriccionAbierto(null);
+                                            } else {
+                                              const rect = e.currentTarget.getBoundingClientRect();
+                                              setMenuMiembroPosicion({ x: rect.left, y: rect.bottom + 4 });
+                                              setMenuMiembroAbierto(nickname);
+                                              setSubmenuRestriccionAbierto(null);
+                                            }
+                                          }}
+                                          style={{ 
+                                            fontSize: "1.1rem", 
+                                            padding: "4px 8px",
+                                            background: menuAbierto ? "var(--chat-accent)" : "transparent",
+                                            color: menuAbierto ? "#ffffff" : "var(--chat-text)",
+                                            border: "1px solid var(--chat-border)",
+                                            borderRadius: "6px",
+                                            cursor: "pointer"
+                                          }}
+                                          title="Opciones"
+                                        >
+                                          ⋮
+                                        </button>
+                                      )}
+                                    </div>
+                                    
+                                    {/* Menú ya no inline; se muestra como overlay */}
+                                    {false && menuAbierto && (
+                                      <div 
+                                        className="chat-member-menu"
+                                        style={{
+                                          display: "inline-block",
+                                          marginTop: "4px",
+                                          background: "rgba(0, 0, 0, 0.05)",
+                                          backdropFilter: "blur(8px)",
+                                          border: "1px solid rgba(255, 255, 255, 0.1)",
+                                          borderRadius: "4px",
+                                          boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
+                                          zIndex: 1000,
+                                          padding: "2px"
+                                        }}
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        {/* Opciones de administración - Solo para admins */}
+                                        {puedoGestionar && !esCreador && (
+                                          <>
+                                            <button
+                                              className="chat-profile-action-btn"
+                                              onClick={async (e) => {
+                                                e.stopPropagation();
+                                                setMenuMiembroAbierto(null);
+                                                try {
+                                                  await authFetch(`${SERVER_URL}/chat/grupos/${chatActual}/miembros/${nickname}/admin`, {
+                                                    method: "POST",
+                                                    headers: { "Content-Type": "application/json" },
+                                                    body: JSON.stringify({ es_admin: !esAdmin }),
+                                                  });
+                                                  abrirPerfilGrupo(chatActual);
+                                                  showAlert(esAdmin ? "Administrador removido" : "Administrador agregado", "success");
+                                                } catch (err) {
+                                                  showAlert("Error gestionando administrador", "error");
+                                                }
+                                              }}
+                                              style={{ 
+                                                width: "auto", 
+                                                display: "block",
+                                                textAlign: "left",
+                                                fontSize: "0.7rem", 
+                                                padding: "4px 8px",
+                                                background: "transparent",
+                                                border: "none",
+                                                color: "var(--chat-text)",
+                                                cursor: "pointer",
+                                                borderRadius: "4px",
+                                                lineHeight: "1.4",
+                                                whiteSpace: "nowrap"
+                                              }}
+                                              onMouseEnter={(e) => e.target.style.background = "rgba(255, 255, 255, 0.1)"}
+                                              onMouseLeave={(e) => e.target.style.background = "transparent"}
+                                            >
+                                              {esAdmin ? "❌ Remover admin" : "⭐ Hacer admin"}
+                                            </button>
+                                            
+                                            <div style={{ position: "relative" }}>
+                                              <button
+                                                className="chat-profile-action-btn"
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  setSubmenuRestriccionAbierto(submenuAbierto ? null : nickname);
+                                                }}
+                                                style={{ 
+                                                  width: "auto", 
+                                                  display: "block",
+                                                  textAlign: "left",
+                                                  fontSize: "0.7rem", 
+                                                  padding: "4px 8px",
+                                                  background: "transparent",
+                                                  border: "none",
+                                                  color: tieneRestriccionIndefinida ? "#22c55e" : "var(--chat-text)",
+                                                  cursor: "pointer",
+                                                  borderRadius: "4px",
+                                                  whiteSpace: "nowrap"
+                                                }}
+                                                onMouseEnter={(e) => e.target.style.background = "rgba(255, 255, 255, 0.1)"}
+                                                onMouseLeave={(e) => e.target.style.background = "transparent"}
+                                              >
+                                                <span>{tieneRestriccionIndefinida ? "✅ Permitir" : "🔒 Restringir"}</span>
+                                                <span style={{ fontSize: "0.6rem" }}>{submenuAbierto ? "▲" : "▼"}</span>
+                                              </button>
+                                              
+                                              {/* Submenú de restricciones */}
+                                              {submenuAbierto && (
+                                                <div 
+                                                  style={{
+                                                    display: "inline-block",
+                                                    marginTop: "2px",
+                                                    background: "rgba(0, 0, 0, 0.05)",
+                                                    backdropFilter: "blur(8px)",
+                                                    border: "1px solid rgba(255, 255, 255, 0.1)",
+                                                    borderRadius: "4px",
+                                                    padding: "2px"
+                                                  }}
+                                                  onClick={(e) => e.stopPropagation()}
+                                                >
+                                                  {tieneRestriccionIndefinida ? (
+                                                    <button
+                                                      onClick={async (e) => {
+                                                        e.stopPropagation();
+                                                        setSubmenuRestriccionAbierto(null);
+                                                        setMenuMiembroAbierto(null);
+                                                        try {
+                                                          await authFetch(`${SERVER_URL}/chat/grupos/${chatActual}/miembros/${nickname}/restringir`, {
+                                                            method: "POST",
+                                                            headers: { "Content-Type": "application/json" },
+                                                            body: JSON.stringify({ duracion_minutos: null, remover: true }),
+                                                          });
+                                                          abrirPerfilGrupo(chatActual);
+                                                          showAlert("Restricción removida", "success");
+                                                        } catch (err) {
+                                                          showAlert("Error removiendo restricción", "error");
+                                                        }
+                                                      }}
+                                                      style={{ 
+                                                        width: "auto", 
+                                                        display: "block",
+                                                        textAlign: "left",
+                                                        fontSize: "0.65rem", 
+                                                        padding: "4px 6px",
+                                                        background: "transparent",
+                                                        border: "none",
+                                                        color: "#22c55e",
+                                                        cursor: "pointer",
+                                                        borderRadius: "3px",
+                                                        lineHeight: "1.3",
+                                                        whiteSpace: "nowrap"
+                                                      }}
+                                                      onMouseEnter={(e) => e.target.style.background = "rgba(34, 197, 94, 0.1)"}
+                                                      onMouseLeave={(e) => e.target.style.background = "transparent"}
+                                                    >
+                                                      ✅ Permitir mensaje
+                                                    </button>
+                                                  ) : (
+                                                    <>
+                                                      {["5 min", "10 min", "15 min", "30 min", "1 hora", "24 horas", "Indefinido"].map((opcion) => (
+                                                        <button
+                                                          key={opcion}
+                                                          onClick={async (e) => {
+                                                            e.stopPropagation();
+                                                            setSubmenuRestriccionAbierto(null);
+                                                            setMenuMiembroAbierto(null);
+                                                            
+                                                            let minutos = null;
+                                                            if (opcion === "5 min") minutos = 5;
+                                                            else if (opcion === "10 min") minutos = 10;
+                                                            else if (opcion === "15 min") minutos = 15;
+                                                            else if (opcion === "30 min") minutos = 30;
+                                                            else if (opcion === "1 hora") minutos = 60;
+                                                            else if (opcion === "24 horas") minutos = 24 * 60;
+                                                            else if (opcion === "Indefinido") minutos = null;
+                                                            
+                                                            try {
+                                                              await authFetch(`${SERVER_URL}/chat/grupos/${chatActual}/miembros/${nickname}/restringir`, {
+                                                                method: "POST",
+                                                                headers: { "Content-Type": "application/json" },
+                                                                body: JSON.stringify({ duracion_minutos: minutos }),
+                                                              });
+                                                              abrirPerfilGrupo(chatActual);
+                                                              showAlert(`Restricción aplicada: ${opcion}`, "success");
+                                                            } catch (err) {
+                                                              showAlert("Error aplicando restricción", "error");
+                                                            }
+                                                          }}
+                                                          style={{ 
+                                                            width: "auto", 
+                                                            display: "block",
+                                                            textAlign: "left",
+                                                            fontSize: "0.65rem", 
+                                                            padding: "4px 6px",
+                                                            background: "transparent",
+                                                            border: "none",
+                                                            color: "var(--chat-text)",
+                                                            cursor: "pointer",
+                                                            borderRadius: "3px",
+                                                            lineHeight: "1.3",
+                                                            whiteSpace: "nowrap"
+                                                          }}
+                                                          onMouseEnter={(e) => e.target.style.background = "rgba(255, 255, 255, 0.1)"}
+                                                          onMouseLeave={(e) => e.target.style.background = "transparent"}
+                                                        >
+                                                          {opcion}
+                                                        </button>
+                                                      ))}
+                                                    </>
+                                                  )}
+                                                </div>
+                                              )}
+                                            </div>
+                                            
+                                            <button
+                                              className="chat-profile-action-btn"
+                                              onClick={async (e) => {
+                                                e.stopPropagation();
+                                                setMenuMiembroAbierto(null);
+                                                if (await showConfirm("Eliminar miembro", `¿Eliminar a ${nickname} del grupo?`) === true) {
+                                                  try {
+                                                    await authFetch(`${SERVER_URL}/chat/grupos/${chatActual}/miembros/${nickname}`, {
+                                                      method: "DELETE",
+                                                    });
+                                                    abrirPerfilGrupo(chatActual);
+                                                    showAlert("Miembro eliminado del grupo", "success");
+                                                  } catch (err) {
+                                                    showAlert("Error eliminando miembro", "error");
+                                                  }
+                                                }
+                                              }}
+                                              style={{ 
+                                                width: "auto", 
+                                                display: "block",
+                                                textAlign: "left",
+                                                fontSize: "0.7rem", 
+                                                padding: "4px 8px",
+                                                background: "transparent",
+                                                border: "none",
+                                                color: "#ef4444",
+                                                cursor: "pointer",
+                                                borderRadius: "4px",
+                                                lineHeight: "1.4",
+                                                whiteSpace: "nowrap"
+                                              }}
+                                              onMouseEnter={(e) => e.target.style.background = "rgba(255, 255, 255, 0.1)"}
+                                              onMouseLeave={(e) => e.target.style.background = "transparent"}
+                                            >
+                                              🗑️ Eliminar
+                                            </button>
+                                          </>
+                                        )}
+                                        
+                                        {/* Transferir propiedad - Solo para el creador */}
+                                        {perfilData?.es_creador && !esCreador && (
+                                          <button
+                                            className="chat-profile-action-btn"
+                                            onClick={async (e) => {
+                                              e.stopPropagation();
+                                              setMenuMiembroAbierto(null);
+                                              if (await showConfirm("Transferir propiedad", `¿Transferir la propiedad del grupo a ${nickname}?`) === true) {
+                                                try {
+                                                  await authFetch(`${SERVER_URL}/chat/grupos/${chatActual}/transferir`, {
+                                                    method: "POST",
+                                                    headers: { "Content-Type": "application/json" },
+                                                    body: JSON.stringify({ nuevo_creador: nickname }),
+                                                  });
+                                                  abrirPerfilGrupo(chatActual);
+                                                  showAlert("Propiedad transferida", "success");
+                                                } catch (err) {
+                                                  showAlert("Error transfiriendo propiedad", "error");
+                                                }
+                                              }
+                                            }}
+                                            style={{ 
+                                              width: "auto", 
+                                              display: "block",
+                                              textAlign: "left",
+                                              fontSize: "0.7rem", 
+                                              padding: "4px 8px",
+                                              background: "transparent",
+                                              border: "none",
+                                              color: "var(--chat-text)",
+                                              cursor: "pointer",
+                                              borderRadius: "4px",
+                                              lineHeight: "1.4",
+                                              whiteSpace: "nowrap"
+                                            }}
+                                            onMouseEnter={(e) => e.target.style.background = "rgba(255, 255, 255, 0.1)"}
+                                            onMouseLeave={(e) => e.target.style.background = "transparent"}
+                                          >
+                                            👑 Transferir propiedad
+                                          </button>
+                                        )}
+                                        
+                                        {/* Opciones básicas - Para todos */}
+                                        <button
+                                          className="chat-profile-action-btn"
+                                          onClick={async (e) => {
+                                            e.stopPropagation();
+                                            setMenuMiembroAbierto(null);
+                                            abrirPerfilUsuario(nickname);
+                                          }}
+                                          style={{ 
+                                            width: "auto", 
+                                            display: "block",
+                                            textAlign: "left",
+                                            fontSize: "0.7rem", 
+                                            padding: "4px 8px",
+                                            background: "transparent",
+                                            border: "none",
+                                            color: "var(--chat-text)",
+                                            cursor: "pointer",
+                                            borderRadius: "4px",
+                                            lineHeight: "1.4",
+                                            whiteSpace: "nowrap"
+                                          }}
+                                          onMouseEnter={(e) => e.target.style.background = "rgba(255, 255, 255, 0.1)"}
+                                          onMouseLeave={(e) => e.target.style.background = "transparent"}
+                                        >
+                                          👤 Ver perfil
+                                        </button>
+                                        
+                                        <button
+                                          className="chat-profile-action-btn"
+                                          onClick={async (e) => {
+                                            e.stopPropagation();
+                                            setMenuMiembroAbierto(null);
+                                            abrirChat("privado", nickname);
+                                          }}
+                                          style={{ 
+                                            width: "auto", 
+                                            display: "block",
+                                            textAlign: "left",
+                                            fontSize: "0.7rem", 
+                                            padding: "4px 8px",
+                                            background: "transparent",
+                                            border: "none",
+                                            color: "var(--chat-text)",
+                                            cursor: "pointer",
+                                            borderRadius: "4px",
+                                            lineHeight: "1.4",
+                                            whiteSpace: "nowrap"
+                                          }}
+                                          onMouseEnter={(e) => e.target.style.background = "var(--fondo-input)"}
+                                          onMouseLeave={(e) => e.target.style.background = "transparent"}
+                                        >
+                                          💬 Enviar mensaje
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                                })
+                              );
+                            })()}
+                          </div>
+                        )}
+                        {!perfilCargando && !perfilError && perfilTab === "configuracion" && perfilTipo === "grupo" && (
+                          <div className="chat-profile-info" style={{ padding: "16px" }}>
+                            {/* Hacer grupo público/privado */}
+                            {perfilData?.es_admin && (
+                              <div style={{ marginBottom: "24px", borderBottom: "1px solid var(--chat-border)", paddingBottom: "16px" }}>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                                  <div>
+                                    <div style={{ fontWeight: 600, fontSize: "0.95rem", color: "var(--chat-text)", marginBottom: "4px" }}>
+                                      Visibilidad del grupo
+                                    </div>
+                                    <div style={{ fontSize: "0.85rem", color: "var(--chat-muted)", lineHeight: "1.5" }}>
+                                      {perfilData?.es_publico ? "Este grupo es público. Cualquiera puede unirse." : "Este grupo es privado. Solo los miembros pueden verlo."}
+                                    </div>
+                                  </div>
+                                  <button
+                                    onClick={async () => {
+                                      try {
+                                        const nuevoEstado = !perfilData?.es_publico;
+                                        await authFetch(`${SERVER_URL}/chat/grupos/${chatActual}`, {
+                                          method: "PUT",
+                                          headers: { "Content-Type": "application/json" },
+                                          body: JSON.stringify({ es_publico: nuevoEstado }),
+                                        });
+                                        abrirPerfilGrupo(chatActual);
+                                        showAlert(`Grupo ${nuevoEstado ? "público" : "privado"}`, "success");
+                                      } catch (err) {
+                                        showAlert("Error cambiando visibilidad del grupo", "error");
+                                      }
+                                    }}
+                                    style={{
+                                      background: "transparent",
+                                      border: "1px solid var(--chat-border)",
+                                      borderRadius: "6px",
+                                      color: "var(--azul-primario)",
+                                      cursor: "pointer",
+                                      fontSize: "0.85rem",
+                                      padding: "6px 12px"
+                                    }}
+                                  >
+                                    {perfilData?.es_publico ? "Hacer privado" : "Hacer público"}
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Permisos de publicación */}
+                            <div style={{ marginBottom: "24px", borderBottom: "1px solid var(--chat-border)", paddingBottom: "16px" }}>
+                              <div style={{ fontWeight: 600, fontSize: "0.95rem", color: "var(--chat-text)", marginBottom: "12px" }}>
+                                Permisos de publicación
+                              </div>
+                              <div style={{ fontSize: "0.85rem", color: "var(--chat-muted)", marginBottom: "8px", lineHeight: "1.5" }}>
+                                <div style={{ marginBottom: "4px" }}>• Todos pueden publicar</div>
+                                <div style={{ marginBottom: "4px" }}>• Todos pueden responder a los mensajes</div>
+                                <div style={{ marginBottom: "8px" }}>
+                                  • Según los ajustes del espacio de trabajo, solo las personas con permisos pueden usar las menciones de @canal y @aquí
+                                </div>
+                                <button type="button" onClick={(e) => e.preventDefault()} style={{ background: "transparent", border: "none", color: "var(--azul-primario)", textDecoration: "none", cursor: "pointer", padding: 0 }}>Más información</button>
+                              </div>
+                            </div>
+
+                            {/* Juntas */}
+                            <div style={{ marginBottom: "24px", borderBottom: "1px solid var(--chat-border)", paddingBottom: "16px" }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "12px" }}>
+                                <div style={{ fontWeight: 600, fontSize: "0.95rem", color: "var(--chat-text)" }}>Juntas</div>
+                                <span style={{ fontSize: "0.75rem", color: "var(--chat-muted)", cursor: "help" }} title="Información sobre juntas">ⓘ</span>
+                              </div>
+                              <div style={{ fontSize: "0.85rem", color: "var(--chat-muted)", marginBottom: "12px" }}>
+                                Los miembros pueden iniciar juntas y unirse a ellas en este grupo.
+                              </div>
+                              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                                <button
+                                  style={{
+                                    padding: "4px 8px",
+                                    background: "var(--chat-accent)",
+                                    border: "none",
+                                    borderRadius: "4px",
+                                    color: "#ffffff",
+                                    cursor: "pointer",
+                                    fontSize: "0.85rem",
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    gap: "4px",
+                                    whiteSpace: "nowrap"
+                                  }}
+                                  disabled
+                                  title="Próximamente"
+                                >
+                                  🎧 Iniciar junta
+                                </button>
+                                <button
+                                  style={{
+                                    padding: "4px 8px",
+                                    background: "transparent",
+                                    border: "1px solid var(--chat-border)",
+                                    borderRadius: "4px",
+                                    color: "var(--chat-text)",
+                                    cursor: "pointer",
+                                    fontSize: "0.85rem",
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    gap: "4px",
+                                    whiteSpace: "nowrap"
+                                  }}
+                                  disabled
+                                  title="Próximamente"
+                                >
+                                  🔗 Copiar el enlace de la junta
+                                </button>
+                              </div>
+                              <button type="button" onClick={(e) => e.preventDefault()} style={{ background: "transparent", border: "none", color: "var(--azul-primario)", textDecoration: "none", fontSize: "0.85rem", marginTop: "8px", display: "block", cursor: "pointer", padding: 0, textAlign: "left" }}>Más información</button>
+                            </div>
+
+                            {/* Iniciar siempre las notas de IA */}
+                            <div style={{ marginBottom: "24px", borderBottom: "1px solid var(--chat-border)", paddingBottom: "16px" }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "8px" }}>
+                                <div>
+                                  <div style={{ fontWeight: 600, fontSize: "0.95rem", color: "var(--chat-text)", marginBottom: "4px" }}>
+                                    Iniciar siempre las notas de IA
+                                  </div>
+                                  <div style={{ fontSize: "0.85rem", color: "var(--chat-muted)", lineHeight: "1.5" }}>
+                                    Elige si todas las juntas de este grupo se transcribirán y resumirán de forma predeterminada. Pueden cambiar este ajuste: Miembros.
+                                  </div>
+                                </div>
+                                {perfilData?.es_admin && (
+                                  <button
+                                    style={{
+                                      background: "transparent",
+                                      border: "none",
+                                      color: "var(--azul-primario)",
+                                      cursor: "pointer",
+                                      fontSize: "0.85rem",
+                                      padding: "4px 8px"
+                                    }}
+                                    disabled
+                                    title="Próximamente"
+                                  >
+                                    Editar
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Elegir quiénes pueden agregar, quitar y reorganizar pestañas */}
+                            <div style={{ marginBottom: "24px", borderBottom: "1px solid var(--chat-border)", paddingBottom: "16px" }}>
+                              <div style={{ fontWeight: 600, fontSize: "0.95rem", color: "var(--chat-text)", marginBottom: "8px" }}>
+                                Elige quiénes pueden agregar, quitar y reorganizar pestañas
+                              </div>
+                              {perfilData?.es_admin ? (
+                                <select
+                                  style={{
+                                    width: "100%",
+                                    padding: "8px 12px",
+                                    background: "var(--fondo-input)",
+                                    border: "1px solid var(--chat-border)",
+                                    borderRadius: "6px",
+                                    color: "var(--chat-text)",
+                                    fontSize: "0.9rem",
+                                    cursor: "pointer"
+                                  }}
+                                  disabled
+                                  title="Próximamente"
+                                >
+                                  <option>Todos</option>
+                                  <option>Solo administradores</option>
+                                </select>
+                              ) : (
+                                <div style={{ fontSize: "0.85rem", color: "var(--chat-muted)" }}>Todos</div>
+                              )}
+                            </div>
+
+                            {/* Copiar nombres de los miembros */}
+                            <div style={{ marginBottom: "16px" }}>
+                              <button
+                                onClick={async () => {
+                                  try {
+                                    const nombres = perfilGrupoMiembros.join(", ");
+                                    await navigator.clipboard.writeText(nombres);
+                                    showAlert("Nombres copiados al portapapeles", "success");
+                                  } catch (err) {
+                                    showAlert("Error al copiar nombres", "error");
+                                  }
+                                }}
+                                style={{
+                                  padding: "4px 8px",
+                                  background: "var(--chat-accent)",
+                                  border: "none",
+                                  borderRadius: "4px",
+                                  color: "#ffffff",
+                                  cursor: "pointer",
+                                  fontSize: "0.85rem",
+                                  fontWeight: 500,
+                                  whiteSpace: "nowrap",
+                                  display: "inline-block"
+                                }}
+                              >
+                                Copiar nombres de los miembros
+                              </button>
+                            </div>
+
+                            {/* Copiar direcciones de correo electrónico de los miembros */}
+                            <div style={{ marginBottom: "16px" }}>
+                              <button
+                                onClick={async () => {
+                                  try {
+                                    const correos = perfilGrupoMiembros
+                                      .map(nickname => {
+                                        const usuario = usuariosIxora.find(u => (u.nickname || u.name) === nickname);
+                                        return usuario?.correo || null;
+                                      })
+                                      .filter(c => c)
+                                      .join(", ");
+                                    if (correos) {
+                                      await navigator.clipboard.writeText(correos);
+                                      showAlert("Correos copiados al portapapeles", "success");
+                                    } else {
+                                      showAlert("No hay correos disponibles", "warning");
+                                    }
+                                  } catch (err) {
+                                    showAlert("Error al copiar correos", "error");
+                                  }
+                                }}
+                                style={{
+                                  padding: "4px 8px",
+                                  background: "var(--chat-accent)",
+                                  border: "none",
+                                  borderRadius: "4px",
+                                  color: "#ffffff",
+                                  cursor: "pointer",
+                                  fontSize: "0.85rem",
+                                  fontWeight: 500,
+                                  whiteSpace: "nowrap",
+                                  display: "inline-block"
+                                }}
+                              >
+                                Copiar direcciones de correo electrónico de los miembros
+                              </button>
+                            </div>
                           </div>
                         )}
                       </div>
@@ -3566,7 +6125,13 @@ export default function ChatPro({ socket, user, onClose }) {
                               <span className="chat-header-title">
                                 <button
                                   className="chat-header-name-button"
-                                  onClick={() => abrirPerfilUsuario(chatActual)}
+                                  onClick={() => {
+                                    // Solo abrir perfil si NO es el usuario actual
+                                    const userNickname = user?.nickname || user?.name;
+                                    if (chatActual && chatActual !== userNickname) {
+                                      abrirPerfilUsuario(chatActual);
+                                    }
+                                  }}
                                   title="Ver información y archivos"
                                   type="button"
                                 >
@@ -3589,7 +6154,7 @@ export default function ChatPro({ socket, user, onClose }) {
                             <div className="chat-header-left">
                               <span className="grupo-icon">👥</span>
                               <span className="chat-header-title">
-                                <strong>
+                                <strong style={{ color: getColorForName(chatActual || "Grupo") }}>
                                   {(Array.isArray(grupos) && grupos.find((g) => String(g.id) === String(chatActual))?.nombre) ||
                                     "Grupo"}
                                 </strong>
@@ -3654,6 +6219,7 @@ export default function ChatPro({ socket, user, onClose }) {
                             : false;
                           const msgIdStr = String(m.id || "");
                           const estaDestacado = msgIdStr && mensajesDestacados.has(msgIdStr);
+                          const esPrioritario = m.prioridad === 1;
                           const fueLeido =
                             tipoChat === "privado" &&
                             esMio &&
@@ -3675,9 +6241,8 @@ export default function ChatPro({ socket, user, onClose }) {
                           return (
                             <div
                               key={i}
-                              className={
-                                esMio ? "msg-row msg-row-out" : "msg-row msg-row-in"
-                              }
+                              id={mensajeId ? `msg-${mensajeId}` : undefined}
+                              className={`${esMio ? "msg-row msg-row-out" : "msg-row msg-row-in"}${mensajeResaltadoId === mensajeId ? " msg-resaltado-prioritario" : ""}`}
                             >
                               {!esMio && (
                                 <img
@@ -3704,14 +6269,32 @@ export default function ChatPro({ socket, user, onClose }) {
                                 />
                               )}
 
+                              {esMio && (
+                                <button
+                                  type="button"
+                                  className="msg-reenviar-btn"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    abrirReenvio(m);
+                                  }}
+                                  onContextMenu={(e) => e.stopPropagation()}
+                                  title="Reenviar"
+                                >
+                                  📤
+                                </button>
+                              )}
+
                               <div
                                 className={`${esMio ? "msg-yo-pro" : "msg-otro-pro"} ${
                                   estaSeleccionado ? "msg-selected" : ""
-                                }`}
+                                } ${esPrioritario ? "msg-prioritario" : ""}`}
                                 style={{
-                                  borderColor: esMio
+                                  borderColor: esPrioritario
+                                    ? "#ff6b6b"
+                                    : esMio
                                     ? getColorForName(userDisplayName || "Usuario")
                                     : getColorForName(otroNickname),
+                                  borderWidth: esPrioritario ? "2px" : "1px",
                                 }}
                                 onClick={(e) => {
                                   if (!seleccionModo || !mensajeId) return;
@@ -3732,6 +6315,11 @@ export default function ChatPro({ socket, user, onClose }) {
                                     otroNickname,
                                   })
                                 }
+                                onDoubleClick={(e) => {
+                                  if (seleccionModo || editandoMensaje === m.id) return;
+                                  if (e.target.closest("button") || e.target.closest("a") || e.target.closest(".msg-archivo-link") || e.target.closest(".msg-mention-link") || e.target.closest(".msg-reenviar-btn")) return;
+                                  togglePrioridadMensaje(m);
+                                }}
                                 onTouchStart={() =>
                                   iniciarPress({
                                     mensaje: m,
@@ -3749,7 +6337,13 @@ export default function ChatPro({ socket, user, onClose }) {
                                   </div>
                                 )}
                                 {tipoChat !== "privado" && !esMio && (
-                                  <div className="msg-usuario-nombre">{otroNickname}</div>
+                                  <div className="msg-usuario-nombre">
+                                    {otroNickname}
+                                    {esPrioritario && <span className="msg-prioridad-badge">🔴 Prioridad Alta</span>}
+                                  </div>
+                                )}
+                                {esPrioritario && tipoChat === "privado" && (
+                                  <div className="msg-prioridad-indicator">🔴 Mensaje Prioritario</div>
                                 )}
                                 {(m.reenviado_de_usuario || m.reenviado_de_chat) && (
                                   <div className="msg-forwarded">
@@ -3813,14 +6407,26 @@ export default function ChatPro({ socket, user, onClose }) {
                                             {m.enlace_compartido}
                                           </a>
                                         )}
-                                        {(!m.enlace_compartido || m.mensaje !== m.enlace_compartido) && (
-                                          <span
-                                            className="msg-texto-html"
-                                            dangerouslySetInnerHTML={{
-                                              __html: formatearMensaje(m.mensaje || ""),
-                                            }}
-                                          />
-                                        )}
+                                        {(!m.enlace_compartido || m.mensaje !== m.enlace_compartido) && !m.archivo_url && (() => {
+                                          // Si el mensaje es solo un sticker, no mostrar el texto
+                                          const mensajeTexto = m.menciona 
+                                            ? (m.mensaje || "").replace(new RegExp(`@${m.menciona}\\b`, 'gi'), '').trim()
+                                            : (m.mensaje || "");
+                                          const esSoloSticker = /^\[sticker:\d+:[^\]]+\]$/.test(mensajeTexto.trim());
+                                          
+                                          if (esSoloSticker) {
+                                            return null; // No mostrar texto si es solo sticker
+                                          }
+                                          
+                                          return (
+                                            <span
+                                              className="msg-texto-html"
+                                              dangerouslySetInnerHTML={{
+                                                __html: formatearMensaje(mensajeTexto),
+                                              }}
+                                            />
+                                          );
+                                        })()}
                                         {m.mensaje_editado === 1 && (
                                           <span className="msg-editado-indicador" title={`Editado el ${new Date(m.fecha_edicion).toLocaleString("es-MX")}`}>
                                             (editado)
@@ -3878,29 +6484,108 @@ export default function ChatPro({ socket, user, onClose }) {
                                           );
                                         })()
                                       )}
-                                      {m.archivo_url && (
-                                        <div className="msg-archivo">
-                                          <button
-                                            type="button"
-                                            className="msg-archivo-link"
-                                            onClick={() =>
-                                              abrirArchivoPrivado({
-                                                archivo_url: m.archivo_url,
-                                                archivo_nombre: m.archivo_nombre,
-                                                archivo_tamaño: m.archivo_tamaño,
-                                                archivo_tipo: m.archivo_tipo,
-                                              })
-                                            }
-                                          >
-                                            📎 {m.archivo_nombre || "Archivo"}
-                                            {m.archivo_tamaño && (
-                                              <span className="msg-archivo-tamaño">
-                                                {" "}({(m.archivo_tamaño / 1024).toFixed(1)} KB)
-                                              </span>
-                                            )}
-                                          </button>
-                                        </div>
-                                      )}
+                                      {m.archivo_url && (() => {
+                                        // Detectar si es un sticker:
+                                        // 1. Por el patrón [sticker:id:nombre] en el mensaje
+                                        // 2. Por el nombre del archivo que contiene "sticker"
+                                        const tienePatronSticker = m.mensaje?.includes('[sticker:');
+                                        const esStickerPorNombre = m.archivo_nombre?.toLowerCase().includes('sticker');
+                                        const esImagen = m.archivo_tipo?.startsWith('image/');
+                                        const esSticker = (tienePatronSticker || esStickerPorNombre) && esImagen;
+                                        
+                                        if (esSticker) {
+                                          // Construir URL completa con token de autenticación
+                                          const token = obtenerToken();
+                                          let urlImagen = m.archivo_url;
+                                          
+                                          if (urlImagen.startsWith('/chat/archivo/')) {
+                                            urlImagen = `${SERVER_URL}${urlImagen}?token=${encodeURIComponent(token)}`;
+                                          } else if (!urlImagen.startsWith('http')) {
+                                            urlImagen = `${SERVER_URL}${urlImagen.startsWith('/') ? '' : '/'}${urlImagen}?token=${encodeURIComponent(token)}`;
+                                          }
+                                          
+                                          const esGif = m.archivo_tipo === 'image/gif' || m.archivo_nombre?.toLowerCase().endsWith('.gif');
+                                          return (
+                                            <img 
+                                              src={urlImagen} 
+                                              alt={m.archivo_nombre || "Sticker"} 
+                                              className="msg-sticker"
+                                              style={esGif ? { imageRendering: 'auto' } : {}}
+                                              onClick={() =>
+                                                abrirArchivoPrivado({
+                                                  archivo_url: m.archivo_url,
+                                                  archivo_nombre: m.archivo_nombre,
+                                                  archivo_tamaño: m.archivo_tamaño,
+                                                  archivo_tipo: m.archivo_tipo,
+                                                })
+                                              }
+                                              onError={(e) => {
+                                                console.error('Error cargando sticker:', m.archivo_url);
+                                                // Si falla, mostrar como archivo normal
+                                                e.target.style.display = 'none';
+                                              }}
+                                            />
+                                          );
+                                        }
+                                        
+                                        // Si es imagen normal, mostrarla más pequeña
+                                        if (esImagen) {
+                                          const token = obtenerToken();
+                                          let urlImagen = m.archivo_url;
+                                          
+                                          if (urlImagen.startsWith('/chat/archivo/')) {
+                                            urlImagen = `${SERVER_URL}${urlImagen}?token=${encodeURIComponent(token)}`;
+                                          } else if (!urlImagen.startsWith('http')) {
+                                            urlImagen = `${SERVER_URL}${urlImagen.startsWith('/') ? '' : '/'}${urlImagen}?token=${encodeURIComponent(token)}`;
+                                          }
+                                          
+                                          return (
+                                            <img 
+                                              src={urlImagen} 
+                                              alt={m.archivo_nombre || "Imagen"} 
+                                              className="msg-imagen"
+                                              style={{ maxWidth: '200px', maxHeight: '200px', cursor: 'pointer', borderRadius: '8px' }}
+                                              onClick={() =>
+                                                abrirArchivoPrivado({
+                                                  archivo_url: m.archivo_url,
+                                                  archivo_nombre: m.archivo_nombre,
+                                                  archivo_tamaño: m.archivo_tamaño,
+                                                  archivo_tipo: m.archivo_tipo,
+                                                })
+                                              }
+                                              onError={(e) => {
+                                                console.error('Error cargando imagen:', m.archivo_url);
+                                                e.target.style.display = 'none';
+                                              }}
+                                            />
+                                          );
+                                        }
+                                        
+                                        // Mostrar como archivo normal (no imagen)
+                                        return (
+                                          <div className="msg-archivo">
+                                            <button
+                                              type="button"
+                                              className="msg-archivo-link"
+                                              onClick={() =>
+                                                abrirArchivoPrivado({
+                                                  archivo_url: m.archivo_url,
+                                                  archivo_nombre: m.archivo_nombre,
+                                                  archivo_tamaño: m.archivo_tamaño,
+                                                  archivo_tipo: m.archivo_tipo,
+                                                })
+                                              }
+                                            >
+                                              📎 {m.archivo_nombre || "Archivo"}
+                                              {m.archivo_tamaño && (
+                                                <span className="msg-archivo-tamaño">
+                                                  {" "}({(m.archivo_tamaño / 1024).toFixed(1)} KB)
+                                                </span>
+                                              )}
+                                            </button>
+                                          </div>
+                                        );
+                                      })()}
                                     </>
                                   )}
                                 </div>
@@ -3948,6 +6633,20 @@ export default function ChatPro({ socket, user, onClose }) {
                                   </div>
                                 )}
                               </div>
+                              {!esMio && (
+                                <button
+                                  type="button"
+                                  className="msg-reenviar-btn"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    abrirReenvio(m);
+                                  }}
+                                  onContextMenu={(e) => e.stopPropagation()}
+                                  title="Reenviar"
+                                >
+                                  📤
+                                </button>
+                              )}
                             </div>
                           );
                         })}
@@ -4103,23 +6802,172 @@ export default function ChatPro({ socket, user, onClose }) {
                           </button>
                         </div>
                         {inputEmojiAbierto && (
-                          <div className="chat-input-emoji-picker">
-                            {emojiExtra.map((emoji) => (
-                              <button
-                                key={`input-emoji-${emoji}`}
-                                className="msg-emoji-btn"
-                                onClick={() => {
-                                  insertarTexto(emoji);
-                                  setEmojiUso((prev) => ({
-                                    ...prev,
-                                    [emoji]: (prev[emoji] || 0) + 1,
-                                  }));
-                                  setInputEmojiAbierto(false);
+                          <div className="chat-input-emoji-picker-completo">
+                            {/* Pestañas de categorías */}
+                            <div className="emoji-picker-tabs">
+                              {Object.entries(emojiCategorias).map(([key, categoria]) => (
+                                <button
+                                  key={key}
+                                  className={`emoji-picker-tab ${emojiCategoriaActiva === key ? "active" : ""}`}
+                                  onClick={() => {
+                                    setEmojiCategoriaActiva(key);
+                                    setEmojiBusqueda("");
+                                  }}
+                                  title={categoria.nombre}
+                                >
+                                  {key === "personalizados" ? (
+                                    <img 
+                                      src="/favicon.ico" 
+                                      alt="IXORA" 
+                                      className="emoji-picker-logo-ixora"
+                                      style={{ width: '20px', height: '20px', objectFit: 'contain' }}
+                                    />
+                                  ) : (
+                                    categoria.icono
+                                  )}
+                                </button>
+                              ))}
+                            </div>
+                            
+                            {/* Barra de búsqueda */}
+                            <div className="emoji-picker-search">
+                              <input
+                                type="text"
+                                placeholder="Buscar en todos los emojis"
+                                value={emojiBusqueda}
+                                onChange={(e) => {
+                                  setEmojiBusqueda(e.target.value);
                                 }}
-                              >
-                                {emoji}
-                              </button>
-                            ))}
+                                className="emoji-picker-search-input"
+                              />
+                            </div>
+                            
+                            {/* Grid de emojis */}
+                            <div className="emoji-picker-grid">
+                              {obtenerEmojisMostrar().map((emoji, index) => {
+                                const esPersonalizado = emojiCategoriaActiva === "personalizados" || (typeof emoji === 'object' && emoji.url);
+                                const emojiValue = esPersonalizado ? (emoji.url || emoji.emoji) : emoji;
+                                const emojiKey = esPersonalizado ? `custom-${index}-${emoji.id || index}` : `emoji-${emoji}-${index}`;
+                                
+                                return (
+                                  <button
+                                    key={emojiKey}
+                                    className="emoji-picker-item"
+                                    onClick={() => {
+                                      if (esPersonalizado) {
+                                        enviarEmojiPersonalizado(emoji);
+                                      } else {
+                                        insertarTexto(emoji);
+                                        setEmojiUso((prev) => ({
+                                          ...prev,
+                                          [emoji]: (prev[emoji] || 0) + 1,
+                                        }));
+                                        setInputEmojiAbierto(false);
+                                      }
+                                    }}
+                                    title={esPersonalizado ? emoji.nombre || "Emoji personalizado" : ""}
+                                  >
+                                    {esPersonalizado ? (
+                                      <img src={emojiValue} alt={emoji.nombre || "Emoji personalizado"} className="emoji-picker-custom-img" />
+                                    ) : (
+                                      emojiValue
+                                    )}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                            
+                            {/* Botón para agregar emojis personalizados (solo en pestaña personalizados) */}
+                            {emojiCategoriaActiva === "personalizados" && (
+                              <div className="emoji-picker-add-custom">
+                                <input
+                                  type="file"
+                                  id="emoji-custom-upload"
+                                  accept="image/*"
+                                  style={{ display: "none" }}
+                                  onChange={async (e) => {
+                                    const file = e.target.files?.[0];
+                                    if (file) {
+                                      // Comprimir imagen antes de guardar (preserva GIFs pequeños, comprime grandes)
+                                      try {
+                                        // Para GIFs grandes, comprimirlos también para evitar problemas de cuota
+                                        const esGif = file.type === 'image/gif';
+                                        const maxWidth = esGif && file.size > 500 * 1024 ? 150 : 200; // GIFs grandes: 150px, otros: 200px
+                                        const calidad = esGif && file.size > 500 * 1024 ? 0.6 : 0.7; // Calidad más baja para GIFs grandes
+                                        
+                                        const imagenComprimida = await comprimirImagen(file, maxWidth, calidad);
+                                        const reader = new FileReader();
+                                        reader.onload = (event) => {
+                                          try {
+                                            const nuevoEmoji = {
+                                              id: Date.now(),
+                                              nombre: file.name.replace(/\.[^/.]+$/, ""),
+                                              url: event.target?.result,
+                                              archivo: file.name,
+                                              tipo: file.type // Preservar el tipo MIME original
+                                            };
+                                            const nuevosEmojis = [...emojisPersonalizados, nuevoEmoji];
+                                            
+                                            // Función auxiliar para intentar guardar con limpieza progresiva
+                                            const intentarGuardar = (emojis, intentos = 0) => {
+                                              try {
+                                                localStorage.setItem('ixora_emojis_personalizados', JSON.stringify(emojis));
+                                                setEmojisPersonalizados(emojis);
+                                              } catch (storageError) {
+                                                if (storageError.name === 'QuotaExceededError' && intentos < 3) {
+                                                  // Reducir progresivamente: 10, 5, 3
+                                                  const limites = [10, 5, 3];
+                                                  const nuevoLimite = limites[intentos] || 3;
+                                                  const emojisLimitados = emojis.slice(-nuevoLimite);
+                                                  intentarGuardar(emojisLimitados, intentos + 1);
+                                                } else if (storageError.name === 'QuotaExceededError') {
+                                                  // Último intento: mantener solo el nuevo emoji
+                                                  const soloNuevo = [nuevoEmoji];
+                                                  try {
+                                                    localStorage.setItem('ixora_emojis_personalizados', JSON.stringify(soloNuevo));
+                                                    setEmojisPersonalizados(soloNuevo);
+                                                    showAlert('El almacenamiento está lleno. Se eliminaron todos los emojis anteriores para guardar el nuevo.', 'warning');
+                                                  } catch (finalError) {
+                                                    console.error('Error final guardando emoji:', finalError);
+                                                    showAlert('No se pudo guardar el emoji. El almacenamiento está completamente lleno. Por favor, elimina algunos emojis manualmente.', 'error');
+                                                  }
+                                                } else {
+                                                  throw storageError;
+                                                }
+                                              }
+                                            };
+                                            
+                                            intentarGuardar(nuevosEmojis);
+                                          } catch (err) {
+                                            console.error('Error procesando emoji:', err);
+                                            if (err.name === 'QuotaExceededError') {
+                                              showAlert('No se pudo guardar el emoji. El almacenamiento está lleno. Por favor, elimina algunos emojis existentes.', 'error');
+                                            } else {
+                                              showAlert('Error al agregar el emoji', 'error');
+                                            }
+                                          }
+                                        };
+                                        reader.onerror = () => {
+                                          showAlert('Error al leer la imagen', 'error');
+                                        };
+                                        reader.readAsDataURL(imagenComprimida);
+                                      } catch (err) {
+                                        console.error('Error comprimiendo imagen:', err);
+                                        showAlert('Error al procesar la imagen', 'error');
+                                      }
+                                    }
+                                    e.target.value = "";
+                                  }}
+                                />
+                                <button
+                                  className="emoji-picker-add-btn"
+                                  onClick={() => document.getElementById('emoji-custom-upload')?.click()}
+                                  title="Agregar emoji personalizado"
+                                >
+                                  ➕ Agregar emoji
+                                </button>
+                              </div>
+                            )}
                           </div>
                         )}
                         <div className="chat-input-row">
@@ -4163,7 +7011,7 @@ export default function ChatPro({ socket, user, onClose }) {
                             placeholder={
                               tipoChat === "privado" && chatActual
                                 ? `Mensaje @${chatActual}`
-                                : "Escribe un mensaje..."
+                                : "Tomar notas"
                             }
                             onKeyDown={(e) => {
                               if (e.key === "Enter" && !e.shiftKey) {
@@ -4215,6 +7063,10 @@ export default function ChatPro({ socket, user, onClose }) {
           </div>
         </div>
       )}
+
+      {/* Panel principal para mostrar el perfil cuando no hay chat abierto */}
+      {/* El contenido del perfil se renderiza automáticamente cuando perfilAbierto es true */}
+      {/* porque ya cambié la condición de tipoChat a solo perfilAbierto */}
 
       {previewItem && (
         <div className="chat-preview-overlay">
@@ -4539,6 +7391,162 @@ export default function ChatPro({ socket, user, onClose }) {
         </div>
       )}
 
+      {menuMiembroAbierto && menuMiembroPosicion && perfilTab === "miembros" && perfilTipo === "grupo" && (() => {
+        const nickname = menuMiembroAbierto;
+        const esAdmin = perfilGrupoAdmins.includes(nickname);
+        const esCreador = perfilData?.creado_por === nickname;
+        const userDisplayName = user?.nickname || user?.name;
+        const puedoGestionar = perfilData?.es_admin && nickname !== userDisplayName;
+        const restriccion = perfilGrupoRestricciones[nickname];
+        const tieneRestriccionIndefinida = restriccion?.indefinida === true;
+        const submenuAbierto = submenuRestriccionAbierto === nickname;
+        return (
+          <div className="chat-member-menu-backdrop" onClick={cerrarMenuMiembro}>
+            <div
+              className="chat-member-menu-overlay"
+              style={{ left: menuMiembroPosicion.x, top: menuMiembroPosicion.y }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {puedoGestionar && !esCreador && (
+                <>
+                  <button
+                    className="chat-profile-action-btn"
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      cerrarMenuMiembro();
+                      try {
+                        await authFetch(`${SERVER_URL}/chat/grupos/${chatActual}/miembros/${nickname}/admin`, {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ es_admin: !esAdmin }),
+                        });
+                        abrirPerfilGrupo(chatActual);
+                        showAlert(esAdmin ? "Administrador removido" : "Administrador agregado", "success");
+                      } catch (err) {
+                        showAlert("Error gestionando administrador", "error");
+                      }
+                    }}
+                  >
+                    {esAdmin ? "❌ Remover admin" : "⭐ Hacer admin"}
+                  </button>
+                  <div style={{ position: "relative" }}>
+                    <button
+                      className="chat-profile-action-btn"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSubmenuRestriccionAbierto(submenuAbierto ? null : nickname);
+                      }}
+                    >
+                      <span>{tieneRestriccionIndefinida ? "✅ Permitir" : "🔒 Restringir"}</span>
+                      <span style={{ fontSize: "0.6rem" }}>{submenuAbierto ? "▲" : "▼"}</span>
+                    </button>
+                    {submenuAbierto && (
+                      <div style={{ marginTop: "2px", padding: "2px", background: "var(--fondo-input)", borderRadius: "4px", border: "1px solid var(--chat-border)" }} onClick={(e) => e.stopPropagation()}>
+                        {tieneRestriccionIndefinida ? (
+                          <button className="chat-profile-action-btn" onClick={async (e) => {
+                            e.stopPropagation();
+                            cerrarMenuMiembro();
+                            try {
+                              await authFetch(`${SERVER_URL}/chat/grupos/${chatActual}/miembros/${nickname}/restringir`, {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ duracion_minutos: null, remover: true }),
+                              });
+                              abrirPerfilGrupo(chatActual);
+                              showAlert("Restricción removida", "success");
+                            } catch (err) {
+                              showAlert("Error removiendo restricción", "error");
+                            }
+                          }}>✅ Permitir mensaje</button>
+                        ) : (
+                          <>
+                            {["5 min", "10 min", "15 min", "30 min", "1 hora", "24 horas", "Indefinido"].map((opcion) => {
+                              let minutos = null;
+                              if (opcion === "5 min") minutos = 5;
+                              else if (opcion === "10 min") minutos = 10;
+                              else if (opcion === "15 min") minutos = 15;
+                              else if (opcion === "30 min") minutos = 30;
+                              else if (opcion === "1 hora") minutos = 60;
+                              else if (opcion === "24 horas") minutos = 24 * 60;
+                              return (
+                                <button key={opcion} className="chat-profile-action-btn" onClick={async (e) => {
+                                  e.stopPropagation();
+                                  cerrarMenuMiembro();
+                                  try {
+                                    await authFetch(`${SERVER_URL}/chat/grupos/${chatActual}/miembros/${nickname}/restringir`, {
+                                      method: "POST",
+                                      headers: { "Content-Type": "application/json" },
+                                      body: JSON.stringify({ duracion_minutos: minutos }),
+                                    });
+                                    abrirPerfilGrupo(chatActual);
+                                    showAlert(`Restricción aplicada: ${opcion}`, "success");
+                                  } catch (err) {
+                                    showAlert("Error aplicando restricción", "error");
+                                  }
+                                }}>{opcion}</button>
+                              );
+                            })}
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    className="chat-profile-action-btn"
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      cerrarMenuMiembro();
+                      if (await showConfirm("Eliminar miembro", `¿Eliminar a ${nickname} del grupo?`) === true) {
+                        try {
+                          await authFetch(`${SERVER_URL}/chat/grupos/${chatActual}/miembros/${nickname}`, { method: "DELETE" });
+                          abrirPerfilGrupo(chatActual);
+                          showAlert("Miembro eliminado del grupo", "success");
+                        } catch (err) {
+                          showAlert("Error eliminando miembro", "error");
+                        }
+                      }
+                    }}
+                    style={{ color: "#ef4444" }}
+                  >
+                    🗑️ Eliminar
+                  </button>
+                </>
+              )}
+              {perfilData?.es_creador && !esCreador && (
+                <button
+                  className="chat-profile-action-btn"
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    cerrarMenuMiembro();
+                    if (await showConfirm("Transferir propiedad", `¿Transferir la propiedad del grupo a ${nickname}?`) === true) {
+                      try {
+                        await authFetch(`${SERVER_URL}/chat/grupos/${chatActual}/transferir`, {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ nuevo_creador: nickname }),
+                        });
+                        abrirPerfilGrupo(chatActual);
+                        showAlert("Propiedad transferida", "success");
+                      } catch (err) {
+                        showAlert("Error transfiriendo propiedad", "error");
+                      }
+                    }
+                  }}
+                >
+                  👑 Transferir propiedad
+                </button>
+              )}
+              <button className="chat-profile-action-btn" onClick={(e) => { e.stopPropagation(); cerrarMenuMiembro(); abrirPerfilUsuario(nickname); }}>
+                👤 Ver perfil
+              </button>
+              <button className="chat-profile-action-btn" onClick={(e) => { e.stopPropagation(); cerrarMenuMiembro(); abrirChat("privado", nickname); }}>
+                💬 Enviar mensaje
+              </button>
+            </div>
+          </div>
+        );
+      })()}
+
       {menuMensaje && (
         <div
           className={`msg-menu-backdrop ${menuMensaje.desdeLongPress ? "mobile" : ""}`}
@@ -4587,20 +7595,83 @@ export default function ChatPro({ socket, user, onClose }) {
               </button>
             </div>
             {menuEmojiAbierto && (
-              <div className="msg-emoji-picker">
-                {emojiExtra.map((emoji) => (
-                  <button
-                    key={`extra-${menuMensaje.msgKey}-${emoji}`}
-                    className="msg-emoji-btn"
-                    onClick={() => {
-                      toggleReaccion(menuMensaje.msgKey, emoji);
-                      setMenuEmojiAbierto(false);
-                      cerrarMenuMensaje();
+              <div className="msg-emoji-picker-completo">
+                {/* Pestañas de categorías */}
+                <div className="emoji-picker-tabs">
+                  {Object.entries(emojiCategorias).map(([key, categoria]) => (
+                    <button
+                      key={key}
+                      className={`emoji-picker-tab ${emojiCategoriaActivaMenu === key ? "active" : ""}`}
+                      onClick={() => {
+                        setEmojiCategoriaActivaMenu(key);
+                        setEmojiBusquedaMenu("");
+                      }}
+                      title={categoria.nombre}
+                    >
+                      {key === "personalizados" ? (
+                        <img 
+                          src="/favicon.ico" 
+                          alt="IXORA" 
+                          className="emoji-picker-logo-ixora"
+                          style={{ width: '20px', height: '20px', objectFit: 'contain' }}
+                        />
+                      ) : (
+                        categoria.icono
+                      )}
+                    </button>
+                  ))}
+                </div>
+                
+                {/* Barra de búsqueda */}
+                <div className="emoji-picker-search">
+                  <input
+                    type="text"
+                    placeholder="Buscar emojis"
+                    value={emojiBusquedaMenu}
+                    onChange={(e) => {
+                      setEmojiBusquedaMenu(e.target.value);
                     }}
-                  >
-                    {emoji}
-                  </button>
-                ))}
+                    className="emoji-picker-search-input"
+                  />
+                </div>
+                
+                {/* Grid de emojis */}
+                <div className="emoji-picker-grid">
+                  {obtenerEmojisMostrarMenu().map((emoji, index) => {
+                    const esPersonalizado = emojiCategoriaActivaMenu === "personalizados" || (typeof emoji === 'object' && emoji.url);
+                    const emojiValue = esPersonalizado ? (emoji.url || emoji.emoji) : emoji;
+                    const emojiKey = esPersonalizado ? `menu-custom-${index}-${emoji.id || index}` : `menu-emoji-${emoji}-${index}`;
+                    
+                    return (
+                      <button
+                        key={emojiKey}
+                        className="emoji-picker-item"
+                        onClick={() => {
+                          if (esPersonalizado) {
+                            // Para emojis personalizados, necesitaríamos una forma de enviarlos
+                            // Por ahora, usamos el emoji estándar más cercano
+                            toggleReaccion(menuMensaje.msgKey, "😀");
+                          } else {
+                            toggleReaccion(menuMensaje.msgKey, emoji);
+                            setEmojiUso((prev) => ({
+                              ...prev,
+                              [emoji]: (prev[emoji] || 0) + 1,
+                            }));
+                          }
+                          setMenuEmojiAbierto(false);
+                          cerrarMenuMensaje();
+                        }}
+                        title={esPersonalizado ? emoji.nombre || "Emoji personalizado" : ""}
+                      >
+                        {esPersonalizado ? (
+                          <img src={emojiValue} alt={emoji.nombre || "Emoji personalizado"} className="emoji-picker-custom-img" />
+                        ) : (
+                          emojiValue
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             )}
             <div className="msg-menu-list">
@@ -4645,15 +7716,6 @@ export default function ChatPro({ socket, user, onClose }) {
               <button
                 className="msg-menu-item"
                 onClick={() => {
-                  abrirReenvio(menuMensaje.mensaje);
-                  cerrarMenuMensaje();
-                }}
-              >
-                📤 Reenviar
-              </button>
-              <button
-                className="msg-menu-item"
-                onClick={() => {
                   if (mensajeFijado?.id === menuMensaje.mensaje?.id) {
                     desfijarMensaje();
                   } else {
@@ -4663,15 +7725,6 @@ export default function ChatPro({ socket, user, onClose }) {
                 }}
               >
                 {mensajeFijado?.id === menuMensaje.mensaje?.id ? "📌 Desfijar" : "📌 Fijar"}
-              </button>
-              <button
-                className="msg-menu-item"
-                onClick={() => {
-                  toggleDestacarMensaje(menuMensaje.mensaje);
-                  cerrarMenuMensaje();
-                }}
-              >
-                ⭐ Destacar
               </button>
               <button
                 className="msg-menu-item"
@@ -4856,26 +7909,51 @@ export default function ChatPro({ socket, user, onClose }) {
                   </button>
                 </div>
                 <div className="modal-agregar-miembros-list">
-                  {usuariosIxora
-                    .filter((u) => {
+                  {(() => {
+                    const usuariosDisponibles = usuariosIxora.filter((u) => {
+                      // Obtener nombre del usuario
+                      const nombreUsuario = u.nickname || u.name;
+                      
+                      // Debe tener nombre
+                      if (!nombreUsuario) return false;
+                      
+                      // No debe ser el usuario actual
+                      const userDisplayName = user?.nickname || user?.name;
+                      if (nombreUsuario === userDisplayName) return false;
+                      
+                      // Obtener el grupo actual
                       const grupoActual = Array.isArray(grupos) ? grupos.find(
                         (g) => String(g.id) === String(grupoAgregarMiembros)
                       ) : null;
+                      
+                      // Si no hay grupo, mostrar todos los usuarios (excepto el actual)
+                      if (!grupoActual) return true;
+                      
+                      // Obtener lista de miembros (asegurar que sea array)
+                      const miembros = Array.isArray(grupoActual.miembros) 
+                        ? grupoActual.miembros 
+                        : (grupoActual.miembros ? [grupoActual.miembros] : []);
+                      
+                      // No debe estar ya en el grupo
+                      return !miembros.includes(nombreUsuario);
+                    });
+                    
+                    if (usuariosDisponibles.length === 0) {
                       return (
-                        u.nickname &&
-                        u.nickname !== (user?.nickname || user?.name) &&
-                        grupoActual &&
-                        !grupoActual?.miembros?.includes(u.nickname)
+                        <div className="chat-empty-pro">
+                          No hay usuarios disponibles para agregar
+                        </div>
                       );
-                    })
-                    .map((u) => (
+                    }
+                    
+                    return usuariosDisponibles.map((u) => (
                       <div
                         key={u.id}
                         className="usuario-item-agregar"
-                        onClick={() => {
-                          agregarMiembroAGrupo(grupoAgregarMiembros, u.nickname);
-                          setMostrarAgregarMiembros(false);
-                          setGrupoAgregarMiembros(null);
+                        onClick={async () => {
+                          await agregarMiembroAGrupo(grupoAgregarMiembros, u.nickname);
+                          // NO cerrar el modal, permitir agregar más usuarios
+                          // El modal se actualizará automáticamente porque se recargan los grupos
                         }}
                       >
                         <img
@@ -4891,26 +7969,214 @@ export default function ChatPro({ socket, user, onClose }) {
                         </span>
                         <span className="agregar-icon">➕</span>
                       </div>
-                    ))}
-                  {usuariosIxora.filter((u) => {
-                    const grupoActual = Array.isArray(grupos) ? grupos.find(
-                      (g) => String(g.id) === String(grupoAgregarMiembros)
-                    ) : null;
-                    return (
-                      u.nickname &&
-                      u.nickname !== (user?.nickname || user?.name) &&
-                      grupoActual &&
-                      !grupoActual?.miembros?.includes(u.nickname)
-                    );
-                  }).length === 0 && (
-                    <div className="chat-empty-pro">
-                      No hay usuarios disponibles para agregar
-                    </div>
-                  )}
+                    ));
+                  })()}
                 </div>
               </div>
             </div>
           )}
+
+      {/* Modal de Reunión */}
+      {modalReunionAbierto && (
+        <div className="chat-modal-reunion-backdrop" onClick={() => setModalReunionAbierto(false)}>
+          <div className="chat-modal-reunion" onClick={(e) => e.stopPropagation()}>
+            <div className="chat-modal-reunion-header">
+              <h3>{reunionEditando ? 'Editar reunión' : 'Nueva reunión'}</h3>
+              <button
+                className="modal-close-btn"
+                onClick={() => {
+                  setModalReunionAbierto(false);
+                  resetearFormularioReunion();
+                }}
+              >
+                ✕
+              </button>
+            </div>
+            
+            <div className="chat-modal-reunion-body">
+              <div className="reunion-form-group">
+                <label>Título *</label>
+                <input
+                  type="text"
+                  value={reunionForm.titulo}
+                  onChange={(e) => setReunionForm({...reunionForm, titulo: e.target.value})}
+                  placeholder="Ej: Reunión de equipo"
+                  className="reunion-input"
+                />
+              </div>
+              
+              <div className="reunion-form-group">
+                <label>Descripción</label>
+                <textarea
+                  value={reunionForm.descripcion}
+                  onChange={(e) => setReunionForm({...reunionForm, descripcion: e.target.value})}
+                  placeholder="Agregar detalles de la reunión..."
+                  className="reunion-textarea"
+                  rows="3"
+                />
+              </div>
+              
+              <div className="reunion-form-row">
+                <div className="reunion-form-group">
+                  <label>Fecha *</label>
+                  <input
+                    type="date"
+                    value={reunionForm.fecha}
+                    onChange={(e) => setReunionForm({...reunionForm, fecha: e.target.value})}
+                    className="reunion-input"
+                    min={new Date().toISOString().split('T')[0]}
+                  />
+                </div>
+                
+                <div className="reunion-form-group">
+                  <label>Hora *</label>
+                  <input
+                    type="time"
+                    value={reunionForm.hora}
+                    onChange={(e) => setReunionForm({...reunionForm, hora: e.target.value})}
+                    className="reunion-input"
+                  />
+                </div>
+              </div>
+              
+              <div className="reunion-form-group">
+                <label>Lugar</label>
+                <input
+                  type="text"
+                  value={reunionForm.lugar}
+                  onChange={(e) => setReunionForm({...reunionForm, lugar: e.target.value})}
+                  placeholder="Ej: Sala de conferencias, Zoom, etc."
+                  className="reunion-input"
+                />
+              </div>
+              
+              <div className="reunion-form-group">
+                <label className="reunion-checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={reunionForm.esVideollamada}
+                    onChange={(e) => setReunionForm({...reunionForm, esVideollamada: e.target.checked})}
+                    className="reunion-checkbox"
+                  />
+                  <span>Es videollamada</span>
+                </label>
+              </div>
+              
+              {tipoChat === 'grupal' && (
+                <div className="reunion-form-group">
+                  <label>Participantes (opcional)</label>
+                  
+                  {/* Participantes seleccionados */}
+                  {reunionForm.participantes.length > 0 && (
+                    <div className="reunion-participantes-seleccionados">
+                      {reunionForm.participantes.map((nickname) => {
+                        const usuario = usuariosIxora.find(u => (u.nickname || u.name) === nickname);
+                        return (
+                          <span key={nickname} className="reunion-participante-tag">
+                            <img
+                              src={getAvatarUrl({
+                                photo: usuario?.photo,
+                                id: usuario?.id,
+                                nickname: usuario?.nickname || usuario?.name
+                              })}
+                              alt={usuario?.nickname || usuario?.name || nickname}
+                              className="reunion-participante-avatar"
+                              onError={(e) => {
+                                e.target.style.display = 'none';
+                              }}
+                            />
+                            <span className="reunion-participante-nombre">{usuario?.nickname || usuario?.name || nickname}</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setReunionForm({
+                                  ...reunionForm,
+                                  participantes: reunionForm.participantes.filter(p => p !== nickname)
+                                });
+                              }}
+                              className="reunion-participante-remove"
+                            >
+                              ✕
+                            </button>
+                          </span>
+                        );
+                      })}
+                    </div>
+                  )}
+                  
+                  {/* Lista de participantes disponibles */}
+                  <div className="reunion-participantes">
+                    {usuariosIxora.filter(u => u.nickname !== (user?.nickname || user?.name)).map(u => (
+                      <label key={u.nickname} className="reunion-participante-item">
+                        <input
+                          type="checkbox"
+                          checked={reunionForm.participantes.includes(u.nickname)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setReunionForm({
+                                ...reunionForm,
+                                participantes: [...reunionForm.participantes, u.nickname]
+                              });
+                            } else {
+                              setReunionForm({
+                                ...reunionForm,
+                                participantes: reunionForm.participantes.filter(p => p !== u.nickname)
+                              });
+                            }
+                          }}
+                        />
+                        <img
+                          src={getAvatarUrl({
+                            photo: u.photo,
+                            id: u.id,
+                            nickname: u.nickname || u.name
+                          })}
+                          alt={u.nickname || u.name}
+                          className="reunion-participante-avatar-small"
+                          onError={(e) => {
+                            e.target.style.display = 'none';
+                          }}
+                        />
+                        <span>{u.nickname || u.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            <div className="chat-modal-reunion-actions">
+              {reunionEditando && (
+                <button
+                  className="reunion-btn-eliminar"
+                  onClick={() => {
+                    eliminarReunion(reunionEditando.id);
+                    setModalReunionAbierto(false);
+                    resetearFormularioReunion();
+                  }}
+                >
+                  🗑️ Eliminar
+                </button>
+              )}
+              <button
+                className="reunion-btn-cancelar"
+                onClick={() => {
+                  setModalReunionAbierto(false);
+                  resetearFormularioReunion();
+                }}
+              >
+                Cancelar
+              </button>
+              <button
+                className="reunion-btn-guardar"
+                onClick={guardarReunion}
+              >
+                {reunionEditando ? 'Actualizar' : 'Crear'} reunión
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </>
   );

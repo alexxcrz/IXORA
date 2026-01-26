@@ -5,16 +5,16 @@ android {
     compileSdk rootProject.ext.compileSdkVersion
     
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_21
-        targetCompatibility JavaVersion.VERSION_21
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
     }
     
     defaultConfig {
         applicationId "com.ixora.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 20
-        versionName "1.1"
+        versionCode 28
+        versionName "1.1.8"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -42,6 +42,68 @@ android {
         }
         debug {
             signingConfig signingConfigs.debug
+        }
+    }
+    
+    // Configurar salida del APK para evitar problemas con directorio bloqueado
+    applicationVariants.all { variant ->
+        variant.outputs.all { output ->
+            def outputFile = output.outputFile
+            if (outputFile != null && outputFile.name.endsWith('.apk')) {
+                // No cambiar el nombre, solo asegurar que se cree correctamente
+            }
+        }
+    }
+    
+    // Deshabilitar limpieza automática del directorio de salida para evitar problemas con archivos bloqueados
+    packagingOptions {
+        doNotStrip "*/armeabi-v7a/*.so"
+        doNotStrip "*/arm64-v8a/*.so"
+        doNotStrip "*/x86/*.so"
+        doNotStrip "*/x86_64/*.so"
+    }
+}
+
+// Deshabilitar limpieza del directorio debug antes de empaquetar
+// Evitar que Gradle intente eliminar el directorio si está bloqueado
+afterEvaluate {
+    tasks.matching { it.name == 'packageDebug' }.all { task ->
+        // Interceptar la tarea ANTES de que intente eliminar el directorio
+        task.doFirst {
+            def debugDir = file("${buildDir}/outputs/apk/debug")
+            
+            // Crear el directorio si no existe
+            if (!debugDir.exists()) {
+                debugDir.mkdirs()
+            }
+            
+            // Si el directorio existe, renombrar temporalmente para evitar que Gradle lo elimine
+            // Luego restaurarlo después de que Gradle intente eliminarlo
+            if (debugDir.exists() && debugDir.listFiles()?.length > 0) {
+                try {
+                    // Intentar eliminar solo archivos APK individuales, no el directorio
+                    debugDir.listFiles()?.each { file ->
+                        if (file.name.endsWith('.apk')) {
+                            try {
+                                file.delete()
+                            } catch (Exception e) {
+                                logger.warn("No se pudo eliminar APK antiguo: ${e.message}")
+                            }
+                        }
+                    }
+                } catch (Exception e) {
+                    logger.warn("No se pudieron eliminar APKs antiguos: ${e.message}")
+                }
+            }
+            
+            logger.info("Directorio debug preparado - NO se eliminará el directorio")
+        }
+        
+        // Marcar outputs para que no se consideren "stale"
+        task.outputs.upToDateWhen { 
+            def debugDir = file("${buildDir}/outputs/apk/debug")
+            // Si el directorio existe, NO limpiarlo
+            return debugDir.exists() 
         }
     }
 }

@@ -154,6 +154,24 @@ dbAud.exec(`
   CREATE INDEX IF NOT EXISTS idx_auditorias_items_codigo ON auditorias_inventario_items(codigo);
 `);
 
+// Agregar columna lotes (JSON) para almacenar múltiples lotes por item
+try {
+  dbAud.exec("ALTER TABLE auditorias_inventario_items ADD COLUMN lotes TEXT");
+} catch (e) {
+  if (!String(e.message).includes("duplicate") && !String(e.message).includes("exists")) {
+    console.error("❌ Error agregando columna lotes:", e);
+  }
+}
+
+// Agregar columna lote_piezas_no_aptas
+try {
+  dbAud.exec("ALTER TABLE auditorias_inventario_items ADD COLUMN lote_piezas_no_aptas TEXT");
+} catch (e) {
+  if (!String(e.message).includes("duplicate") && !String(e.message).includes("exists")) {
+    console.error("❌ Error agregando columna lote_piezas_no_aptas:", e);
+  }
+}
+
 // Agregar columnas si no existen (migración) - DEBE HACERSE ANTES DE CREAR ÍNDICES
 try {
   dbAud.exec(`ALTER TABLE auditorias_inventario_items ADD COLUMN usuario TEXT;`);
@@ -177,6 +195,26 @@ try {
 } catch (e) {
   if (!String(e.message).includes("duplicate") && !String(e.message).includes("exists")) {
     console.error("Error creando índice idx_auditorias_items_usuario:", e);
+  }
+}
+
+// Agregar columna inventario_id a auditorias_inventario (para asociar auditoría con un inventario específico)
+try {
+  dbAud.exec("ALTER TABLE auditorias_inventario ADD COLUMN inventario_id INTEGER DEFAULT 1");
+  // Asignar todas las auditorías existentes al inventario por defecto (ID 1)
+  dbAud.exec("UPDATE auditorias_inventario SET inventario_id = 1 WHERE inventario_id IS NULL");
+} catch (e) {
+  if (!String(e.message).includes("duplicate") && !String(e.message).includes("exists") && !String(e.message).includes("no such column")) {
+    console.error("❌ Error agregando inventario_id a auditorias_inventario:", e);
+  }
+}
+
+// Crear índice para inventario_id
+try {
+  dbAud.exec(`CREATE INDEX IF NOT EXISTS idx_auditorias_inventario_id ON auditorias_inventario(inventario_id);`);
+} catch (e) {
+  if (!String(e.message).includes("duplicate") && !String(e.message).includes("exists")) {
+    console.error("Error creando índice idx_auditorias_inventario_id:", e);
   }
 }
 
@@ -404,27 +442,258 @@ try {
   }
 }
 
-dbInv.exec(`
-  CREATE TABLE IF NOT EXISTS productos_lotes (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    codigo_producto TEXT NOT NULL,
-    lote TEXT NOT NULL,
-    cantidad_piezas INTEGER DEFAULT 0,
-    laboratorio TEXT,
-    fecha_ingreso TEXT DEFAULT (datetime('now', 'localtime')),
-    activo INTEGER DEFAULT 0,
-    UNIQUE(codigo_producto, lote),
-    FOREIGN KEY (codigo_producto) REFERENCES productos_ref(codigo) ON DELETE CASCADE
-  );
-  CREATE INDEX IF NOT EXISTS idx_lotes_codigo ON productos_lotes(codigo_producto);
-  CREATE INDEX IF NOT EXISTS idx_lotes_activo ON productos_lotes(activo);
-`);
+// Tabla para múltiples inventarios
+try {
+  dbInv.exec(`
+    CREATE TABLE IF NOT EXISTS inventarios (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      nombre TEXT NOT NULL,
+      alias TEXT,
+      fecha_creacion TEXT DEFAULT (datetime('now', 'localtime')),
+      activo INTEGER DEFAULT 1
+    );
+  `);
+  // Crear inventario por defecto "Inventario" con alias "CEDIS" si no existe
+  const inventarioDefault = dbInv.prepare("SELECT id FROM inventarios WHERE nombre = 'Inventario'").get();
+  if (!inventarioDefault) {
+    dbInv.prepare("INSERT INTO inventarios (nombre, alias) VALUES ('Inventario', 'CEDIS')").run();
+  }
+} catch (e) {
+  console.error("❌ Error creando tabla inventarios:", e);
+}
+
+// Agregar campos para inventarios copiados/sincronizados
+try {
+  dbInv.exec("ALTER TABLE inventarios ADD COLUMN es_copia INTEGER DEFAULT 0");
+} catch (e) {
+  if (!String(e.message).includes("duplicate") && !String(e.message).includes("exists")) {
+    console.error("❌ Error agregando es_copia:", e);
+  }
+}
+
+try {
+  dbInv.exec("ALTER TABLE inventarios ADD COLUMN inventario_origen_id INTEGER");
+} catch (e) {
+  if (!String(e.message).includes("duplicate") && !String(e.message).includes("exists")) {
+    console.error("❌ Error agregando inventario_origen_id:", e);
+  }
+}
+
+try {
+  dbInv.exec("ALTER TABLE inventarios ADD COLUMN sincronizar_productos INTEGER DEFAULT 0");
+} catch (e) {
+  if (!String(e.message).includes("duplicate") && !String(e.message).includes("exists")) {
+    console.error("❌ Error agregando sincronizar_productos:", e);
+  }
+}
+
+// Agregar campo inventario_id a productos_ref
+try {
+  dbInv.exec("ALTER TABLE productos_ref ADD COLUMN inventario_id INTEGER DEFAULT 1");
+  // Asignar todos los productos existentes al inventario por defecto (ID 1)
+  dbInv.exec("UPDATE productos_ref SET inventario_id = 1 WHERE inventario_id IS NULL");
+} catch (e) {
+  if (!String(e.message).includes("duplicate") && !String(e.message).includes("exists")) {
+    console.error("❌ Error agregando inventario_id:", e);
+  }
+}
+
+// Migración: columna mostrar_en_pagina (visibilidad en tienda)
+try {
+  dbInv.exec("ALTER TABLE productos_ref ADD COLUMN mostrar_en_pagina INTEGER DEFAULT 0");
+} catch (e) {
+  if (!String(e.message).includes("duplicate") && !String(e.message).includes("exists")) {
+    console.error("❌ Error agregando mostrar_en_pagina:", e);
+  }
+}
+
+// Migración: permitir mismo código en múltiples inventarios (unique por codigo+inventario_id)
+try {
+  const tablaRef = dbInv
+    .prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='productos_ref'")
+    .get();
+  const sqlRef = tablaRef?.sql || "";
+  const tieneUniqueSoloCodigo = sqlRef.includes("codigo TEXT UNIQUE");
+  const yaTieneUniqueCompuesto =
+    sqlRef.includes("UNIQUE (codigo, inventario_id)") ||
+    sqlRef.includes("UNIQUE(codigo, inventario_id)");
+
+  if (tieneUniqueSoloCodigo && !yaTieneUniqueCompuesto) {
+    console.log("🔄 Migrando productos_ref para admitir múltiples inventarios con mismo código…");
+    dbInv.exec("PRAGMA foreign_keys = OFF;");
+    dbInv.exec(`
+      CREATE TABLE IF NOT EXISTS productos_ref_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        codigo TEXT NOT NULL,
+        nombre TEXT,
+        categoria TEXT,
+        subcategoria TEXT,
+        piezas_por_caja INTEGER DEFAULT 0,
+        presentacion TEXT,
+        precio REAL DEFAULT 0,
+        foto TEXT,
+        activo INTEGER DEFAULT 1,
+        inventario_id INTEGER DEFAULT 1,
+        UNIQUE (codigo, inventario_id)
+      );
+    `);
+    dbInv.exec(`
+      INSERT OR IGNORE INTO productos_ref_new
+      (id, codigo, nombre, categoria, subcategoria, piezas_por_caja, presentacion, precio, foto, activo, inventario_id)
+      SELECT
+        id, codigo, nombre, categoria, subcategoria,
+        COALESCE(piezas_por_caja, 0),
+        presentacion, precio, foto,
+        COALESCE(activo, 1),
+        COALESCE(inventario_id, 1)
+      FROM productos_ref;
+    `);
+    dbInv.exec("DROP TABLE productos_ref;");
+    dbInv.exec("ALTER TABLE productos_ref_new RENAME TO productos_ref;");
+    dbInv.exec("PRAGMA foreign_keys = ON;");
+    console.log("✅ Migración de productos_ref completada.");
+  }
+} catch (e) {
+  console.error("❌ Error migrando productos_ref a unique(codigo, inventario_id):", e);
+}
+
+// Migración: recrear productos_lotes SIN FK directa (evita mismatch tras cambios de UNIQUE)
+try {
+  // Verificar si la tabla existe y si tiene la columna inventario_id
+  const tableInfo = dbInv.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='productos_lotes'").get();
+  if (tableInfo) {
+    const columns = dbInv.prepare("PRAGMA table_info(productos_lotes)").all();
+    const hasInventarioId = columns.some(col => col.name === 'inventario_id');
+    
+    if (!hasInventarioId) {
+      console.log("🔄 Migrando productos_lotes para agregar inventario_id...");
+      dbInv.exec("PRAGMA foreign_keys = OFF;");
+      dbInv.exec(`
+        CREATE TABLE IF NOT EXISTS productos_lotes_new (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          codigo_producto TEXT NOT NULL,
+          lote TEXT NOT NULL,
+          cantidad_piezas INTEGER DEFAULT 0,
+          laboratorio TEXT,
+          fecha_ingreso TEXT DEFAULT (datetime('now', 'localtime')),
+          caducidad TEXT,
+          activo INTEGER DEFAULT 0,
+          inventario_id INTEGER DEFAULT 1,
+          UNIQUE(codigo_producto, inventario_id, lote)
+        );
+      `);
+      dbInv.exec(`
+        INSERT OR IGNORE INTO productos_lotes_new
+        (id, codigo_producto, lote, cantidad_piezas, laboratorio, fecha_ingreso, caducidad, activo, inventario_id)
+        SELECT
+          pl.id,
+          pl.codigo_producto,
+          pl.lote,
+          pl.cantidad_piezas,
+          pl.laboratorio,
+          pl.fecha_ingreso,
+          pl.caducidad,
+          pl.activo,
+          COALESCE(pr.inventario_id, 1)
+        FROM productos_lotes pl
+        LEFT JOIN productos_ref pr ON pr.codigo = pl.codigo_producto;
+      `);
+      dbInv.exec("DROP TABLE productos_lotes;");
+      dbInv.exec("ALTER TABLE productos_lotes_new RENAME TO productos_lotes;");
+      dbInv.exec("CREATE INDEX IF NOT EXISTS idx_lotes_codigo ON productos_lotes(codigo_producto);");
+      dbInv.exec("CREATE INDEX IF NOT EXISTS idx_lotes_inv ON productos_lotes(inventario_id);");
+      dbInv.exec("CREATE INDEX IF NOT EXISTS idx_lotes_activo ON productos_lotes(activo);");
+      dbInv.exec("PRAGMA foreign_keys = ON;");
+      console.log("✅ Migración de productos_lotes completada.");
+    } else {
+      console.log("✅ productos_lotes ya tiene inventario_id, verificando datos...");
+      // Verificar si hay lotes sin inventario_id y actualizarlos
+      const lotesSinInventario = dbInv
+        .prepare("SELECT COUNT(*) as total FROM productos_lotes WHERE inventario_id IS NULL OR inventario_id = 0")
+        .get();
+      
+      if (lotesSinInventario && lotesSinInventario.total > 0) {
+        console.log(`🔄 Actualizando ${lotesSinInventario.total} lotes sin inventario_id...`);
+        dbInv.exec(`
+          UPDATE productos_lotes
+          SET inventario_id = COALESCE(
+            (SELECT inventario_id FROM productos_ref WHERE codigo = productos_lotes.codigo_producto LIMIT 1),
+            1
+          )
+          WHERE inventario_id IS NULL OR inventario_id = 0
+        `);
+        console.log("✅ Lotes actualizados con inventario_id.");
+      }
+    }
+  } else {
+    // Si la tabla no existe, crearla directamente con la estructura correcta
+    console.log("🔄 Creando tabla productos_lotes con inventario_id...");
+    dbInv.exec(`
+      CREATE TABLE IF NOT EXISTS productos_lotes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        codigo_producto TEXT NOT NULL,
+        lote TEXT NOT NULL,
+        cantidad_piezas INTEGER DEFAULT 0,
+        laboratorio TEXT,
+        fecha_ingreso TEXT DEFAULT (datetime('now', 'localtime')),
+        caducidad TEXT,
+        activo INTEGER DEFAULT 0,
+        inventario_id INTEGER DEFAULT 1,
+        UNIQUE(codigo_producto, inventario_id, lote)
+      );
+    `);
+    dbInv.exec("CREATE INDEX IF NOT EXISTS idx_lotes_codigo ON productos_lotes(codigo_producto);");
+    dbInv.exec("CREATE INDEX IF NOT EXISTS idx_lotes_inv ON productos_lotes(inventario_id);");
+    dbInv.exec("CREATE INDEX IF NOT EXISTS idx_lotes_activo ON productos_lotes(activo);");
+    console.log("✅ Tabla productos_lotes creada correctamente.");
+  }
+} catch (e) {
+  console.error("❌ Error migrando productos_lotes:", e);
+  console.error("   Stack:", e.stack);
+}
+
+// Crear tabla de historial de lotes (siempre, independientemente de si productos_lotes existe)
+try {
+  dbInv.exec(`
+    CREATE TABLE IF NOT EXISTS lotes_historial (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      lote_id INTEGER NOT NULL,
+      codigo_producto TEXT NOT NULL,
+      lote TEXT NOT NULL,
+      cantidad_anterior INTEGER,
+      cantidad_nueva INTEGER,
+      diferencia INTEGER,
+      motivo TEXT NOT NULL,
+      usuario TEXT NOT NULL,
+      fecha TEXT NOT NULL,
+      hora TEXT NOT NULL,
+      observaciones TEXT,
+      FOREIGN KEY (lote_id) REFERENCES productos_lotes(id) ON DELETE CASCADE
+    );
+  `);
+  dbInv.exec("CREATE INDEX IF NOT EXISTS idx_lotes_historial_lote_id ON lotes_historial(lote_id);");
+  dbInv.exec("CREATE INDEX IF NOT EXISTS idx_lotes_historial_codigo ON lotes_historial(codigo_producto);");
+  dbInv.exec("CREATE INDEX IF NOT EXISTS idx_lotes_historial_fecha ON lotes_historial(fecha);");
+  console.log("✅ Tabla lotes_historial creada/verificada correctamente.");
+} catch (e) {
+  console.error("❌ Error creando tabla lotes_historial:", e);
+  console.error("   Stack:", e.stack);
+}
 
 try {
   dbInv.exec("ALTER TABLE productos_lotes ADD COLUMN laboratorio TEXT");
 } catch (e) {
   if (!String(e.message).includes("duplicate") && !String(e.message).includes("exists")) {
     console.error("❌ Error agregando columna laboratorio:", e);
+  }
+}
+
+// Agregar columna caducidad (fecha_vencimiento) a productos_lotes
+try {
+  dbInv.exec("ALTER TABLE productos_lotes ADD COLUMN caducidad TEXT");
+} catch (e) {
+  if (!String(e.message).includes("duplicate") && !String(e.message).includes("exists")) {
+    console.error("❌ Error agregando columna caducidad:", e);
   }
 }
 
@@ -937,6 +1206,192 @@ dbChat.exec(`
   CREATE INDEX IF NOT EXISTS idx_chat_grupal_leidos_grupo ON chat_grupal_leidos(grupo_id);
 `);
 
+// Tabla de administradores de grupos
+dbChat.exec(`
+  CREATE TABLE IF NOT EXISTS chat_grupos_administradores (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    grupo_id INTEGER NOT NULL,
+    usuario_nickname TEXT NOT NULL,
+    FOREIGN KEY (grupo_id) REFERENCES chat_grupos(id) ON DELETE CASCADE,
+    UNIQUE(grupo_id, usuario_nickname)
+  );
+  CREATE INDEX IF NOT EXISTS idx_grupos_administradores_grupo ON chat_grupos_administradores(grupo_id);
+  CREATE INDEX IF NOT EXISTS idx_grupos_administradores_usuario ON chat_grupos_administradores(usuario_nickname);
+`);
+
+// Tabla de reuniones
+dbChat.exec(`
+  CREATE TABLE IF NOT EXISTS reuniones (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    titulo TEXT NOT NULL,
+    descripcion TEXT,
+    fecha TEXT NOT NULL,
+    hora TEXT NOT NULL,
+    lugar TEXT,
+    es_videollamada INTEGER DEFAULT 0,
+    creador_nickname TEXT NOT NULL,
+    creada TEXT DEFAULT (datetime('now', 'localtime')),
+    estado TEXT DEFAULT 'activa',
+    observaciones TEXT,
+    fecha_terminada TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_reuniones_fecha ON reuniones(fecha, hora);
+  CREATE INDEX IF NOT EXISTS idx_reuniones_creador ON reuniones(creador_nickname);
+`);
+
+// Agregar columnas para observaciones y fecha_terminada si no existen
+try {
+  dbChat.exec(`ALTER TABLE reuniones ADD COLUMN observaciones TEXT;`);
+} catch (e) {
+  // Columna ya existe
+}
+try {
+  dbChat.exec(`ALTER TABLE reuniones ADD COLUMN fecha_terminada TEXT;`);
+} catch (e) {
+  // Columna ya existe
+}
+try {
+  dbChat.exec(`ALTER TABLE reuniones ADD COLUMN link_videollamada TEXT;`);
+} catch (e) {
+  // Columna ya existe
+}
+
+// Tabla de participantes de reuniones
+dbChat.exec(`
+  CREATE TABLE IF NOT EXISTS reuniones_participantes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    reunion_id INTEGER NOT NULL,
+    usuario_nickname TEXT NOT NULL,
+    notificado INTEGER DEFAULT 0,
+    FOREIGN KEY (reunion_id) REFERENCES reuniones(id) ON DELETE CASCADE,
+    UNIQUE(reunion_id, usuario_nickname)
+  );
+  CREATE INDEX IF NOT EXISTS idx_reuniones_participantes_reunion ON reuniones_participantes(reunion_id);
+  CREATE INDEX IF NOT EXISTS idx_reuniones_participantes_usuario ON reuniones_participantes(usuario_nickname);
+`);
+
+// Intentar eliminar foreign keys problemáticas si existen (referencian tabla inexistente 'usuarios')
+try {
+  // Verificar si la tabla tiene la foreign key problemática
+  const fkInfo = dbChat.prepare(`
+    SELECT sql FROM sqlite_master 
+    WHERE type='table' AND name='reuniones'
+  `).get();
+  
+  if (fkInfo && fkInfo.sql && fkInfo.sql.includes('REFERENCES usuarios')) {
+    console.warn("⚠️ Tabla 'reuniones' tiene foreign key a tabla inexistente 'usuarios'. Recreando tabla...");
+    // Hacer backup de datos
+    const datosBackup = dbChat.prepare("SELECT * FROM reuniones").all();
+    // Eliminar tabla
+    dbChat.exec("DROP TABLE IF EXISTS reuniones");
+    // Recrear sin foreign key problemática
+    dbChat.exec(`
+      CREATE TABLE reuniones (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        titulo TEXT NOT NULL,
+        descripcion TEXT,
+        fecha TEXT NOT NULL,
+        hora TEXT NOT NULL,
+        lugar TEXT,
+        es_videollamada INTEGER DEFAULT 0,
+        creador_nickname TEXT NOT NULL,
+        creada TEXT DEFAULT (datetime('now', 'localtime')),
+        estado TEXT DEFAULT 'activa'
+      );
+      CREATE INDEX IF NOT EXISTS idx_reuniones_fecha ON reuniones(fecha, hora);
+      CREATE INDEX IF NOT EXISTS idx_reuniones_creador ON reuniones(creador_nickname);
+    `);
+    // Restaurar datos
+    if (datosBackup.length > 0) {
+      const insert = dbChat.prepare(`
+        INSERT INTO reuniones (id, titulo, descripcion, fecha, hora, lugar, es_videollamada, creador_nickname, creada, estado)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      for (const row of datosBackup) {
+        insert.run(row.id, row.titulo, row.descripcion, row.fecha, row.hora, row.lugar, row.es_videollamada, row.creador_nickname, row.creada, row.estado);
+      }
+    }
+    console.log("✅ Tabla 'reuniones' recreada sin foreign key problemática");
+  }
+} catch (e) {
+  console.warn("⚠️ No se pudo verificar/arreglar foreign keys de reuniones:", e.message);
+}
+
+try {
+  const fkInfoParticipantes = dbChat.prepare(`
+    SELECT sql FROM sqlite_master 
+    WHERE type='table' AND name='reuniones_participantes'
+  `).get();
+  
+  if (fkInfoParticipantes && fkInfoParticipantes.sql && fkInfoParticipantes.sql.includes('REFERENCES usuarios')) {
+    console.warn("⚠️ Tabla 'reuniones_participantes' tiene foreign key a tabla inexistente 'usuarios'. Recreando tabla...");
+    // Hacer backup de datos
+    const datosBackup = dbChat.prepare("SELECT * FROM reuniones_participantes").all();
+    // Eliminar tabla
+    dbChat.exec("DROP TABLE IF EXISTS reuniones_participantes");
+    // Recrear sin foreign key problemática
+    dbChat.exec(`
+      CREATE TABLE reuniones_participantes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        reunion_id INTEGER NOT NULL,
+        usuario_nickname TEXT NOT NULL,
+        notificado INTEGER DEFAULT 0,
+        FOREIGN KEY (reunion_id) REFERENCES reuniones(id) ON DELETE CASCADE,
+        UNIQUE(reunion_id, usuario_nickname)
+      );
+      CREATE INDEX IF NOT EXISTS idx_reuniones_participantes_reunion ON reuniones_participantes(reunion_id);
+      CREATE INDEX IF NOT EXISTS idx_reuniones_participantes_usuario ON reuniones_participantes(usuario_nickname);
+    `);
+    // Restaurar datos
+    if (datosBackup.length > 0) {
+      const insert = dbChat.prepare(`
+        INSERT INTO reuniones_participantes (id, reunion_id, usuario_nickname, notificado)
+        VALUES (?, ?, ?, ?)
+      `);
+      for (const row of datosBackup) {
+        insert.run(row.id, row.reunion_id, row.usuario_nickname, row.notificado || 0);
+      }
+    }
+    console.log("✅ Tabla 'reuniones_participantes' recreada sin foreign key problemática");
+  }
+} catch (e) {
+  console.warn("⚠️ No se pudo verificar/arreglar foreign keys de reuniones_participantes:", e.message);
+}
+
+// Tabla de restricciones de grupos
+dbChat.exec(`
+  CREATE TABLE IF NOT EXISTS chat_grupos_restricciones (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    grupo_id INTEGER NOT NULL,
+    usuario_nickname TEXT NOT NULL,
+    restriccion_tipo TEXT NOT NULL DEFAULT 'sin_mensajes',
+    duracion_minutos INTEGER,
+    fecha_inicio TEXT DEFAULT (datetime('now', 'localtime')),
+    fecha_fin TEXT,
+    activa INTEGER DEFAULT 1,
+    FOREIGN KEY (grupo_id) REFERENCES chat_grupos(id) ON DELETE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS idx_grupos_restricciones_grupo ON chat_grupos_restricciones(grupo_id);
+  CREATE INDEX IF NOT EXISTS idx_grupos_restricciones_usuario ON chat_grupos_restricciones(usuario_nickname);
+  CREATE INDEX IF NOT EXISTS idx_grupos_restricciones_activa ON chat_grupos_restricciones(activa);
+`);
+
+dbChat.exec(`
+  CREATE TABLE IF NOT EXISTS chat_grupos_solicitudes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    grupo_id INTEGER NOT NULL,
+    usuario_nickname TEXT NOT NULL,
+    fecha TEXT DEFAULT (datetime('now', 'localtime')),
+    estado TEXT NOT NULL DEFAULT 'pendiente',
+    respondido_por TEXT,
+    respondido_en TEXT,
+    FOREIGN KEY (grupo_id) REFERENCES chat_grupos(id) ON DELETE CASCADE,
+    UNIQUE(grupo_id, usuario_nickname)
+  );
+  CREATE INDEX IF NOT EXISTS idx_grupos_solicitudes_grupo ON chat_grupos_solicitudes(grupo_id);
+  CREATE INDEX IF NOT EXISTS idx_grupos_solicitudes_estado ON chat_grupos_solicitudes(estado);
+`);
+
 dbChat.exec(`
   CREATE TABLE IF NOT EXISTS chat_pins (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1015,6 +1470,15 @@ agregarColumnaSiNoExiste(dbChat, "chat_privado", "reenviado_de_chat", "TEXT");
 agregarColumnaSiNoExiste(dbChat, "chat_privado", "reenviado_de_tipo", "TEXT");
 
 // Migrar chat_grupal
+agregarColumnaSiNoExiste(dbChat, "chat_grupal", "tipo_mensaje", "TEXT DEFAULT 'texto'");
+agregarColumnaSiNoExiste(dbChat, "chat_grupal", "archivo_url", "TEXT");
+agregarColumnaSiNoExiste(dbChat, "chat_grupal", "archivo_nombre", "TEXT");
+agregarColumnaSiNoExiste(dbChat, "chat_grupal", "archivo_tipo", "TEXT");
+agregarColumnaSiNoExiste(dbChat, "chat_grupal", "archivo_tamaño", "INTEGER");
+agregarColumnaSiNoExiste(dbChat, "chat_grupal", "mensaje_editado", "INTEGER DEFAULT 0");
+agregarColumnaSiNoExiste(dbChat, "chat_grupal", "fecha_edicion", "TEXT");
+agregarColumnaSiNoExiste(dbChat, "chat_grupal", "menciona", "TEXT");
+agregarColumnaSiNoExiste(dbChat, "chat_grupal", "enlace_compartido", "TEXT");
 agregarColumnaSiNoExiste(dbChat, "chat_grupal", "reply_to_id", "INTEGER");
 agregarColumnaSiNoExiste(dbChat, "chat_grupal", "reply_to_user", "TEXT");
 agregarColumnaSiNoExiste(dbChat, "chat_grupal", "reply_to_text", "TEXT");
@@ -1022,15 +1486,24 @@ agregarColumnaSiNoExiste(dbChat, "chat_grupal", "reenviado_de_usuario", "TEXT");
 agregarColumnaSiNoExiste(dbChat, "chat_grupal", "reenviado_de_chat", "TEXT");
 agregarColumnaSiNoExiste(dbChat, "chat_grupal", "reenviado_de_tipo", "TEXT");
 
+// Agregar campo de prioridad a las tablas de mensajes
+agregarColumnaSiNoExiste(dbChat, "chat_general", "prioridad", "INTEGER DEFAULT 0");
+agregarColumnaSiNoExiste(dbChat, "chat_privado", "prioridad", "INTEGER DEFAULT 0");
+agregarColumnaSiNoExiste(dbChat, "chat_grupal", "prioridad", "INTEGER DEFAULT 0");
+
 // Agregar campos a grupos para público/privado
 try {
   dbChat.exec(`
     ALTER TABLE chat_grupos ADD COLUMN es_publico INTEGER DEFAULT 1;
     ALTER TABLE chat_grupos ADD COLUMN es_archivado INTEGER DEFAULT 0;
+    ALTER TABLE chat_grupos ADD COLUMN foto TEXT;
   `);
 } catch (e) {
   // Las columnas ya existen, ignorar error
 }
+
+// Agregar columna foto si no existe
+agregarColumnaSiNoExiste(dbChat, "chat_grupos", "foto", "TEXT");
 
 // Tabla para configuración de notificaciones de chat
 dbChat.exec(`
@@ -1332,6 +1805,7 @@ const BASE_PERMS = [
   "inventario.ajustes",
   "inventario.exportar",
   "inventario.importar",
+  "inventario.crear_inventario",
   // Permisos de tienda
   "tienda.ver",
   "tienda.productos.ver",

@@ -26,6 +26,7 @@ import ReportesActivaciones from "./pestañas/ReportesActivaciones/ReportesActiv
 import { AuthProvider, useAuth } from "./AuthContext";
 import Login from "./Login";
 import { SERVER_URL, getServerUrl, getServerUrlSync } from "./config/server";
+import { activarContextoEnPrimeraInteraccion } from "./utils/sonidoIxora";
 
 // Socket.io siempre usa la IP del servidor IXORA
 // Inicializar con URL síncrona, se actualizará después
@@ -33,28 +34,52 @@ import { SERVER_URL, getServerUrl, getServerUrlSync } from "./config/server";
 let socket = null;
 try {
   const serverUrl = getServerUrlSync();
+  
   if (serverUrl) {
-    socket = io(serverUrl, { 
-      transports: ["websocket", "polling"], // Permitir fallback a polling si websocket falla
-      reconnection: true,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000,
-      reconnectionAttempts: 5,
-      timeout: 10000, // Timeout de 10 segundos
-      autoConnect: false, // No conectar automáticamente, esperar a que la app esté lista
-    });
-    
-    // Manejar errores del socket para evitar crashes
-    socket.on('connect_error', (error) => {
-      console.warn('⚠️ Error de conexión socket:', error);
-    });
-    
-    socket.on('error', (error) => {
-      console.warn('⚠️ Error socket:', error);
-    });
+    try {
+      socket = io(serverUrl, { 
+        transports: ["websocket", "polling"], // Permitir fallback a polling si websocket falla
+        reconnection: true,
+        reconnectionDelay: 1000,
+        reconnectionDelayMax: 5000,
+        reconnectionAttempts: 5,
+        timeout: 10000, // Timeout de 10 segundos
+        autoConnect: false, // No conectar automáticamente, esperar a que la app esté lista
+      });
+      
+      
+      // Manejar errores del socket para evitar crashes
+      if (socket && typeof socket.on === 'function') {
+        try {
+          socket.on('connect_error', (error) => {
+            console.error('[IXORA_ERROR] Socket connect_error:', error?.message || error);
+          });
+          
+          socket.on('error', (error) => {
+            console.error('[IXORA_ERROR] Socket error:', error?.message || error);
+          });
+          
+          socket.on('connect', () => {
+          });
+          
+          socket.on('disconnect', (reason) => {
+          });
+        } catch (eventErr) {
+          console.error('[IXORA_ERROR] Error configurando eventos del socket:', eventErr);
+        }
+      }
+    } catch (ioErr) {
+      console.error('[IXORA_ERROR] Error creando instancia de socket.io:', ioErr);
+      throw ioErr;
+    }
+  } else {
   }
 } catch (error) {
-  console.error("Error inicializando socket:", error);
+  console.error('[IXORA_ERROR] ========================================');
+  console.error('[IXORA_ERROR] Error inicializando socket:', error);
+  console.error('[IXORA_ERROR] Stack:', error?.stack);
+  console.error('[IXORA_ERROR] ========================================');
+  
   // Crear socket dummy para evitar crashes
   socket = {
     connected: false,
@@ -67,7 +92,11 @@ try {
 }
 
 // Exponer socket globalmente para que otros componentes puedan usarlo
-window.socket = socket;
+try {
+  window.socket = socket;
+} catch (exposeErr) {
+  console.error('[IXORA_ERROR] Error exponiendo socket globalmente:', exposeErr);
+}
 
 const CATEGORIAS = {
   Alimentos: [],
@@ -87,6 +116,7 @@ const CATEGORIAS = {
 };
 
 function AppProtegida() {
+  // PROTECCIÓN: useAuth debe llamarse directamente (es un hook)
   const { user, isLoading } = useAuth();
   
   // PROTECCIÓN: Usar useMemo para evitar re-renders innecesarios
@@ -109,6 +139,99 @@ function AppProtegida() {
   
   const tabFromURL = urlParams.get('tab');
   const esTienda = tabFromURL === 'tienda';
+  
+  // Estado para manejar el tiempo de espera de la sesión
+  const [tiempoEsperaSesion, setTiempoEsperaSesion] = useState(0);
+  
+  // Estado para manejar la restauración de sesión
+  const [intentandoRestaurar, setIntentandoRestaurar] = useState(true);
+  
+  // Timer para dar tiempo a que se verifique la sesión en Android
+  useEffect(() => {
+    if (!user && tokenEnStorage && !isLoading) {
+      // Si hay token pero no usuario y ya terminó de cargar, iniciar timer
+      const intervalId = setInterval(() => {
+        setTiempoEsperaSesion(prev => {
+          if (prev >= 3000) {
+            // Ya pasaron 3 segundos, no incrementar más
+            return prev;
+          }
+          return prev + 100;
+        });
+      }, 100);
+      
+      // Limpiar después de 3 segundos
+      const timeoutId = setTimeout(() => {
+        clearInterval(intervalId);
+      }, 3000);
+      
+      return () => {
+        clearInterval(intervalId);
+        clearTimeout(timeoutId);
+      };
+    } else if (user || !tokenEnStorage) {
+      // Si ya hay usuario o no hay token, resetear timer
+      setTiempoEsperaSesion(0);
+    }
+  }, [user, tokenEnStorage, isLoading]);
+  
+  // 🔥 CRÍTICO: Escuchar evento de sesión actualizada después del login
+  useEffect(() => {
+    const handleSesionActualizada = (event) => {
+      // Cuando se dispara este evento después del login, forzar actualización
+      console.log('[IXORA_APP] Sesión actualizada detectada, esperando sincronización...');
+      setIntentandoRestaurar(true);
+      // Dar tiempo para que AuthContext sincronice el estado
+      setTimeout(() => {
+        setIntentandoRestaurar(false);
+      }, 2000);
+    };
+    
+    window.addEventListener('ixora-sesion-actualizada', handleSesionActualizada);
+    
+    return () => {
+      window.removeEventListener('ixora-sesion-actualizada', handleSesionActualizada);
+    };
+  }, []);
+  
+  // Intentar restaurar sesión cuando hay token pero no usuario
+  useEffect(() => {
+    if (!user && tokenEnStorage) {
+      // 🔥 CRÍTICO: Si hay token en localStorage, intentar restaurar sesión ANTES de mostrar login
+      // Esto evita que la app se cierre después del login
+      try {
+        const userLocal = localStorage.getItem("user");
+        if (userLocal) {
+          try {
+            const userParsed = JSON.parse(userLocal);
+            // Si hay usuario en localStorage, mantener intentandoRestaurar en true
+            // para dar tiempo a que AuthContext lo cargue
+            // Esperar más tiempo antes de marcar como false
+            setTimeout(() => {
+              // Verificar nuevamente si ya hay user en el estado
+              const userReCheck = localStorage.getItem("user");
+              if (userReCheck) {
+                setIntentandoRestaurar(true);
+              } else {
+                setIntentandoRestaurar(false);
+              }
+            }, 10000); // Aumentar tiempo de espera a 10 segundos
+          } catch (e) {
+            // Si no se puede parsear, esperar un momento más
+            setTimeout(() => setIntentandoRestaurar(false), 5000);
+          }
+        } else {
+          // No hay usuario local, esperar un poco para ver si se carga
+          setTimeout(() => setIntentandoRestaurar(false), 10000); // Aumentar tiempo de espera
+        }
+      } catch (e) {
+        setTimeout(() => setIntentandoRestaurar(false), 5000);
+      }
+    } else if (user) {
+      // Si ya hay usuario, marcar como restaurado inmediatamente
+      setIntentandoRestaurar(false);
+    }
+  }, [user, tokenEnStorage]);
   
   // Mostrar loading mientras se carga la sesión
   if (isLoading) {
@@ -139,24 +262,66 @@ function AppProtegida() {
   }
   
   if (!user && tokenEnStorage) {
-    // Si hay token pero no user, esperar un momento (puede estar cargando)
-    // PROTECCIÓN: En Android, dar más tiempo antes de mostrar error
-    return (
-      <div style={{
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        height: '100vh',
-        background: '#1a1a1a',
-        color: '#fff'
-      }}>
-        <div>Cargando sesión...</div>
-      </div>
-    );
+    // 🔥 CRÍTICO: Verificar SIEMPRE localStorage antes de decidir qué mostrar
+    // Esto evita que la app se cierre después del login
+    try {
+      const userLocalCheck = localStorage.getItem("user");
+      const tokenLocalCheck = localStorage.getItem("token");
+      
+      // Si hay datos en localStorage, MOSTRAR LOADING y esperar a que AuthContext los cargue
+      if (userLocalCheck && tokenLocalCheck) {
+        return (
+          <div style={{
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            height: '100vh',
+            background: '#1a1a1a',
+            color: '#fff',
+            flexDirection: 'column',
+            gap: '20px'
+          }}>
+            <div>Cargando sesión...</div>
+            <div style={{ fontSize: '14px', opacity: 0.7 }}>
+              Restaurando sesión guardada...
+            </div>
+          </div>
+        );
+      }
+    } catch (e) {
+      console.error('[IXORA_APP] Error verificando localStorage:', e);
+    }
+    
+    // Si aún está intentando restaurar o no hay datos en localStorage, mostrar loading
+    // Aumentar tiempo de espera para dar más tiempo a la sincronización
+    if (intentandoRestaurar || tiempoEsperaSesion < 15000) {
+      return (
+        <div style={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          height: '100vh',
+          background: '#1a1a1a',
+          color: '#fff',
+          flexDirection: 'column',
+          gap: '20px'
+        }}>
+          <div>Cargando sesión...</div>
+          <div style={{ fontSize: '14px', opacity: 0.7 }}>
+            Verificando credenciales...
+          </div>
+        </div>
+      );
+    }
+    
+    // Solo mostrar login si realmente no hay sesión
+    return <Login />;
   }
   
   // Si hay user, renderizar la app
-  if (user) {
+  // 🔥 CRÍTICO: Verificar también localStorage como respaldo
+  // Esto evita que la app se cierre si hay un pequeño delay en la sincronización del estado
+  if (user || (tokenEnStorage && localStorage.getItem("user"))) {
     return <App />;
   }
   
@@ -221,65 +386,126 @@ function App() {
     const actualizarIPServidor = async () => {
       try {
         // Limpiar IP antigua del localStorage si existe
-        const savedUrl = localStorage.getItem('server_url');
-        if (savedUrl && savedUrl.includes('172.16.30.160')) {
-          localStorage.removeItem('server_url');
+        let savedUrl = null;
+        try {
+          savedUrl = localStorage.getItem('server_url');
+          if (savedUrl && savedUrl.includes('172.16.30.160')) {
+            localStorage.removeItem('server_url');
+          }
+        } catch (localStorageErr) {
         }
+        
+        // Detectar si estamos en Electron
+        const isElectron = typeof window !== 'undefined' && (
+          window.navigator?.userAgent?.includes('Electron') ||
+          window.process?.type === 'renderer' ||
+          window.require
+        );
         
         // En desarrollo, usar la IP actual con puerto 3001
         let nuevaUrl;
-        if (process.env.NODE_ENV === 'development') {
-          const currentHost = window.location.hostname;
-          if (currentHost && currentHost !== 'localhost' && currentHost !== '127.0.0.1') {
-            nuevaUrl = `http://${currentHost}:3001`;
+        try {
+          if (process.env.NODE_ENV === 'development' && !isElectron) {
+            const currentHost = window.location?.hostname;
+            if (currentHost && currentHost !== 'localhost' && currentHost !== '127.0.0.1') {
+              nuevaUrl = `http://${currentHost}:3001`;
+            } else {
+              nuevaUrl = 'http://172.16.30.5:3001';
+            }
           } else {
-            nuevaUrl = 'http://172.16.30.12:3001';
+            // En Android/producción, usar getServerUrl con protección
+            try {
+              nuevaUrl = await getServerUrl();
+            } catch (getUrlErr) {
+              // Fallback a IP por defecto
+              nuevaUrl = 'http://172.16.30.5:3001';
+            }
           }
-        } else {
-          nuevaUrl = await getServerUrl();
+        } catch (urlErr) {
+          console.error('[IXORA_ERROR] Error determinando URL del servidor:', urlErr);
+          nuevaUrl = 'http://172.16.30.5:3001';
         }
         
-        // Guardar en localStorage
-        localStorage.setItem('server_url', nuevaUrl);
+        // Guardar en localStorage con protección
+        try {
+          localStorage.setItem('server_url', nuevaUrl);
+        } catch (localStorageErr) {
+        }
         
         // Si la URL cambió, reconectar el socket
         // PROTECCIÓN: Verificar que socket existe y es válido
-        if (socket && socket.io) {
-          if (socket.io.uri !== nuevaUrl) {
-            try {
-              socket.disconnect();
-              socket.io.uri = nuevaUrl;
-              setTimeout(() => {
-                if (socket && socket.connect && !socket.connected) {
-                  socket.connect();
-                }
-              }, 500);
-            } catch (error) {
-              console.warn("Error reconectando socket:", error);
-            }
-          } else if (!socket.connected && socket.connect) {
-            // Si no está conectado, conectar después de un delay
-            setTimeout(() => {
+        try {
+          if (socket && socket.io && typeof socket.disconnect === 'function' && typeof socket.connect === 'function') {
+            if (socket.io.uri !== nuevaUrl) {
               try {
-                if (socket && socket.connect && !socket.connected) {
-                  socket.connect();
+                if (socket.connected) {
+                  socket.disconnect();
+                }
+                socket.io.uri = nuevaUrl;
+                // 🔥 CRÍTICO: Solo conectar socket si hay usuario logueado
+                const hasUser = localStorage.getItem("user");
+                if (hasUser) {
+                  setTimeout(() => {
+                    try {
+                      if (socket && socket.connect && !socket.connected) {
+                        socket.connect();
+                      }
+                    } catch (error) {
+                      console.warn("Error conectando socket:", error);
+                      // NO cerrar sesión por errores de socket
+                    }
+                  }, 2000); // Aumentar delay a 2 segundos
                 }
               } catch (error) {
-                console.warn("Error conectando socket:", error);
+                console.warn("⚠️ [App] Error reconectando socket:", error);
               }
-            }, 1000);
+            } else if (!socket.connected && socket.connect) {
+              // 🔥 CRÍTICO: Solo conectar socket si hay usuario logueado
+              // Esto evita errores que puedan causar el cierre de la app
+              const hasUser = localStorage.getItem("user");
+              if (hasUser) {
+                // Si no está conectado, conectar después de un delay
+                setTimeout(() => {
+                  try {
+                    if (socket && socket.connect && !socket.connected) {
+                      socket.connect();
+                    }
+                  } catch (error) {
+                    console.warn("Error conectando socket:", error);
+                    // NO cerrar sesión por errores de socket
+                  }
+                }, 2000); // Aumentar delay a 2 segundos
+              }
+            }
           }
+        } catch (socketError) {
         }
       } catch (err) {
-        console.warn('⚠️ [App] Error actualizando IP del servidor:', err);
+        console.error('[IXORA_ERROR] Stack del error:', err?.stack);
         // Fallback a IP por defecto
-        const fallbackUrl = 'http://172.16.30.12:3001';
-        localStorage.setItem('server_url', fallbackUrl);
-        if (socket.io) {
-          socket.io.uri = fallbackUrl;
-          if (!socket.connected) {
-            socket.connect();
+        try {
+          const fallbackUrl = 'http://172.16.30.5:3001';
+          localStorage.setItem('server_url', fallbackUrl);
+          if (socket && socket.io && typeof socket.connect === 'function') {
+            try {
+              socket.io.uri = fallbackUrl;
+              // 🔥 CRÍTICO: Solo conectar socket si hay usuario logueado
+              const hasUser = localStorage.getItem("user");
+              if (hasUser && !socket.connected) {
+                setTimeout(() => {
+                  try {
+                    socket.connect();
+                  } catch (connectErr) {
+                    console.warn("Error conectando socket en fallback:", connectErr);
+                    // NO cerrar sesión por errores de socket
+                  }
+                }, 2000); // Aumentar delay a 2 segundos
+              }
+            } catch (socketErr) {
+            }
           }
+        } catch (fallbackErr) {
+          console.error('[IXORA_ERROR] Error en fallback:', fallbackErr);
         }
       }
     };
@@ -287,9 +513,113 @@ function App() {
     actualizarIPServidor();
   }, []);
 
+  // ============================
+  // 🔄 Detectar cambios de red y actualizar IP automáticamente
+  // ============================
   useEffect(() => {
+    let reconnectTimeout = null;
+    let checkInterval = null;
+
+    const verificarYReconectar = async () => {
+      try {
+        // Obtener la URL actual del servidor
+        const currentUrl = await getServerUrl();
+        const savedUrl = localStorage.getItem('server_url');
+        
+        // Si la URL cambió o el socket no está conectado, reconectar
+        if (socket && socket.io) {
+          const socketUrl = socket.io.uri || (socket.io.opts && socket.io.opts.uri);
+          
+          if (socketUrl !== currentUrl || !socket.connected) {
+            console.log(`🔄 [App] Detectado cambio de IP o desconexión. Reconectando...`);
+            console.log(`   URL anterior: ${socketUrl}`);
+            console.log(`   URL nueva: ${currentUrl}`);
+            
+            try {
+              // Desconectar el socket actual
+              if (socket.connected && typeof socket.disconnect === 'function') {
+                socket.disconnect();
+              }
+              
+              // Actualizar la URI del socket
+              socket.io.uri = currentUrl;
+              if (socket.io.opts) {
+                socket.io.opts.uri = currentUrl;
+              }
+              
+              // 🔥 CRÍTICO: Solo reconectar socket si hay usuario logueado
+              const hasUser = localStorage.getItem("user");
+              if (hasUser) {
+                // Reconectar después de un breve delay
+                reconnectTimeout = setTimeout(() => {
+                  try {
+                    if (socket && typeof socket.connect === 'function' && !socket.connected) {
+                      socket.connect();
+                      console.log(`✅ [App] Socket reconectado a: ${currentUrl}`);
+                    }
+                  } catch (connectErr) {
+                    console.warn('⚠️ [App] Error reconectando socket:', connectErr);
+                    // NO cerrar sesión por errores de socket
+                  }
+                }, 2000); // Aumentar delay a 2 segundos
+              }
+            } catch (reconnectErr) {
+              console.warn('⚠️ [App] Error en proceso de reconexión:', reconnectErr);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('⚠️ [App] Error verificando conexión:', err);
+      }
+    };
+
+    // Listener para cambios de estado de red (online/offline)
+    const handleOnline = () => {
+      console.log('🌐 [App] Red conectada. Verificando IP del servidor...');
+      setTimeout(verificarYReconectar, 2000); // Esperar 2 segundos para que la red se estabilice
+    };
+
+    const handleOffline = () => {
+      console.log('📴 [App] Red desconectada.');
+    };
+
+    // Agregar listeners de red
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    // Verificar periódicamente la IP del servidor (cada 30 segundos)
+    checkInterval = setInterval(() => {
+      verificarYReconectar();
+    }, 30000);
+
+    // Verificación inicial después de 5 segundos
+    setTimeout(verificarYReconectar, 5000);
+
+    // Cleanup
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+      if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout);
+      }
+      if (checkInterval) {
+        clearInterval(checkInterval);
+      }
+    };
+  }, [socket]);
+
+  useEffect(() => {
+    // 🔥 CRÍTICO: Esperar un momento después del login antes de hacer requests
+    // Esto evita que la app se cierre por errores de autenticación inmediatos
+    if (!user) {
+      return;
+    }
+    
     const cargarVisibilidad = async () => {
       try {
+        // Esperar 2 segundos después del login para asegurar que el token esté completamente propagado
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
         // Obtener URL actualizada del servidor
         const currentServerUrl = await getServerUrl();
         const permisos = await authFetch(`${currentServerUrl}/admin/perms/visibilidad`);
@@ -306,16 +636,17 @@ function App() {
         }
         setVisibilidadPestañas(visibilidad);
       } catch (err) {
-        if (!err.message?.includes("403") && !err.message?.includes("permiso")) {
+        // NO cerrar sesión por errores de visibilidad - solo loggear
+        if (!err.message?.includes("403") && !err.message?.includes("permiso") && !err.message?.includes("401")) {
           console.error("Error cargando visibilidad de pestañas:", err);
         }
+        // Si hay error, usar valores por defecto (todas las pestañas visibles)
+        setVisibilidadPestañas({});
       }
     };
     
-    if (user) {
-      cargarVisibilidad();
-    }
-  }, [user, authFetch]);
+    cargarVisibilidad();
+  }, [user]);
 
   const debeMostrarPestaña = (tabPerm) => {
     const { esPC, esTablet, esCelular } = detectarDispositivo();
@@ -359,6 +690,16 @@ function App() {
   }, [can, debeMostrarPestaña]);
 
   const [menuOpen, setMenuOpen] = useState(false);
+  const [menuClosing, setMenuClosing] = useState(false);
+  
+  // Función helper para cerrar el menú con animación
+  const cerrarMenu = () => {
+    setMenuClosing(true);
+    setTimeout(() => {
+      setMenuOpen(false);
+      setMenuClosing(false);
+    }, 250); // Reducido para mejor fluidez
+  };
   const [logoViewerOpen, setLogoViewerOpen] = useState(false);
   const [categoriasColapsadas, setCategoriasColapsadas] = useState({
     operaciones: true,
@@ -421,7 +762,7 @@ function App() {
     }
     
     setActiveTab(tab);
-    setMenuOpen(false);
+    cerrarMenu();
     const url = new URL(window.location);
     url.searchParams.set('tab', tab);
     // Usar pushState para permitir navegación con botón de regreso
@@ -450,7 +791,6 @@ function App() {
           const appModule = await import('@capacitor/app');
           App = appModule.App;
         } catch (importError) {
-          console.warn('Plugin @capacitor/app no disponible, usando método alternativo');
           // Fallback: usar window.history.back() si el plugin no está disponible
           document.addEventListener('backbutton', (e) => {
             e.preventDefault();
@@ -465,7 +805,7 @@ function App() {
         backButtonListener = await App.addListener('backButton', ({ canGoBack }) => {
           // Si el menú está abierto, cerrarlo primero
           if (menuOpen) {
-            setMenuOpen(false);
+            cerrarMenu();
             return;
           }
 
@@ -480,12 +820,11 @@ function App() {
           }
         });
       } catch (error) {
-        console.warn('Error configurando botón de regreso:', error);
         // Fallback: usar evento personalizado de Android
         document.addEventListener('backbutton', (e) => {
           e.preventDefault();
           if (menuOpen) {
-            setMenuOpen(false);
+            cerrarMenu();
             return;
           }
           if (tabHistoryRef.current.length > 1) {
@@ -566,7 +905,19 @@ function App() {
   const [diasCerrados, setDiasCerrados] = useState([]);
   const [detalleDia, setDetalleDia] = useState([]);
   const [fecha, setFecha] = useState("");
-  const [horaActual, setHoraActual] = useState(new Date());
+  // PROTECCIÓN: Inicializar horaActual con validación para evitar crashes
+  const [horaActual, setHoraActual] = useState(() => {
+    try {
+      const now = new Date();
+      if (isNaN(now.getTime())) {
+        return new Date(2024, 0, 1); // Fecha por defecto si falla
+      }
+      return now;
+    } catch (error) {
+      console.error('Error inicializando horaActual:', error);
+      return new Date(2024, 0, 1); // Fecha por defecto en caso de error
+    }
+  });
   const [inventario, setInventario] = useState([]);
   const [lotesCache, setLotesCache] = useState({});
   const [personalizacion, setPersonalizacion] = useState({
@@ -703,45 +1054,138 @@ function App() {
   }, [activeTab, perms, can, cambiarModulo, getFirstAllowedTab]);
 
   // Declarar funciones de formateo antes de usarlas en useMemo
+  // PROTECCIÓN: Agregar validaciones para evitar crashes en Android
   const formatearFechaCompleta = useCallback((fechaString) => {
-    if (!fechaString) {
-      return ""; // No mostrar fecha si no está seleccionada
+    try {
+      if (!fechaString) {
+        return ""; // No mostrar fecha si no está seleccionada
+      }
+      
+      // Validar que fechaString sea un string válido
+      if (typeof fechaString !== 'string' && typeof fechaString !== 'number') {
+        return "";
+      }
+      
+      const fecha = new Date(fechaString + 'T00:00:00');
+      
+      // Validar que la fecha sea válida
+      if (isNaN(fecha.getTime())) {
+        return "";
+      }
+      
+      const diasSemana = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+      const meses = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 
+                     'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+      
+      const dia = fecha.getDay();
+      const fechaDia = fecha.getDate();
+      const mes = fecha.getMonth();
+      const año = fecha.getFullYear();
+      
+      // Validar índices
+      if (dia < 0 || dia > 6 || mes < 0 || mes > 11) {
+        return "";
+      }
+      
+      return `${diasSemana[dia]} ${fechaDia} de ${meses[mes]} del ${año}`;
+    } catch (error) {
+      console.error('Error formateando fecha:', error, fechaString);
+      return ""; // Retornar string vacío en caso de error
     }
-    const fecha = new Date(fechaString + 'T00:00:00');
-    const diasSemana = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
-    const meses = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 
-                   'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
-    return `${diasSemana[fecha.getDay()]} ${fecha.getDate()} de ${meses[fecha.getMonth()]} del ${fecha.getFullYear()}`;
   }, []);
 
   const formatearHora = useCallback((fecha) => {
-    const horas = fecha.getHours().toString().padStart(2, '0');
-    const minutos = fecha.getMinutes().toString().padStart(2, '0');
-    const segundos = fecha.getSeconds().toString().padStart(2, '0');
-    return `${horas}:${minutos}:${segundos}`;
+    try {
+      // Validar que fecha sea un objeto Date válido
+      if (!fecha || !(fecha instanceof Date)) {
+        return "00:00:00"; // Retornar hora por defecto
+      }
+      
+      // Validar que la fecha sea válida
+      if (isNaN(fecha.getTime())) {
+        return "00:00:00";
+      }
+      
+      const horas = fecha.getHours();
+      const minutos = fecha.getMinutes();
+      const segundos = fecha.getSeconds();
+      
+      // Validar que los valores sean números válidos
+      if (isNaN(horas) || isNaN(minutos) || isNaN(segundos)) {
+        return "00:00:00";
+      }
+      
+      return `${horas.toString().padStart(2, '0')}:${minutos.toString().padStart(2, '0')}:${segundos.toString().padStart(2, '0')}`;
+    } catch (error) {
+      console.error('Error formateando hora:', error, fecha);
+      return "00:00:00"; // Retornar hora por defecto en caso de error
+    }
   }, []);
 
   useEffect(() => {
     // Optimización: actualizar hora cada segundo pero sin causar re-renders innecesarios
     // Usar ref para minimizar re-renders del componente completo
+    // PROTECCIÓN: Agregar validación para evitar crashes
     const interval = setInterval(() => {
-      setHoraActual(prev => {
-        const now = new Date();
-        // Solo actualizar si realmente cambió el segundo
-        if (prev.getSeconds() !== now.getSeconds()) {
-          return now;
-        }
-        return prev;
-      });
+      try {
+        setHoraActual(prev => {
+          try {
+            const now = new Date();
+            
+            // Validar que la fecha actual sea válida
+            if (isNaN(now.getTime())) {
+              return prev || new Date(); // Mantener la anterior o crear nueva
+            }
+            
+            // Validar que prev sea válido
+            if (!prev || !(prev instanceof Date) || isNaN(prev.getTime())) {
+              return now; // Si prev no es válido, usar now
+            }
+            
+            // Solo actualizar si realmente cambió el segundo
+            if (prev.getSeconds() !== now.getSeconds()) {
+              return now;
+            }
+            return prev;
+          } catch (error) {
+            console.error('Error actualizando hora:', error);
+            return prev || new Date(); // En caso de error, mantener prev o crear nueva
+          }
+        });
+      } catch (error) {
+        console.error('Error en setInterval de hora:', error);
+      }
     }, 1000);
     return () => clearInterval(interval);
   }, []);
   
   // Memoizar formatearHora para evitar recalcular en cada render
-  const horaFormateada = useMemo(() => formatearHora(horaActual), [horaActual, formatearHora]);
+  // PROTECCIÓN: Agregar validación antes de formatear
+  const horaFormateada = useMemo(() => {
+    try {
+      if (!horaActual || !(horaActual instanceof Date)) {
+        return "00:00:00";
+      }
+      return formatearHora(horaActual);
+    } catch (error) {
+      console.error('Error en horaFormateada:', error);
+      return "00:00:00";
+    }
+  }, [horaActual, formatearHora]);
   
   // Memoizar fecha formateada
-  const fechaCompletaFormateada = useMemo(() => fecha ? formatearFechaCompleta(fecha) : "", [fecha, formatearFechaCompleta]);
+  // PROTECCIÓN: Agregar validación antes de formatear
+  const fechaCompletaFormateada = useMemo(() => {
+    try {
+      if (!fecha) {
+        return "";
+      }
+      return formatearFechaCompleta(fecha);
+    } catch (error) {
+      console.error('Error en fechaCompletaFormateada:', error);
+      return "";
+    }
+  }, [fecha, formatearFechaCompleta]);
 
   // Detectar y aplicar modo oscuro del sistema
   useEffect(() => {
@@ -834,24 +1278,44 @@ function App() {
   const cargasInicialesRef = useRef(false);
   
   useEffect(() => {
+    // 🔥 CRÍTICO: Solo cargar datos si hay usuario Y token
+    // Esto evita errores que puedan causar el cierre de la app
+    if (!user) {
+      return;
+    }
+    
     const tokenEnStorage = localStorage.getItem("token");
-    // Evitar disparar peticiones protegidas si no hay sesión
-    if (!tokenEnStorage) return;
+    if (!tokenEnStorage) {
+      return;
+    }
+    
     if (cargasInicialesRef.current) return;
     cargasInicialesRef.current = true;
     
-    // Cargar datos con delay para evitar sobrecarga inicial y mejorar rendimiento
+    // 🔥 CRÍTICO: Esperar más tiempo después del login antes de cargar datos
+    // Esto asegura que el token esté completamente propagado y la sesión establecida
     setTimeout(() => {
-      cargarProductos();
-      cargarInventario();
-      cargarDevoluciones();
-      cargarDiasCerrados();
-      cargarFecha();
+      try {
+        cargarProductos();
+        cargarInventario();
+        cargarDevoluciones();
+        cargarDiasCerrados();
+        cargarFecha();
+      } catch (err) {
+        console.error("Error cargando datos iniciales:", err);
+        // NO cerrar sesión por errores de carga de datos
+      }
+      
       // Cargar personalización con más delay para evitar conflictos
       setTimeout(() => {
-        cargarPersonalizacion();
-      }, 500);
-    }, 500); // Aumentar delay a 500ms para mejor rendimiento
+        try {
+          cargarPersonalizacion();
+        } catch (err) {
+          console.error("Error cargando personalización inicial:", err);
+          // NO cerrar sesión por errores de personalización
+        }
+      }, 1000);
+    }, 2500); // Esperar 2.5 segundos después del login para asegurar que la sesión esté establecida
   }, [user]);
 
   const cargarPersonalizacion = useCallback(async () => {
@@ -936,7 +1400,6 @@ function App() {
           link.href = faviconUrl;
           link.onerror = () => {
             // Si falla, intentar con rutas estáticas directas
-            console.warn("⚠️ Favicon no encontrado en ruta GET, intentando rutas estáticas...");
             posiblesExtensiones.forEach((ext, index) => {
               const fallbackLink = document.createElement("link");
               fallbackLink.rel = index === 0 ? "icon" : "alternate icon";
@@ -959,7 +1422,6 @@ function App() {
           appleLink.href = faviconUrl;
           document.head.appendChild(appleLink);
           
-          console.log(`✅ Favicon cargado desde: ${faviconUrl}`);
         } else {
           document.querySelectorAll("link[rel='icon'], link[rel='shortcut icon'], link[rel='apple-touch-icon']").forEach(el => {
             if (el.href.includes('personalizacion')) {
@@ -1075,17 +1537,34 @@ function App() {
   }, []);
 
   useEffect(() => {
-    // Guardar referencias para usar en los listeners de socket
-    const currentUser = user;
-    const currentAuthFetch = authFetch;
+    // 🔥 CRÍTICO: Solo configurar socket listeners si hay usuario
+    // Esto evita errores que puedan causar el cierre de la app
+    if (!user) {
+      return;
+    }
+    
+    // Esperar un momento después del login antes de configurar socket listeners
+    const setupSocketListeners = async () => {
+      try {
+        // Esperar 2 segundos para asegurar que la sesión esté completamente establecida
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        // Verificar que aún hay usuario después del delay
+        if (!user) {
+          return;
+        }
+        
+        // Guardar referencias para usar en los listeners de socket
+        const currentUser = user;
+        const currentAuthFetch = authFetch;
 
-    socket.on("productos_actualizados", (data) => {
-      if (Array.isArray(data) && data.length > 0) {
-        setProductos(data);
-      } else {
-        if (cargarProductosRef.current) cargarProductosRef.current();
-      }
-    });
+        socket.on("productos_actualizados", (data) => {
+          if (Array.isArray(data) && data.length > 0) {
+            setProductos(data);
+          } else {
+            if (cargarProductosRef.current) cargarProductosRef.current();
+          }
+        });
 
     socket.on("picking_actualizado", () => {
       if (cargarProductosRef.current) cargarProductosRef.current();
@@ -1165,7 +1644,6 @@ function App() {
     socket.on("tema_personal_actualizado", async (data) => {
       // Solo aplicar si es para el usuario actual
       if (data && data.userId && currentUser && currentUser.id && data.userId === currentUser.id) {
-        console.log("🎨 Tema personal actualizado desde otro dispositivo:", data.tema);
         try {
           // Recargar el tema personal desde el servidor
           const SERVER_URL = getServerUrl();
@@ -1177,7 +1655,6 @@ function App() {
             aplicarTema(temaData.tema);
             localStorage.setItem(`tema-personal-${currentUser.id}`, temaData.tema);
             localStorage.setItem("tema-actual", temaData.tema);
-            console.log("✅ Tema personal aplicado automáticamente:", temaData.tema);
           } else {
             // Si se eliminó el tema personal, usar el tema global
             const dataGlobal = await currentAuthFetch(`${SERVER_URL}/admin/personalizacion`);
@@ -1186,7 +1663,6 @@ function App() {
             aplicarTema(temaAAplicar);
             localStorage.removeItem(`tema-personal-${currentUser.id}`);
             localStorage.setItem("tema-actual", temaAAplicar);
-            console.log("✅ Tema personal eliminado, aplicando tema global:", temaAAplicar);
           }
         } catch (err) {
           console.error("Error recargando tema personal:", err);
@@ -1197,7 +1673,6 @@ function App() {
     // Escuchar cambios en el tema global (predeterminado) desde administrador
     socket.on("tema_global_actualizado", async (data) => {
       if (data && data.tema) {
-        console.log("🎨 Tema global actualizado desde administrador:", data.tema);
         try {
           // Solo aplicar si el usuario NO tiene tema personal
           if (currentUser && currentUser.id) {
@@ -1209,16 +1684,13 @@ function App() {
               const { aplicarTema } = await import("./utils/temas");
               aplicarTema(data.tema);
               localStorage.setItem("tema-actual", data.tema);
-              console.log("✅ Tema global aplicado automáticamente:", data.tema);
             } else {
-              console.log("ℹ️ Usuario tiene tema personal, no se aplica tema global");
             }
           } else {
             // Si no hay usuario, aplicar directamente
             const { aplicarTema } = await import("./utils/temas");
             aplicarTema(data.tema);
             localStorage.setItem("tema-actual", data.tema);
-            console.log("✅ Tema global aplicado automáticamente:", data.tema);
           }
         } catch (err) {
           console.error("Error aplicando tema global:", err);
@@ -1226,7 +1698,21 @@ function App() {
       }
     });
 
-    return () => socket.removeAllListeners();
+      } catch (err) {
+        console.error("Error configurando socket listeners:", err);
+        // NO cerrar sesión por errores de socket
+      }
+    };
+    
+    setupSocketListeners();
+    
+    return () => {
+      try {
+        socket.removeAllListeners();
+      } catch (cleanupErr) {
+        // Ignorar errores de cleanup
+      }
+    };
   }, [user, authFetch, perms, SERVER_URL]);
 
   const inputFechaRef = useRef(null);
@@ -1652,31 +2138,48 @@ function App() {
         }}
       >
 
-      {personalizacion.mensajeBienvenida && (
-        <div 
-          className="mensaje-bienvenida"
-          id="mensaje-bienvenida-editable"
-          style={{
-            width: typeof personalizacion.mensajeBienvenidaAncho === 'number' 
-              ? `${personalizacion.mensajeBienvenidaAncho}px` 
-              : personalizacion.mensajeBienvenidaAncho || "500px",
-            height: personalizacion.mensajeBienvenidaAlto === "auto" 
-              ? "auto" 
-              : typeof personalizacion.mensajeBienvenidaAlto === 'number'
-              ? `${personalizacion.mensajeBienvenidaAlto}px`
-              : personalizacion.mensajeBienvenidaAlto || "auto",
-            transform: `translate(${personalizacion.mensajeBienvenidaPosX || 0}px, ${personalizacion.mensajeBienvenidaPosY || 0}px)`,
-            fontSize: `${personalizacion.mensajeBienvenidaTamañoFuente || 0.7}rem`,
-            textAlign: personalizacion.mensajeBienvenidaAlineacionTexto || "center",
-            display: 'flex',
-            alignItems: personalizacion.mensajeBienvenidaAlineacionVertical || "center",
-            justifyContent: personalizacion.mensajeBienvenidaAlineacionTexto === "left" ? "flex-start" : 
-                          personalizacion.mensajeBienvenidaAlineacionTexto === "right" ? "flex-end" : "center",
-            '--mensaje-pos-y': `${personalizacion.mensajeBienvenidaPosY || 0}px`,
-            '--mensaje-font-size': `${personalizacion.mensajeBienvenidaTamañoFuente || 0.7}rem`,
-          }}
-        >
-          {personalizacion.mensajeBienvenida}
+      {/* Barra superior fija */}
+      {activeTab !== "tienda" && (
+        <div className="top-bar">
+          <button className="menu-trigger" onClick={() => setMenuOpen(true)}>
+            ⋮
+          </button>
+          
+          {personalizacion.mensajeBienvenida && (
+            <div 
+              className="mensaje-bienvenida"
+              id="mensaje-bienvenida-editable"
+              style={{
+                width: typeof personalizacion.mensajeBienvenidaAncho === 'number' 
+                  ? `${personalizacion.mensajeBienvenidaAncho}px` 
+                  : personalizacion.mensajeBienvenidaAncho || "500px",
+                height: personalizacion.mensajeBienvenidaAlto === "auto" 
+                  ? "auto" 
+                  : typeof personalizacion.mensajeBienvenidaAlto === 'number'
+                  ? `${personalizacion.mensajeBienvenidaAlto}px`
+                  : personalizacion.mensajeBienvenidaAlto || "auto",
+                transform: `translate(${personalizacion.mensajeBienvenidaPosX || 0}px, ${personalizacion.mensajeBienvenidaPosY || 0}px)`,
+                fontSize: `${personalizacion.mensajeBienvenidaTamañoFuente || 0.7}rem`,
+                textAlign: personalizacion.mensajeBienvenidaAlineacionTexto || "center",
+                display: 'flex',
+                alignItems: personalizacion.mensajeBienvenidaAlineacionVertical || "center",
+                justifyContent: personalizacion.mensajeBienvenidaAlineacionTexto === "left" ? "flex-start" : 
+                              personalizacion.mensajeBienvenidaAlineacionTexto === "right" ? "flex-end" : "center",
+                '--mensaje-pos-y': `${personalizacion.mensajeBienvenidaPosY || 0}px`,
+                '--mensaje-font-size': `${personalizacion.mensajeBienvenidaTamañoFuente || 0.7}rem`,
+              }}
+            >
+              {personalizacion.mensajeBienvenida}
+            </div>
+          )}
+          
+          <WidgetsMenu 
+            serverUrl={SERVER_URL} 
+            pushToast={pushToast} 
+            socket={socket}
+            user={user}
+            inTopBar={true}
+          />
         </div>
       )}
 
@@ -1803,10 +2306,6 @@ function App() {
         />
       )}
 
-      {activeTab === "auditoria" && can("tab:auditoria") && (
-        <Auditoria SERVER_URL={SERVER_URL} />
-      )}
-
       {activeTab === "inventario" && can("tab:inventario") && (
         <Inventario
           SERVER_URL={SERVER_URL}
@@ -1828,6 +2327,7 @@ function App() {
           setLotesCache={setLotesCache}
           inventario={inventario}
           setInventario={setInventario}
+          socket={socket}
         />
       )}
 
@@ -1843,56 +2343,56 @@ function App() {
       )}
 
       {activeTab === "reenvios" && can("tab:reenvios") && (
-        <Reenvios serverUrl={SERVER_URL} pushToast={pushToast} fecha={fecha} />
+        <Reenvios serverUrl={SERVER_URL} pushToast={pushToast} fecha={fecha} socket={socket} />
       )}
 
       {activeTab === "rep_devol" && can("tab:rep_devol") && (
-        <ReportesDevoluciones serverUrl={SERVER_URL} pushToast={pushToast} />
+        <ReportesDevoluciones serverUrl={SERVER_URL} pushToast={pushToast} socket={socket} />
       )}
 
       {activeTab === "rep_reenvios" && can("tab:rep_reenvios") && (
-        <ReportesReenvios serverUrl={SERVER_URL} pushToast={pushToast} />
+        <ReportesReenvios serverUrl={SERVER_URL} pushToast={pushToast} socket={socket} />
       )}
 
       {activeTab === "admin" && can("tab:admin") && (
-        <Administrador serverUrl={SERVER_URL} pushToast={pushToast} />
+        <Administrador serverUrl={SERVER_URL} pushToast={pushToast} socket={socket} />
       )}
 
       {activeTab === "ixora_ia" && can("tab:ixora_ia") && (
-        <IxoraIA serverUrl={SERVER_URL} pushToast={pushToast} />
+        <IxoraIA serverUrl={SERVER_URL} pushToast={pushToast} socket={socket} />
       )}
 
 
       {activeTab === "tienda" && (
-        <Tienda />
+        <Tienda socket={socket} />
       )}
 
       {activeTab === "activos" && can("tab:activos") && (
-        <ActivosInformaticos serverUrl={SERVER_URL} />
+        <ActivosInformaticos serverUrl={SERVER_URL} socket={socket} />
       )}
 
       {activeTab === "activaciones" && can("tab:activaciones") && (
-        <Activaciones SERVER_URL={SERVER_URL} />
+        <Activaciones SERVER_URL={SERVER_URL} socket={socket} />
       )}
 
       {activeTab === "rep_activaciones" && can("tab:rep_activaciones") && (
-        <ReportesActivaciones SERVER_URL={SERVER_URL} />
+        <ReportesActivaciones SERVER_URL={SERVER_URL} socket={socket} />
       )}
 
-      {activeTab !== "tienda" && (
-        <>
-          <button className="menu-trigger" onClick={() => setMenuOpen(true)}>
-            ⋮
-          </button>
-        </>
+      {activeTab === "auditoria" && can("tab:auditoria") && (
+        <Auditoria SERVER_URL={SERVER_URL} socket={socket} />
+      )}
+
+
+      {menuOpen && (
+        <div 
+          className={`menu-overlay ${menuClosing ? 'closing' : ''}`}
+          onClick={cerrarMenu}
+        ></div>
       )}
 
       {menuOpen && (
-        <div className="menu-overlay" onClick={() => setMenuOpen(false)}></div>
-      )}
-
-      {menuOpen && (
-        <div className="menu-panel">
+        <div className={`menu-panel ${menuClosing ? 'closing' : ''}`}>
           <button
             className="menu-trigger-inside"
             onClick={() => setMenuOpen(false)}
@@ -1968,7 +2468,7 @@ function App() {
                       onClick={(e) => {
                         e.preventDefault();
                         cambiarModulo("escaneo");
-                        setMenuOpen(false);
+                        cerrarMenu();
                       }}
                     >
                       <span className="menu-icon">🔎</span>
@@ -1984,7 +2484,7 @@ function App() {
                       onClick={(e) => {
                         e.preventDefault();
                         cambiarModulo("escaneo_retail");
-                        setMenuOpen(false);
+                        cerrarMenu();
                       }}
                     >
                       <span className="menu-icon">🛍️</span>
@@ -2000,7 +2500,7 @@ function App() {
                       onClick={(e) => {
                         e.preventDefault();
                         cambiarModulo("escaneo_fulfillment");
-                        setMenuOpen(false);
+                        cerrarMenu();
                       }}
                     >
                       <span className="menu-icon">📦</span>
@@ -2034,7 +2534,7 @@ function App() {
                       onClick={(e) => {
                         e.preventDefault();
                         cambiarModulo("devoluciones");
-                        setMenuOpen(false);
+                        cerrarMenu();
                       }}
                     >
                       <span className="menu-icon">🚚</span>
@@ -2051,7 +2551,7 @@ function App() {
                       onClick={(e) => {
                         e.preventDefault();
                         cambiarModulo("reenvios");
-                        setMenuOpen(false);
+                        cerrarMenu();
                       }}
                     >
                       <span className="menu-icon">📨</span>
@@ -2085,7 +2585,7 @@ function App() {
                       onClick={(e) => {
                         e.preventDefault();
                         cambiarModulo("reportes");
-                        setMenuOpen(false);
+                        cerrarMenu();
                       }}
                     >
                       <span className="menu-icon">📝</span>
@@ -2102,7 +2602,7 @@ function App() {
                       onClick={(e) => {
                         e.preventDefault();
                         cambiarModulo("rep_devol");
-                        setMenuOpen(false);
+                        cerrarMenu();
                       }}
                     >
                       <span className="menu-icon">📝</span>
@@ -2119,7 +2619,7 @@ function App() {
                       onClick={(e) => {
                         e.preventDefault();
                         cambiarModulo("rep_reenvios");
-                        setMenuOpen(false);
+                        cerrarMenu();
                       }}
                     >
                       <span className="menu-icon">📝</span>
@@ -2136,7 +2636,7 @@ function App() {
                       onClick={(e) => {
                         e.preventDefault();
                         cambiarModulo("rep_activaciones");
-                        setMenuOpen(false);
+                        cerrarMenu();
                       }}
                     >
                       <span className="menu-icon">📝</span>
@@ -2170,7 +2670,7 @@ function App() {
                       onClick={(e) => {
                         e.preventDefault();
                         cambiarModulo("inventario");
-                        setMenuOpen(false);
+                        cerrarMenu();
                       }}
                     >
                       <span className="menu-icon">📋</span>
@@ -2186,7 +2686,7 @@ function App() {
                       onClick={(e) => {
                         e.preventDefault();
                         cambiarModulo("activaciones");
-                        setMenuOpen(false);
+                        cerrarMenu();
                       }}
                     >
                       <span className="menu-icon">⚡</span>
@@ -2202,7 +2702,7 @@ function App() {
                       onClick={(e) => {
                         e.preventDefault();
                         cambiarModulo("auditoria");
-                        setMenuOpen(false);
+                        cerrarMenu();
                       }}
                     >
                       <span className="menu-icon">🔍</span>
@@ -2216,7 +2716,7 @@ function App() {
                       onClick={(e) => {
                         e.preventDefault();
                         cambiarModulo("activos");
-                        setMenuOpen(false);
+                        cerrarMenu();
                       }}
                     >
                       <span className="menu-icon">💻</span>
@@ -2249,7 +2749,7 @@ function App() {
                       onClick={(e) => {
                         e.preventDefault();
                         cambiarModulo("tienda");
-                        setMenuOpen(false);
+                        cerrarMenu();
                       }}
                     >
                       <span className="menu-icon">🛍️</span>
@@ -2282,7 +2782,7 @@ function App() {
                       onClick={(e) => {
                         e.preventDefault();
                         cambiarModulo("ixora_ia");
-                        setMenuOpen(false);
+                        cerrarMenu();
                       }}
                     >
                       <span className="menu-icon">✨</span>
@@ -2299,7 +2799,7 @@ function App() {
                       onClick={(e) => {
                         e.preventDefault();
                         cambiarModulo("admin");
-                        setMenuOpen(false);
+                        cerrarMenu();
                       }}
                     >
                       <span className="menu-icon">👑</span>
@@ -2436,9 +2936,9 @@ function App() {
               </div>
               <p className="alert-modal-message">
                 {fechaPendiente && fechaPendiente !== ""
-                  ? `Se requiere contraseña de administrador para cambiar la fecha a: ${fechaPendiente ? formatearFechaCompleta(fechaPendiente) : ''}`
+                  ? `Se requiere contraseña de administrador para cambiar la fecha a: ${fechaPendiente ? (formatearFechaCompleta(fechaPendiente) || fechaPendiente) : ''}`
                   : fecha
-                    ? `Se requiere contraseña de administrador para eliminar la fecha actual: ${formatearFechaCompleta(fecha)}`
+                    ? `Se requiere contraseña de administrador para eliminar la fecha actual: ${(formatearFechaCompleta(fecha) || fecha)}`
                     : "Se requiere contraseña de administrador para establecer una nueva fecha"}
               </p>
               <input
@@ -2497,6 +2997,7 @@ function App() {
             pushToast={pushToast} 
             socket={socket}
             user={user}
+            inTopBar={false}
           />
         </>
       )}
@@ -2506,6 +3007,9 @@ function App() {
 }
 
 export default function Wrapper() {
+  useEffect(() => {
+    activarContextoEnPrimeraInteraccion();
+  }, []);
   return (
       <AlertModalProvider>
       <AuthProvider>

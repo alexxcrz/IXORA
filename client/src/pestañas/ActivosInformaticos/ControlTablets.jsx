@@ -51,6 +51,7 @@ export default function ControlTablets({ serverUrl }) {
   const [draggedIndex, setDraggedIndex] = useState(null);
   const [dragOverIndex, setDragOverIndex] = useState(null);
   const [menuAbierto, setMenuAbierto] = useState(false);
+  const [busqueda, setBusqueda] = useState("");
 
   // Cargar datos
   const cargar = async () => {
@@ -255,8 +256,21 @@ export default function ControlTablets({ serverUrl }) {
     }
   };
 
+  // Filtrar y ordenar tablets
+  const tabletsFiltrados = busqueda.trim()
+    ? tablets.filter((tablet) => {
+        const busquedaLower = busqueda.toLowerCase();
+        const tab = (tablet.tab || "").toLowerCase();
+        const responsable = (tablet.responsable || "").toLowerCase();
+        const area = (tablet.area || "").toLowerCase();
+        return tab.includes(busquedaLower) || 
+               responsable.includes(busquedaLower) || 
+               area.includes(busquedaLower);
+      })
+    : tablets;
+
   // Ordenar tablets
-  const tabletsOrdenados = [...tablets].sort((a, b) => {
+  const tabletsOrdenados = [...tabletsFiltrados].sort((a, b) => {
     if (a.orden !== undefined && b.orden !== undefined) {
       return a.orden - b.orden;
     }
@@ -759,6 +773,27 @@ export default function ControlTablets({ serverUrl }) {
         </div>
       </div>
 
+      {/* Buscador */}
+      <div style={{ marginBottom: "20px", padding: "0 20px" }}>
+        <input
+          type="text"
+          placeholder="🔍 Buscar por TAB, responsable o área..."
+          value={busqueda}
+          onChange={(e) => setBusqueda(e.target.value)}
+          style={{
+            width: "100%",
+            padding: "12px 16px",
+            fontSize: "16px",
+            border: "2px solid #e5e7eb",
+            borderRadius: "8px",
+            outline: "none",
+            transition: "border-color 0.2s",
+          }}
+          onFocus={(e) => e.target.style.borderColor = "#0d9488"}
+          onBlur={(e) => e.target.style.borderColor = "#e5e7eb"}
+        />
+      </div>
+
       <div className="activos-tabla-container" style={{ overflowX: "auto" }}>
         <table className="activos-tabla" style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.9rem" }}>
           <thead>
@@ -896,7 +931,7 @@ export default function ControlTablets({ serverUrl }) {
       {/* Modal para Tablet */}
       {modalAbierto && (
         <div className="modal-overlay" onClick={() => setModalAbierto(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
+          <div className="modal modal-lg" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3>{editarId ? "Editar Tablet" : "Nueva Tablet"}</h3>
               <button
@@ -1088,7 +1123,7 @@ export default function ControlTablets({ serverUrl }) {
       {/* Modal Importar */}
       {showModalImportar && (
         <div className="modal-overlay" onClick={() => setShowModalImportar(false)}>
-          <div className="modal modal-importar" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "800px", width: "90%" }}>
+          <div className="modal modal-importar" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3>Importar Tablets desde Excel</h3>
               <button className="modal-close" onClick={() => setShowModalImportar(false)}>

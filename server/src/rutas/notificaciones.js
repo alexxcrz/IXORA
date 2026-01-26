@@ -15,6 +15,21 @@ const obtenerNombreUsuario = (userId) => {
   return usuarioData.nickname || usuarioData.name || null;
 };
 
+const mensajeSigueConPrioridad = (d) => {
+  if (!d || d.prioridad !== 1 || d.mensaje_id == null || !d.chatType) return false;
+  let tabla;
+  if (d.chatType === "general") tabla = "chat_general";
+  else if (d.chatType === "privado") tabla = "chat_privado";
+  else if (d.chatType === "grupal") tabla = "chat_grupal";
+  else return false;
+  try {
+    const row = dbChat.prepare(`SELECT prioridad FROM ${tabla} WHERE id = ?`).get(d.mensaje_id);
+    return row?.prioridad === 1;
+  } catch {
+    return false;
+  }
+};
+
 const router = express.Router();
 
 // GET: Obtener todas las notificaciones del usuario (no leídas primero)
@@ -92,6 +107,25 @@ router.post("/", authRequired, (req, res) => {
     const notificationId = result.lastInsertRowid;
 
     try {
+      const io = getIO();
+      if (io && typeof io.emit === "function") {
+        io.emit("nueva_notificacion", {
+          userId: userId,
+          usuario_id: userId,
+          id: notificationId,
+          titulo: titulo,
+          mensaje: mensaje,
+          tipo: tipo || "info",
+          admin_only: admin_only || false,
+          data: data || null,
+          timestamp: new Date().toISOString(),
+        });
+      }
+    } catch (socketErr) {
+      console.warn("Error emitiendo notificación por socket:", socketErr?.message);
+    }
+
+    try {
       const tokens = dbUsers
         .prepare("SELECT token FROM push_tokens WHERE usuario_id = ?")
         .all(userId)
@@ -164,15 +198,26 @@ router.put("/:id/leida", authRequired, (req, res) => {
   try {
     const userId = req.user.id;
     const { id } = req.params;
+    const idNum = Number(id);
     
     const result = dbUsers.prepare(`
       UPDATE notificaciones 
       SET leida = 1 
       WHERE id = ? AND usuario_id = ?
-    `).run(id, userId);
+    `).run(idNum, userId);
     
     if (result.changes === 0) {
       return res.status(404).json({ error: "Notificación no encontrada" });
+    }
+
+    try {
+      getIO().emit("notificacion_leida", {
+        userId,
+        id: idNum,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (e) {
+      /* ignorar errores de socket */
     }
     
     res.json({ ok: true, message: "Notificación marcada como leída" });
@@ -203,7 +248,19 @@ router.delete("/:id", authRequired, (req, res) => {
       console.log(`⚠️ Notificación ${id} no encontrada para usuario ${userId}`);
       return res.status(404).json({ error: "Notificación no encontrada" });
     }
-    
+
+    let dataParsed = null;
+    try {
+      dataParsed = notificacion.data ? JSON.parse(notificacion.data) : null;
+    } catch (_) {}
+    if (dataParsed?.prioridad === 1 && dataParsed?.mensaje_id != null && dataParsed?.chatType) {
+      if (mensajeSigueConPrioridad(dataParsed)) {
+        return res.status(403).json({
+          error: "No se puede eliminar hasta que se quite la prioridad al mensaje",
+        });
+      }
+    }
+
     const result = dbUsers.prepare(`
       DELETE FROM notificaciones 
       WHERE id = ? AND usuario_id = ?
@@ -222,23 +279,30 @@ router.delete("/:id", authRequired, (req, res) => {
   }
 });
 
-// DELETE: Eliminar todas las notificaciones (excepto confirmaciones activas)
+// DELETE: Eliminar todas las notificaciones (excepto confirmaciones activas y prioritarias con mensaje aún prioritario)
 router.delete("/", authRequired, (req, res) => {
   try {
     const userId = req.user.id;
-    
-    // Eliminar todas las notificaciones excepto las de confirmación no leídas
-    const result = dbUsers.prepare(`
-      DELETE FROM notificaciones 
-      WHERE usuario_id = ? 
-      AND NOT (es_confirmacion = 1 AND leida = 0)
-    `).run(userId);
-    
-    res.json({ 
-      ok: true, 
-      message: `${result.changes} notificaciones eliminadas`,
-      eliminadas: result.changes
-    });
+    const todas = dbUsers.prepare(`
+      SELECT id, data, es_confirmacion, leida FROM notificaciones WHERE usuario_id = ?
+    `).all(userId);
+    const aEliminar = [];
+    for (const n of todas) {
+      if (n.es_confirmacion === 1 && n.leida === 0) continue;
+      let d = null;
+      try {
+        d = n.data ? JSON.parse(n.data) : null;
+      } catch (_) {}
+      if (d?.prioridad === 1 && d?.mensaje_id != null && d?.chatType && mensajeSigueConPrioridad(d)) continue;
+      aEliminar.push(n.id);
+    }
+    let cambios = 0;
+    const del = dbUsers.prepare("DELETE FROM notificaciones WHERE id = ? AND usuario_id = ?");
+    for (const id of aEliminar) {
+      const r = del.run(id, userId);
+      if (r.changes) cambios += r.changes;
+    }
+    res.json({ ok: true, message: `${cambios} notificaciones eliminadas`, eliminadas: cambios });
   } catch (err) {
     console.error("Error eliminando notificaciones:", err);
     res.status(500).json({ error: "Error eliminando notificaciones" });

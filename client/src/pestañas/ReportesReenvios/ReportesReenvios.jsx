@@ -4,7 +4,7 @@ import { authFetch } from "../../AuthContext";
 import { useAlert } from "../../components/AlertModal";
 import { getServerUrl } from "../../config/server";
 
-export default function ReportesReenvios({ serverUrl, SERVER_URL }) {
+export default function ReportesReenvios({ serverUrl, SERVER_URL, socket }) {
   const SERVER = serverUrl || SERVER_URL || getServerUrl();
   const { showAlert, showConfirm } = useAlert();
   const [meses, setMeses] = useState({});
@@ -32,20 +32,6 @@ export default function ReportesReenvios({ serverUrl, SERVER_URL }) {
     try {
       setLoading(true);
       const data = await authFetch(`${SERVER}/reenvios/reportes`);
-      console.log("📊 Datos recibidos del servidor:", data);
-      
-      // Debug: verificar estructura de datos
-      if (data && typeof data === 'object') {
-        const primerMes = Object.keys(data)[0];
-        if (primerMes && data[primerMes] && Array.isArray(data[primerMes]) && data[primerMes].length > 0) {
-          const primerDia = data[primerMes][0];
-          console.log("📋 Ejemplo de datos del primer día:", primerDia);
-          console.log("   - fedex:", primerDia.fedex);
-          console.log("   - dhl:", primerDia.dhl);
-          console.log("   - estafeta:", primerDia.estafeta);
-        }
-      }
-      
       setMeses(data || {});
       // No abrir automáticamente ningún mes
     } catch (err) {
@@ -63,12 +49,9 @@ export default function ReportesReenvios({ serverUrl, SERVER_URL }) {
   // ESCUCHAR EVENTOS DE SOCKET PARA ACTUALIZACIÓN AUTOMÁTICA
   // ==========================================================
   useEffect(() => {
-    // eslint-disable-next-line no-undef
-    const socket = typeof window !== 'undefined' ? window.socket : null;
     if (!socket) return;
 
     const handleReenviosActualizados = () => {
-      console.log("📡 Evento reenvios_actualizados recibido en reportes, recargando...");
       // Pequeño delay para asegurar que el servidor haya completado la transacción
       setTimeout(() => {
         cargarReportes();
@@ -76,7 +59,6 @@ export default function ReportesReenvios({ serverUrl, SERVER_URL }) {
     };
 
     const handleReportesActualizados = () => {
-      console.log("📡 Evento reportes_actualizados recibido, recargando...");
       setTimeout(() => {
         cargarReportes();
       }, 200);
@@ -89,7 +71,7 @@ export default function ReportesReenvios({ serverUrl, SERVER_URL }) {
       socket.off("reenvios_actualizados", handleReenviosActualizados);
       socket.off("reportes_actualizados", handleReportesActualizados);
     };
-  }, [SERVER]);
+  }, [socket, SERVER]);
 
   const listaMeses = useMemo(
     () => Object.keys(meses || {}).sort().reverse(),

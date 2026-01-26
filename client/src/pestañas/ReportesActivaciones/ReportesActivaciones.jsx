@@ -3,7 +3,7 @@ import "./ReportesActivaciones.css";
 import { useAuth } from "../../AuthContext";
 import { useAlert } from "../../components/AlertModal";
 
-export default function ReportesActivaciones({ SERVER_URL }) {
+export default function ReportesActivaciones({ SERVER_URL, socket }) {
   const { authFetch } = useAuth();
   const { showAlert, showConfirm } = useAlert();
 
@@ -38,18 +38,20 @@ export default function ReportesActivaciones({ SERVER_URL }) {
 
   // Socket para tiempo real
   useEffect(() => {
-    const socket = window.socket;
+    if (!socket) return;
 
     const handleActualizacion = () => {
       cargarDias();
     };
 
     socket.on("reportes_activaciones_actualizados", handleActualizacion);
+    socket.on("activaciones_actualizadas", handleActualizacion); // También escuchar cuando se actualizan activaciones
 
     return () => {
       socket.off("reportes_activaciones_actualizados", handleActualizacion);
+      socket.off("activaciones_actualizadas", handleActualizacion);
     };
-  }, [SERVER_URL, cargarDias]);
+  }, [socket, SERVER_URL, cargarDias]);
 
   // Agrupar días por mes
   const diasPorMes = useMemo(() => {

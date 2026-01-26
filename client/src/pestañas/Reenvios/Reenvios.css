@@ -824,6 +824,114 @@
   flex-direction: column;
 }
 
+/* Sistema de tamaños proporcionales para modales de Reenvios */
+.modal {
+  background: var(--fondo-card);
+  border-radius: 12px;
+  box-shadow: var(--sombra-xl);
+  border: 1px solid var(--borde-sutil);
+  color: var(--texto-principal);
+  display: flex;
+  flex-direction: column;
+  max-height: 90vh;
+  overflow: hidden;
+  margin: auto;
+  position: relative;
+}
+
+.modal.modal-sm {
+  max-width: 400px;
+  width: calc(100% - 40px);
+}
+
+.modal.modal-md {
+  max-width: 500px;
+  width: calc(100% - 40px);
+}
+
+.modal.modal-lg {
+  max-width: 700px;
+  width: calc(100% - 40px);
+}
+
+.modal.modal-qr {
+  max-width: 550px;
+  width: calc(100% - 40px);
+}
+
+.modal:not(.modal-sm):not(.modal-md):not(.modal-lg):not(.modal-xl):not(.modal-qr):not(.edit-modal) {
+  max-width: 500px;
+  width: calc(100% - 40px);
+}
+
+/* Responsive para móviles */
+@media (max-width: 768px) {
+  .modal-overlay,
+  .edit-modal-overlay {
+    padding: 10px !important;
+  }
+
+  .modal {
+    max-width: calc(100% - 20px) !important;
+    width: calc(100% - 20px) !important;
+    max-height: calc(100vh - 20px) !important;
+  }
+
+  .modal.modal-sm,
+  .modal.modal-md,
+  .modal.modal-lg,
+  .modal.modal-qr,
+  .edit-modal {
+    max-width: calc(100% - 20px) !important;
+    width: calc(100% - 20px) !important;
+  }
+
+  .modal-header {
+    padding: 12px 16px !important;
+  }
+
+  .modal-header h3 {
+    font-size: 1.1rem !important;
+  }
+
+  .modal-body {
+    padding: 16px !important;
+  }
+
+  .modal-body label {
+    font-size: 0.85rem !important;
+    margin-bottom: 4px !important;
+  }
+
+  .modal-body input,
+  .modal-body textarea,
+  .modal-body select {
+    padding: 8px 12px !important;
+    font-size: 0.9rem !important;
+    margin-bottom: 12px !important;
+  }
+
+  .modal-actions {
+    padding: 12px 16px !important;
+    gap: 8px !important;
+    flex-wrap: wrap;
+  }
+
+  .modal-actions .btn,
+  .modal-actions button {
+    padding: 10px 16px !important;
+    font-size: 0.9rem !important;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .modal-close {
+    width: 28px !important;
+    height: 28px !important;
+    font-size: 1.5rem !important;
+  }
+}
+
 /* Ocultar mensaje de bienvenida cuando el modal de edición está abierto */
 .edit-modal-overlay ~ .mensaje-bienvenida,
 body:has(.edit-modal-overlay) .mensaje-bienvenida,

@@ -10,28 +10,109 @@ const router = express.Router();
 
 router.get("/reportes/dias", (req, res) => {
   const canal = (req.query?.canal || "").toString().trim().toLowerCase();
+  
+  // Expresión para calcular piezas: usar piezas si existe y es > 0, sino calcular cajas * piezas_por_caja + extras
+  const calcPiezas = `COALESCE(
+    NULLIF(h.piezas, 0),
+    (COALESCE(h.cajas, 0) * COALESCE(h.piezas_por_caja, 0) + COALESCE(h.extras, 0))
+  )`;
+  
   if (canal && canal !== "all") {
-    const rows = dbHist.prepare(`
-      SELECT fecha,
-             COUNT(*) AS total_productos,
-             SUM(COALESCE(piezas,0)) AS total_piezas
-      FROM productos_historico
-      WHERE COALESCE(canal, 'picking') = ?
+    // Consulta con desglose por tipo cuando hay filtro de canal
+    const query = `
+      SELECT 
+        fecha,
+        COUNT(*) AS total_productos,
+        SUM(${calcPiezas}) AS total_piezas,
+        -- Picking (canal picking y no importación)
+        SUM(CASE 
+          WHEN COALESCE(h.canal, 'picking') = 'picking' 
+            AND (COALESCE(r.categoria, '') NOT LIKE '%import%' AND COALESCE(r.categoria, '') NOT LIKE '%importación%')
+            AND COALESCE(h.origen, 'normal') != 'devoluciones'
+          THEN 1 ELSE 0 
+        END) AS total_productos_picking,
+        SUM(CASE 
+          WHEN COALESCE(h.canal, 'picking') = 'picking' 
+            AND (COALESCE(r.categoria, '') NOT LIKE '%import%' AND COALESCE(r.categoria, '') NOT LIKE '%importación%')
+            AND COALESCE(h.origen, 'normal') != 'devoluciones'
+          THEN ${calcPiezas} ELSE 0 
+        END) AS total_piezas_picking,
+        -- Importación
+        SUM(CASE 
+          WHEN (COALESCE(r.categoria, '') LIKE '%import%' OR COALESCE(r.categoria, '') LIKE '%importación%')
+            AND COALESCE(h.origen, 'normal') != 'devoluciones'
+          THEN 1 ELSE 0 
+        END) AS total_productos_importacion,
+        SUM(CASE 
+          WHEN (COALESCE(r.categoria, '') LIKE '%import%' OR COALESCE(r.categoria, '') LIKE '%importación%')
+            AND COALESCE(h.origen, 'normal') != 'devoluciones'
+          THEN ${calcPiezas} ELSE 0 
+        END) AS total_piezas_importacion,
+        -- Devoluciones
+        SUM(CASE 
+          WHEN COALESCE(h.origen, 'normal') = 'devoluciones'
+          THEN 1 ELSE 0 
+        END) AS total_productos_devoluciones,
+        SUM(CASE 
+          WHEN COALESCE(h.origen, 'normal') = 'devoluciones'
+          THEN ${calcPiezas} ELSE 0 
+        END) AS total_piezas_devoluciones
+      FROM productos_historico h
+      LEFT JOIN productos_ref r ON r.codigo = h.codigo
+      WHERE COALESCE(h.canal, 'picking') = ?
       GROUP BY fecha
       ORDER BY fecha ASC
-    `).all(canal);
+    `;
+    const rows = dbHist.prepare(query).all(canal);
     res.json(rows);
     return;
   }
 
-  const rows = dbHist.prepare(`
-    SELECT fecha,
-           COUNT(*) AS total_productos,
-           SUM(COALESCE(piezas,0)) AS total_piezas
-    FROM productos_historico
+  // Consulta completa con desglose por tipo
+  const query = `
+    SELECT 
+      fecha,
+      COUNT(*) AS total_productos,
+      SUM(${calcPiezas}) AS total_piezas,
+      -- Picking (canal picking y no importación)
+      SUM(CASE 
+        WHEN COALESCE(h.canal, 'picking') = 'picking' 
+          AND (COALESCE(r.categoria, '') NOT LIKE '%import%' AND COALESCE(r.categoria, '') NOT LIKE '%importación%')
+          AND COALESCE(h.origen, 'normal') != 'devoluciones'
+        THEN 1 ELSE 0 
+      END) AS total_productos_picking,
+      SUM(CASE 
+        WHEN COALESCE(h.canal, 'picking') = 'picking' 
+          AND (COALESCE(r.categoria, '') NOT LIKE '%import%' AND COALESCE(r.categoria, '') NOT LIKE '%importación%')
+          AND COALESCE(h.origen, 'normal') != 'devoluciones'
+        THEN ${calcPiezas} ELSE 0 
+      END) AS total_piezas_picking,
+      -- Importación
+      SUM(CASE 
+        WHEN (COALESCE(r.categoria, '') LIKE '%import%' OR COALESCE(r.categoria, '') LIKE '%importación%')
+          AND COALESCE(h.origen, 'normal') != 'devoluciones'
+        THEN 1 ELSE 0 
+      END) AS total_productos_importacion,
+      SUM(CASE 
+        WHEN (COALESCE(r.categoria, '') LIKE '%import%' OR COALESCE(r.categoria, '') LIKE '%importación%')
+          AND COALESCE(h.origen, 'normal') != 'devoluciones'
+        THEN ${calcPiezas} ELSE 0 
+      END) AS total_piezas_importacion,
+      -- Devoluciones
+      SUM(CASE 
+        WHEN COALESCE(h.origen, 'normal') = 'devoluciones'
+        THEN 1 ELSE 0 
+      END) AS total_productos_devoluciones,
+      SUM(CASE 
+        WHEN COALESCE(h.origen, 'normal') = 'devoluciones'
+        THEN ${calcPiezas} ELSE 0 
+      END) AS total_piezas_devoluciones
+    FROM productos_historico h
+    LEFT JOIN productos_ref r ON r.codigo = h.codigo
     GROUP BY fecha
     ORDER BY fecha ASC
-  `).all();
+  `;
+  const rows = dbHist.prepare(query).all();
   res.json(rows);
 });
 

@@ -3,131 +3,71 @@ import './WidgetsMenu.css';
 import ChatPro from './ChatPro';
 import { useNotifications } from './Notifications';
 import { useAuth } from '../AuthContext';
+import { reproducirSonidoIxora } from '../utils/sonidoIxora';
 
-export default function WidgetsMenu({ serverUrl, pushToast, socket, user }) {
+export default function WidgetsMenu({ serverUrl, pushToast, socket, user, inTopBar = false }) {
   const [widgetAbierto, setWidgetAbierto] = useState(null); // 'chat', 'notificaciones'
+  const [solicitudPending, setSolicitudPending] = useState(null); // { grupoId, solicitudId, solicitanteNickname, fecha, groupName }
+  const [mensajePrioritarioPending, setMensajePrioritarioPending] = useState(null); // { chatType, chatTarget, mensaje_id }
   const menuRef = useRef(null);
   const { authFetch } = useAuth();
   const notificationsContext = useNotifications();
   const [chatPrivadosNoLeidos, setChatPrivadosNoLeidos] = useState(0);
   const [chatExtrasNoLeidos, setChatExtrasNoLeidos] = useState(0);
-  const audioContextRef = useRef(null);
+  const [configChat, setConfigChat] = useState(null);
   const refreshPrivadosTimeoutRef = useRef(null);
 
   const notificacionesNoLeidas = notificationsContext?.unreadCount || 0;
   const chatNoLeidosTotal = chatPrivadosNoLeidos + chatExtrasNoLeidos;
-  const hayPendientes = chatNoLeidosTotal > 0 || notificacionesNoLeidas > 0;
+  const [hayPrioritariosPendientes, setHayPrioritariosPendientes] = useState(false);
+  const hayPendientesChat = chatNoLeidosTotal > 0 || hayPrioritariosPendientes;
 
-  const activarAudioContext = useRef(() => {
+  const cargarConfigChat = useCallback(async () => {
+    if (!user || !serverUrl) return;
     try {
-      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-      if (!AudioContextClass) return;
-      
-      if (!audioContextRef.current) {
-        const audioCtx = new AudioContextClass();
-        audioContextRef.current = audioCtx;
-      }
-      
-      if (audioContextRef.current.state === 'suspended') {
-        audioContextRef.current.resume().catch(() => {});
-      }
-    } catch (err) {
-      // Ignorar errores silenciosamente
+      const c = await authFetch(`${serverUrl}/chat/notificaciones/config`);
+      setConfigChat(c || null);
+    } catch {
+      setConfigChat(null);
     }
-  }).current;
-
-  const crearSonidoChat = (audioCtx) => {
-    try {
-      const now = audioCtx.currentTime;
-      const osc1 = audioCtx.createOscillator();
-      const osc2 = audioCtx.createOscillator();
-      const osc3 = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-      
-      osc1.type = "sine";
-      osc2.type = "sine";
-      osc3.type = "sine";
-      
-      osc1.frequency.setValueAtTime(600, now);
-      osc1.frequency.exponentialRampToValueAtTime(800, now + 0.1);
-      
-      osc2.frequency.setValueAtTime(700, now + 0.12);
-      osc2.frequency.exponentialRampToValueAtTime(1000, now + 0.22);
-      
-      osc3.frequency.setValueAtTime(900, now + 0.24);
-      osc3.frequency.exponentialRampToValueAtTime(1200, now + 0.34);
-      
-      gain.gain.setValueAtTime(0.0001, now);
-      gain.gain.linearRampToValueAtTime(0.5, now + 0.05);
-      gain.gain.linearRampToValueAtTime(0.0001, now + 0.1);
-      gain.gain.linearRampToValueAtTime(0.6, now + 0.12);
-      gain.gain.linearRampToValueAtTime(0.0001, now + 0.22);
-      gain.gain.linearRampToValueAtTime(0.7, now + 0.24);
-      gain.gain.linearRampToValueAtTime(0.0001, now + 0.34);
-      
-      osc1.connect(gain);
-      osc2.connect(gain);
-      osc3.connect(gain);
-      gain.connect(audioCtx.destination);
-      
-      osc1.start(now);
-      osc1.stop(now + 0.1);
-      osc2.start(now + 0.12);
-      osc2.stop(now + 0.22);
-      osc3.start(now + 0.24);
-      osc3.stop(now + 0.34);
-    } catch (err) {
-      console.warn("Error creando sonido Chat:", err);
-    }
-  };
-
-  const reproducirSonidoChat = useCallback(() => {
-    try {
-      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-      if (!AudioContextClass) {
-        return;
-      }
-      
-      let audioCtx = audioContextRef.current;
-      if (!audioCtx || audioCtx.state === 'closed') {
-        audioCtx = new AudioContextClass();
-        audioContextRef.current = audioCtx;
-      }
-      
-      if (audioCtx.state === 'suspended') {
-        audioCtx.resume().then(() => {
-          crearSonidoChat(audioCtx);
-        }).catch(() => {
-          try {
-            crearSonidoChat(audioCtx);
-          } catch (_) {}
-        });
-        return;
-      }
-      
-      crearSonidoChat(audioCtx);
-    } catch (err) {
-      // Ignorar errores silenciosamente
-    }
-  }, []);
+  }, [user, serverUrl, authFetch]);
 
   useEffect(() => {
-    let activado = false;
-    const activarEnInteraccion = () => {
-      if (activado) return;
-      activado = true;
-      activarAudioContext();
-    };
-    const eventos = ['click', 'touchstart', 'keydown', 'mousedown'];
-    eventos.forEach(evento => {
-      document.addEventListener(evento, activarEnInteraccion, { once: true, passive: true });
-    });
-    return () => {
-      eventos.forEach(evento => {
-        document.removeEventListener(evento, activarEnInteraccion);
-      });
-    };
-  }, [activarAudioContext]);
+    if (user && serverUrl) cargarConfigChat();
+  }, [user, serverUrl, cargarConfigChat]);
+
+  useEffect(() => {
+    const handler = () => { cargarConfigChat(); };
+    window.addEventListener("config-notificaciones-guardada", handler);
+    return () => window.removeEventListener("config-notificaciones-guardada", handler);
+  }, [cargarConfigChat]);
+
+  const reproducirSonidoChat = useCallback(() => {
+    if (!configChat || configChat.sonido_activo === 0) return;
+    const key = configChat.sonido_mensaje || "ixora-pulse";
+    reproducirSonidoIxora(key);
+  }, [configChat]);
+
+  const estaDentroHorario = useCallback((cfg) => {
+    if (!cfg || cfg.notificaciones_activas === 0) return false;
+    const day = new Date().getDay();
+    const diaId = day === 0 ? "7" : String(day);
+    const dias = (cfg.dias_semana || "1,2,3,4,5,6,7").split(",").map((d) => d.trim()).filter(Boolean);
+    if (!dias.includes(diaId)) return false;
+    const mapa = { "1": "lun", "2": "mar", "3": "mie", "4": "jue", "5": "vie", "6": "sab", "7": "dom" };
+    const key = mapa[diaId];
+    const inicio = cfg[`horario_${key}_inicio`] || cfg.horario_inicio || "08:00";
+    const fin = cfg[`horario_${key}_fin`] || cfg.horario_fin || "22:00";
+    const [hi, mi] = inicio.split(":").map(Number);
+    const [hf, mf] = fin.split(":").map(Number);
+    const ahora = new Date();
+    const ahoraMin = ahora.getHours() * 60 + ahora.getMinutes();
+    const inicioMin = hi * 60 + mi;
+    const finMin = hf * 60 + mf;
+    if (Number.isNaN(inicioMin) || Number.isNaN(finMin)) return true;
+    if (finMin < inicioMin) return ahoraMin >= inicioMin || ahoraMin <= finMin;
+    return ahoraMin >= inicioMin && ahoraMin <= finMin;
+  }, []);
 
   const cargarChatPrivadosNoLeidos = useCallback(async () => {
     if (!user || !authFetch || !serverUrl) return;
@@ -138,7 +78,6 @@ export default function WidgetsMenu({ serverUrl, pushToast, socket, user }) {
         : 0;
       setChatPrivadosNoLeidos(total);
     } catch (err) {
-      console.warn("Error cargando no leídos del chat:", err);
     }
   }, [user, authFetch, serverUrl]);
 
@@ -206,8 +145,99 @@ export default function WidgetsMenu({ serverUrl, pushToast, socket, user }) {
     }
   }, [widgetAbierto, cargarChatPrivadosNoLeidos]);
 
+  // Sincronizar cuando se marcan mensajes como leídos en otro dispositivo
+  useEffect(() => {
+    if (!socket || !user) return;
+    const handlePrivadoLeidos = () => {
+      programarActualizacionPrivados();
+    };
+    const handleChatsActivosActualizados = () => {
+      programarActualizacionPrivados();
+      setChatExtrasNoLeidos(0);
+    };
+    socket.on("chat_privado_leidos", handlePrivadoLeidos);
+    socket.on("chats_activos_actualizados", handleChatsActivosActualizados);
+    return () => {
+      socket.off("chat_privado_leidos", handlePrivadoLeidos);
+      socket.off("chats_activos_actualizados", handleChatsActivosActualizados);
+    };
+  }, [socket, user, programarActualizacionPrivados]);
+
+  useEffect(() => {
+    const handler = (e) => {
+      const d = e.detail || {};
+      if (d.grupoId != null) {
+        setSolicitudPending({
+          grupoId: d.grupoId,
+          solicitudId: d.solicitudId,
+          solicitanteNickname: d.solicitanteNickname || d.solicitante_nickname,
+          fecha: d.fecha,
+          groupName: d.groupName,
+        });
+        setWidgetAbierto("chat");
+      }
+    };
+    window.addEventListener("ixora-abrir-chat-solicitud", handler);
+    return () => window.removeEventListener("ixora-abrir-chat-solicitud", handler);
+  }, []);
+
+  useEffect(() => {
+    const handler = (e) => {
+      const d = e.detail || {};
+      if (d.chatType && d.chatTarget != null && d.mensaje_id != null) {
+        setMensajePrioritarioPending({
+          chatType: d.chatType,
+          chatTarget: d.chatTarget,
+          mensaje_id: d.mensaje_id,
+        });
+        setWidgetAbierto("chat");
+      }
+    };
+    window.addEventListener("ixora-abrir-chat-mensaje-prioritario", handler);
+    return () => window.removeEventListener("ixora-abrir-chat-mensaje-prioritario", handler);
+  }, []);
+
+  useEffect(() => {
+    if (!user || !serverUrl) return;
+    const check = async () => {
+      try {
+        const r = await authFetch(`${serverUrl}/chat/prioritarios-pendientes`);
+        setHayPrioritariosPendientes(!!r?.hay);
+      } catch (_) {
+        setHayPrioritariosPendientes(false);
+      }
+    };
+    const t0 = setTimeout(check, 2000);
+    const interval = setInterval(check, 60 * 1000);
+    return () => {
+      clearTimeout(t0);
+      clearInterval(interval);
+    };
+  }, [user, serverUrl, authFetch]);
+
+  useEffect(() => {
+    if (!user || !serverUrl) return;
+    if (configChat && !estaDentroHorario(configChat)) return;
+
+    const check = async () => {
+      try {
+        const r = await authFetch(`${serverUrl}/chat/prioritarios-pendientes`);
+        if (r?.hay) {
+          const key = configChat?.sonido_mensaje || "ixora-pulse";
+          reproducirSonidoIxora(key);
+        }
+      } catch (_) {}
+    };
+
+    const t0 = setTimeout(check, 4000);
+    const interval = setInterval(check, 3 * 60 * 1000);
+    return () => {
+      clearTimeout(t0);
+      clearInterval(interval);
+    };
+  }, [user, serverUrl, configChat, authFetch, estaDentroHorario]);
+
   const abrirWidget = (tipo) => {
-    activarAudioContext();
     if (tipo === 'notificaciones') {
       // Abrir panel de notificaciones usando el contexto
       if (notificationsContext && typeof notificationsContext.setIsOpen === 'function') {
@@ -224,13 +254,10 @@ export default function WidgetsMenu({ serverUrl, pushToast, socket, user }) {
 
   return (
     <>
-      <div
-        className={`widgets-notifications-container top-right ${
-          widgetAbierto === "chat" ? "chat-open" : ""
-        }`}
-      >
+      {inTopBar ? (
+        // Botón de notificaciones para la barra superior
         <button
-          className="widgets-notifications-button"
+          className="widgets-notifications-button top-bar-button"
           onClick={() => abrirWidget("notificaciones")}
           title="Notificaciones"
         >
@@ -241,28 +268,56 @@ export default function WidgetsMenu({ serverUrl, pushToast, socket, user }) {
             </span>
           )}
         </button>
-      </div>
+      ) : (
+        <>
+          <div
+            className={`widgets-notifications-container top-right ${
+              widgetAbierto === "chat" ? "chat-open" : ""
+            }`}
+          >
+            <button
+              className="widgets-notifications-button"
+              onClick={() => abrirWidget("notificaciones")}
+              title="Notificaciones"
+            >
+              <span className="widget-menu-item-icon">🔔</span>
+              {notificacionesNoLeidas > 0 && (
+                <span className="widgets-menu-badge">
+                  {notificacionesNoLeidas > 99 ? "99+" : notificacionesNoLeidas}
+                </span>
+              )}
+            </button>
+          </div>
 
-      <div
-        className={`widgets-menu-container ${
-          widgetAbierto === "chat" ? "chat-open" : ""
-        }`}
-        ref={menuRef}
-      >
-        {/* Botón principal circular */}
-        <button 
-          className="widgets-menu-button"
-          onClick={() => abrirWidget('chat')}
-          title="Chat"
-        >
-          <span className="widgets-menu-icon">💬</span>
-          {hayPendientes && <span className="widgets-menu-dot" aria-hidden="true" />}
-        </button>
-      </div>
+          <div
+            className={`widgets-menu-container ${
+              widgetAbierto === "chat" ? "chat-open" : ""
+            } ${hayPendientesChat ? "has-chat-pending" : ""}`}
+            ref={menuRef}
+          >
+            {/* Botón principal circular; anillo parpadeante cuando hay mensajes nuevos */}
+            <button 
+              className="widgets-menu-button"
+              onClick={() => abrirWidget('chat')}
+              title="Chat"
+            >
+              <span className="widgets-menu-icon">💬</span>
+            </button>
+          </div>
+        </>
+      )}
 
       {/* Renderizar widgets cuando están abiertos */}
       {widgetAbierto === 'chat' && socket && user && (
-        <ChatPro socket={socket} user={user} onClose={cerrarWidget} />
+        <ChatPro
+          socket={socket}
+          user={user}
+          onClose={cerrarWidget}
+          solicitudPending={solicitudPending}
+          onSolicitudConsumida={() => setSolicitudPending(null)}
+          mensajePrioritarioPending={mensajePrioritarioPending}
+          onMensajePrioritarioConsumido={() => setMensajePrioritarioPending(null)}
+        />
       )}
     </>
   );

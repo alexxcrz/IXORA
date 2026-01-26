@@ -485,7 +485,6 @@ try {
   if (!tieneCodigo) {
     console.log('📝 Agregando columna codigo a calidad_registros...');
     dbDevol.exec(`ALTER TABLE calidad_registros ADD COLUMN codigo TEXT`);
-    console.log('✅ Columna codigo agregada exitosamente');
   }
 } catch (e) {
   // Si hay error, probablemente la tabla no existe aún, se creará con el CREATE TABLE
@@ -532,7 +531,6 @@ router.get("/calidad/registros/:id", authRequired, (req, res) => {
       return res.status(404).json({ error: "Registro no encontrado" });
     }
     
-    console.log(`✅ Registro ID ${id} encontrado`);
     
     // Parsear evidencias si es JSON
     if (registro.evidencias) {
@@ -582,7 +580,6 @@ router.post("/calidad/registros", authRequired, (req, res) => {
       caducidad || ''
     );
     
-    console.log("✅ Registro creado con ID:", info.lastInsertRowid);
     
     const nuevoRegistro = dbDevol.prepare("SELECT * FROM calidad_registros WHERE id = ?").get(info.lastInsertRowid);
     
@@ -1058,10 +1055,6 @@ router.post(
         const nuevoPath = path.join(carpetaPedido, file.filename);
         const finalPath = `${nombrePedido}/${file.filename}`;
         
-        // Logs removidos para evitar saturar la consola
-        console.log(`📸 ¿Existe en original?: ${fs.existsSync(filePathOriginal)}`);
-        console.log(`📸 Ruta destino: ${nuevoPath}`);
-        console.log(`📸 ¿Existe en destino?: ${fs.existsSync(nuevoPath)}`);
         
         try {
           if (fs.existsSync(filePathOriginal)) {
@@ -1072,15 +1065,9 @@ router.post(
               }
               
               fs.renameSync(filePathOriginal, nuevoPath);
-              console.log(`✅ Foto movida: ${file.filename} → ${carpetaPedido}`);
-              
-              if (fs.existsSync(nuevoPath)) {
-                console.log(`✅ Verificado: archivo existe en destino`);
-              } else {
+              if (!fs.existsSync(nuevoPath)) {
                 console.error(`❌ ERROR: Archivo no existe después de mover`);
               }
-            } else {
-              console.log(`ℹ️ Foto ya está en carpeta correcta`);
             }
           } else if (fs.existsSync(nuevoPath)) {
             console.log(`ℹ️ Foto ya está en carpeta del pedido`);
@@ -1100,7 +1087,6 @@ router.post(
                     fs.mkdirSync(carpetaPedido, { recursive: true });
                   }
                   fs.renameSync(ruta, nuevoPath);
-                  console.log(`✅ Foto movida desde ubicación alternativa`);
                   encontrado = true;
                   break;
                 } catch (e) {
@@ -1114,7 +1100,6 @@ router.post(
           }
           
           insertFoto.run(devolucionId, finalPath);
-          console.log(`✅ Foto guardada en BD: devolucion_id=${devolucionId}, path=${finalPath}`);
           
         } catch (moveErr) {
           console.error(`⚠️ Error procesando foto ${file.filename}:`, moveErr);
@@ -1126,7 +1111,6 @@ router.post(
       const fotosGuardadas = dbDevol
         .prepare("SELECT * FROM devoluciones_fotos WHERE devolucion_id = ?")
         .all(devolucionId);
-      console.log(`📸 Total de fotos guardadas para devolucion_id ${devolucionId}: ${fotosGuardadas.length}`);
 
       const io = getIO();
       if (io) {
@@ -1292,6 +1276,23 @@ router.put("/clientes/productos-general/:id/activo", authRequired, (req, res) =>
     
     const activoValue = activo === true || activo === 1 || activo === "1" ? 1 : 0;
     
+    // Si se intenta activar, verificar que el producto sea apto
+    if (activoValue === 1) {
+      const producto = dbDevol
+        .prepare(`SELECT apto FROM devoluciones_productos_general WHERE id = ?`)
+        .get(id);
+      
+      if (!producto) {
+        return res.status(404).json({ error: "Producto no encontrado" });
+      }
+      
+      // Verificar si el producto es "no apto"
+      const esNoApto = producto.apto !== 1 && producto.apto !== true && producto.apto !== '1';
+      if (esNoApto) {
+        return res.status(400).json({ error: "Los productos no aptos no se pueden activar" });
+      }
+    }
+    
     dbDevol
       .prepare(`UPDATE devoluciones_productos_general SET activo = ? WHERE id = ?`)
       .run(activoValue, id);
@@ -1414,7 +1415,6 @@ router.delete("/clientes/pedidos/:id", authRequired, (req, res) => {
   try {
     const { id } = req.params;
     
-    console.log(`🗑️ Intentando eliminar pedido ID: ${id}`);
     
     // Verificar si el pedido existe en DEVOLUCIONES (no reenvíos)
     // Buscar primero en tabla actual, luego en histórica
@@ -1448,7 +1448,6 @@ router.delete("/clientes/pedidos/:id", authRequired, (req, res) => {
       return res.status(404).json({ error: "Pedido no encontrado en devoluciones" });
     }
     
-    console.log(`✅ Pedido de DEVOLUCIONES encontrado: ID ${id}, Área: ${pedido.area}, Pedido: ${pedido.pedido}, Histórico: ${esHistorico}`);
     
     // Eliminar pedido de DEVOLUCIONES (actual o histórico)
     
@@ -1593,7 +1592,6 @@ router.delete("/clientes/productos/sin-pedido", authRequired, (req, res) => {
 router.delete("/clientes/productos/:id", authRequired, (req, res) => {
   try {
     const { id } = req.params;
-    console.log(`🗑️ Intentando eliminar producto ID: ${id} de devoluciones clientes`);
     
     // Verificar que el producto existe
     // Primero intentar buscar con JOIN (si tiene devolucion_id)
@@ -1624,7 +1622,6 @@ router.delete("/clientes/productos/:id", authRequired, (req, res) => {
       return res.status(404).json({ error: "Producto no encontrado" });
     }
     
-    console.log(`✅ Producto encontrado: ID ${id}, devolucion_id: ${producto.devolucion_id || 'null'}, nombre: ${producto.nombre || 'N/A'}`);
     
     // Si el producto tiene devolucion_id, verificar que el pedido sea de Clientes
     if (producto.devolucion_id) {
@@ -1678,7 +1675,6 @@ router.delete("/clientes/productos/:id", authRequired, (req, res) => {
     }
     
     // Si el producto NO tiene devolucion_id (no pertenece a un pedido), sí puede eliminarse físicamente
-    console.log(`🗑️ Eliminando producto ID ${id} (sin pedido asociado)...`);
     const resultado = dbDevol
       .prepare("DELETE FROM devoluciones_productos WHERE id = ?")
       .run(id);
@@ -1688,7 +1684,6 @@ router.delete("/clientes/productos/:id", authRequired, (req, res) => {
       return res.status(404).json({ error: "Producto no encontrado" });
     }
     
-    console.log(`✅ Producto ID ${id} eliminado correctamente (${resultado.changes} fila(s) afectada(s))`);
     
     // Emitir eventos para actualizar frontend en tiempo real
     getIO().emit("devoluciones_actualizadas", []);
@@ -1794,8 +1789,6 @@ router.get("/clientes/fotos/:id", (req, res) => {
       )
       .all(id);
     
-    console.log(`📸 Fotos encontradas en BD para devolucion_id ${id}: ${rows.length}`);
-    console.log(`📦 Pedido: ${pedido.pedido}`);
     
     // Agregar URLs completas usando el endpoint de fotos
     const fotosConUrls = rows.map(foto => {
@@ -1810,7 +1803,6 @@ router.get("/clientes/fotos/:id", (req, res) => {
       // Construir URL usando el endpoint de fotos
       const url = `${req.protocol}://${req.get("host")}/devoluciones/foto/${id}/${encodeURIComponent(archivo)}`;
       
-      console.log(`📸 Foto: path=${foto.path}, archivo=${archivo}, url=${url}`);
       
       return {
         ...foto,
@@ -1818,7 +1810,6 @@ router.get("/clientes/fotos/:id", (req, res) => {
       };
     });
     
-    console.log(`📸 Total URLs generadas: ${fotosConUrls.length}`);
     res.json(fotosConUrls);
   } catch (err) {
     console.error("❌ Error listando fotos:", err);
@@ -1831,7 +1822,6 @@ router.get("/foto/:id/:archivo", (req, res) => {
     const { id, archivo } = req.params;
     const archivoDecodificado = decodeURIComponent(archivo);
     
-    console.log(`📸 Buscando foto: ID=${id}, archivo=${archivoDecodificado}`);
     
     // Obtener el pedido desde la base de datos
     const devolucion = dbDevol
@@ -1862,7 +1852,6 @@ router.get("/foto/:id/:archivo", (req, res) => {
       console.log(`📁 Intentando ruta 1 (carpeta pedido): ${filePath}`);
       if (fs.existsSync(filePath)) {
         file = filePath;
-        console.log(`✅ Foto encontrada en carpeta del pedido`);
       } else {
         console.log(`❌ No existe en: ${filePath}`);
       }
@@ -1878,7 +1867,6 @@ router.get("/foto/:id/:archivo", (req, res) => {
       console.log(`📁 Intentando ruta 2 (raíz): ${filePath}`);
       if (fs.existsSync(filePath)) {
         file = filePath;
-        console.log(`✅ Foto encontrada en raíz`);
       } else {
         console.log(`❌ No existe en: ${filePath}`);
       }
@@ -1895,7 +1883,6 @@ router.get("/foto/:id/:archivo", (req, res) => {
       console.log(`📁 Intentando ruta 3 (carpeta ID): ${filePath}`);
       if (fs.existsSync(filePath)) {
         file = filePath;
-        console.log(`✅ Foto encontrada en carpeta ID`);
       } else {
         console.log(`❌ No existe en: ${filePath}`);
       }
@@ -2094,7 +2081,6 @@ router.put("/producto/:id/activo", authRequired, requierePermiso("action:activar
             categoria || null  // ⚠️ Categoría del inventario
           );
 
-        console.log(`✅ Registro de picking creado para devolución producto ID: ${id} con categoría: ${categoria || "N/A"}`);
         
         // Emitir evento para actualizar picking en tiempo real
         const io = getIO();
@@ -2373,6 +2359,7 @@ router.get("/clientes/productos/resumen", authRequired, (req, res) => {
     const soloActivos = req.query.soloActivos === "true";
     
     // Si se solicita solo activos para importar, devolver productos individuales
+    // IMPORTANTE: Buscar en productos_general donde se gestionan las activaciones
     if (soloActivos) {
       const productos = dbDevol
         .prepare(
@@ -2385,18 +2372,17 @@ router.get("/clientes/productos/resumen", authRequired, (req, res) => {
             COALESCE(p.lote, '') AS lote,
             p.cantidad,
             p.activo,
-            p.apto
-          FROM devoluciones_productos p
-          JOIN devoluciones_pedidos d ON d.id = p.devolucion_id
-          WHERE d.area = ? 
-            AND p.nombre IS NOT NULL 
+            p.apto,
+            COALESCE(p.pedido, '') AS pedido
+          FROM devoluciones_productos_general p
+          WHERE p.nombre IS NOT NULL 
             AND p.nombre != '' 
-            AND p.apto = 1
-            AND p.activo = 1
+            AND (p.apto = 1 OR p.apto = true OR p.apto = '1')
+            AND (p.activo = 1 OR p.activo = true OR p.activo = '1')
           ORDER BY p.nombre, p.codigo, p.lote
         `
         )
-        .all(area);
+        .all();
       
       res.json(productos);
       return;
@@ -2454,6 +2440,24 @@ router.put("/clientes/productos/estado", authRequired, requierePermiso("action:a
     const caducidad = req.body?.caducidad || null;
 
     try {
+      // Si se intenta activar, verificar que existan productos aptos con ese nombre
+      if (activoBD === 1) {
+        const productosAptos = dbDevol
+          .prepare(
+            `SELECT COUNT(*) as count FROM devoluciones_productos 
+             WHERE nombre = ? 
+             AND devolucion_id IN (SELECT id FROM devoluciones_pedidos WHERE area = 'Clientes')
+             AND apto = 1`
+          )
+          .get(nombre);
+        
+        if (!productosAptos || productosAptos.count === 0) {
+          return res.status(400).json({ 
+            error: `No se pueden activar productos con nombre "${nombre}" porque no hay productos aptos con ese nombre` 
+          });
+        }
+      }
+      
       // Solo actualizar productos aptos (apto = 1)
       // El modal solo muestra productos aptos, así que solo actualizamos esos
       const updateWhere = `WHERE nombre = ? AND devolucion_id IN (
@@ -2509,6 +2513,7 @@ router.put("/clientes/productos/estado", authRequired, requierePermiso("action:a
       if (io) {
         io.emit("devoluciones_actualizadas");
         io.emit("productos_actualizados", []);
+        io.emit("productos_general_actualizados"); // Actualizar productos general también
         // Si se activaron productos, también actualizar picking
         if (activoBD === 1) {
           io.emit("picking_actualizado");
@@ -2535,6 +2540,23 @@ router.put("/clientes/productos/estado", authRequired, requierePermiso("action:a
   const placeholders = ids.map(() => "?").join(",");
 
   try {
+    // Si se intenta activar, verificar que todos los productos sean aptos
+    if (activoBD === 1) {
+      const productosNoAptos = dbDevol
+        .prepare(
+          `SELECT id FROM devoluciones_productos 
+           WHERE id IN (${placeholders}) 
+           AND (apto IS NULL OR apto = 0 OR apto = '0' OR apto = false)`
+        )
+        .all(...ids);
+      
+      if (productosNoAptos.length > 0) {
+        return res.status(400).json({ 
+          error: `No se pueden activar ${productosNoAptos.length} producto(s) porque están marcados como no aptos` 
+        });
+      }
+    }
+    
     dbDevol
       .prepare(
         `UPDATE devoluciones_productos SET activo=? WHERE id IN (${placeholders})`
@@ -2768,9 +2790,6 @@ router.post("/cerrar-dia", authRequired, (req, res) => {
   try {
     const fecha = req.body?.fecha || dayjs().format("YYYY-MM-DD");
     
-    console.log(`📅 Cerrando día de devoluciones: ${fecha}`);
-    console.log(`📊 dbHist disponible:`, !!dbHist);
-    console.log(`📊 dbDevol disponible:`, !!dbDevol);
 
     // Función helper para verificar si una tabla existe
     const tableExists = (db, tableName) => {
@@ -3033,7 +3052,6 @@ router.post("/cerrar-dia", authRequired, (req, res) => {
               WHERE d.area = ?
             `)
             .all(area);
-          console.log(`📦 TODOS los productos del día en ${area} (sin filtrar): ${productosDelDia.length}`);
         } else {
           // Para Retail, Reacondicionados, Cubbo, Regulatorio: obtener de las tablas del día
           const tablaDia = getTablaDia(area.toLowerCase());
@@ -3287,8 +3305,6 @@ router.post("/cerrar-dia", authRequired, (req, res) => {
             .all(area);
           console.log(`📦 Todos los pedidos en ${area}: ${pedidosDelDia.length}`);
           if (pedidosDelDia.length > 0) {
-            console.log(`📋 IDs de pedidos encontrados: ${pedidosDelDia.map(p => p.id).join(', ')}`);
-            console.log(`📋 Pedidos: ${pedidosDelDia.map(p => p.pedido).join(', ')}`);
           }
         } catch (queryErr) {
           console.error(`❌ Error consultando pedidos de ${area}:`, queryErr);
@@ -3299,7 +3315,6 @@ router.post("/cerrar-dia", authRequired, (req, res) => {
         // Mover TODOS los pedidos al histórico (sin importar si tienen productos o no)
         // Similar a reenvíos: todos pasan al histórico y se eliminan de la tabla actual
         if (pedidosDelDia.length > 0) {
-          console.log(`🔄 Procesando ${pedidosDelDia.length} pedidos para mover al histórico en ${area}`);
           
           // 1. Guardar fotos en histórico ANTES de eliminarlas (como en reenvíos)
           const pedidosIds = pedidosDelDia.map(p => p.id);
@@ -3331,7 +3346,6 @@ router.post("/cerrar-dia", authRequired, (req, res) => {
                   console.error(`❌ Error guardando foto ${foto.path} en histórico:`, fotoErr);
                 }
               }
-              console.log(`📸 ${fotosDelDia.length} fotos guardadas en histórico`);
             }
           } catch (e) {
             console.warn("⚠️ Error guardando fotos en histórico:", e.message);
@@ -3504,7 +3518,6 @@ router.post("/cerrar-dia", authRequired, (req, res) => {
               }
             }
             
-            console.log(`✅ ${productosCopiados} productos copiados al histórico`);
             resumenPorArea[area] = productosCopiados;
             totalMovidos += productosCopiados;
           } else {
@@ -3526,7 +3539,6 @@ router.post("/cerrar-dia", authRequired, (req, res) => {
               const productosEliminados = dbDevol
                 .prepare(`DELETE FROM devoluciones_productos WHERE devolucion_id IN (${placeholders})`)
                 .run(...pedidosIds);
-              console.log(`🗑️ ${productosEliminados.changes} productos eliminados de tabla principal`);
             } catch (e) {
               console.warn("⚠️ Error eliminando productos:", e.message);
             }
@@ -3546,7 +3558,6 @@ router.post("/cerrar-dia", authRequired, (req, res) => {
               const pedidosEliminados = dbDevol
                 .prepare(`DELETE FROM devoluciones_pedidos WHERE id IN (${placeholders})`)
                 .run(...pedidosIds);
-              console.log(`🗑️ ${pedidosEliminados.changes} pedidos eliminados de ${area} (todos movidos al histórico)`);
             } catch (e) {
               console.error("❌ Error eliminando pedidos:", e);
               throw e; // Re-lanzar el error para que se capture en el catch principal
@@ -3588,7 +3599,6 @@ router.post("/cerrar-dia", authRequired, (req, res) => {
       registroId: 0,
     });
 
-    console.log(`📊 Resumen del cierre: ${totalMovidos} productos y ${totalPedidosMovidos} pedidos movidos al histórico`);
 
     res.json({ 
       success: true,
@@ -3656,7 +3666,6 @@ router.post("/clientes/importar-no-aptos", authRequired, requierePermiso("action
       });
     }
     
-    console.log(`📦 Importando ${productosNoAptos.length} productos no aptos a Control de Calidad`);
     
     // Insertar en calidad_registros
     const insCalidad = dbDevol.prepare(`
@@ -3697,26 +3706,38 @@ router.post("/clientes/importar-no-aptos", authRequired, requierePermiso("action
     // ⚠️ IMPORTANTE: NO eliminar productos de devoluciones_productos
     // Solo se crean copias en calidad_registros, las tarjetas deben mantenerse completas
     // Los productos permanecen en las tarjetas tal cual fueron creados
-    console.log(`✅ ${importados} productos no aptos copiados a Control de Calidad (las tarjetas permanecen intactas)`);
     
-    // Eliminar de productos_general los productos importados
+    // Eliminar de productos_general SOLO los productos NO APTOS importados
+    // IMPORTANTE: Solo eliminar productos que sean NO APTOS para no afectar productos activos o no activos
     let eliminadosGeneral = 0;
     try {
       for (const p of productosNoAptos) {
-        const eliminado = dbDevol
+        // Verificar que el producto en productos_general sea realmente NO APTO antes de eliminar
+        const productoEnGeneral = dbDevol
           .prepare(`
-            DELETE FROM devoluciones_productos_general 
+            SELECT id, apto FROM devoluciones_productos_general 
             WHERE codigo = ? 
               AND COALESCE(lote, '') = COALESCE(?, '')
               AND cantidad = ?
               AND pedido = ?
           `)
-          .run(p.codigo || '', p.lote || '', p.cantidad || 0, p.pedido || '');
-        if (eliminado.changes > 0) {
-          eliminadosGeneral++;
+          .get(p.codigo || '', p.lote || '', p.cantidad || 0, p.pedido || '');
+        
+        // Solo eliminar si existe y es NO APTO
+        if (productoEnGeneral) {
+          const esNoApto = productoEnGeneral.apto !== 1 && productoEnGeneral.apto !== true && productoEnGeneral.apto !== '1';
+          if (esNoApto) {
+            const eliminado = dbDevol
+              .prepare(`DELETE FROM devoluciones_productos_general WHERE id = ?`)
+              .run(productoEnGeneral.id);
+            if (eliminado.changes > 0) {
+              eliminadosGeneral++;
+            }
+          } else {
+            console.log(`⚠️ Producto ${productoEnGeneral.id} no se elimina porque es apto (apto=${productoEnGeneral.apto})`);
+          }
         }
       }
-      console.log(`🗑️ ${eliminadosGeneral} productos eliminados de productos_general`);
     } catch (err) {
       console.error("⚠️ Error eliminando de productos_general:", err);
     }
@@ -3775,8 +3796,6 @@ router.post("/importar", authRequired, requierePermiso("action:activar-productos
     // Si es "Clientes", usar la estructura de pedidos. Para otras áreas, usar tablas en dbDia
     const esClientes = tipoNormalizado === "clientes" || areaObjetivo === "Clientes";
     
-    console.log(`📦 Importando desde área: ${areaObjetivo || tipo} (tipo: ${tipo}, area: ${area}, esClientes: ${esClientes})`);
-    console.log(`📦 Grupos recibidos: ${grupos.length}`, grupos.map(g => ({ nombre: g.nombre, codigo: g.codigo, cantidad: g.cantidad || g.total })));
 
     const hora = dayjs().format("HH:mm:ss");
     let productosImportados = 0;
@@ -3798,7 +3817,6 @@ router.post("/importar", authRequired, requierePermiso("action:activar-productos
         
         // Validar que las piezas sean válidas
         if (piezas <= 0 || !grupo.nombre) {
-          console.log(`⚠️ Producto "${grupo.nombre}" tiene piezas 0 o inválidas, saltando...`);
           continue;
         }
 
@@ -3823,7 +3841,6 @@ router.post("/importar", authRequired, requierePermiso("action:activar-productos
       }
     }
 
-    console.log(`📦 Productos agrupados: ${productosAgrupados.size}`, Array.from(productosAgrupados.values()).map(p => ({ nombre: p.nombre, codigo: p.codigo, piezas: p.piezas })));
 
     // Insertar cada producto agrupado
     for (const [key, productoAgrupado] of productosAgrupados) {
@@ -3835,7 +3852,6 @@ router.post("/importar", authRequired, requierePermiso("action:activar-productos
         // Cambiar "cantidadTotal" por "piezasTotal" para mayor claridad
         const piezasTotal = Number(productoAgrupado.piezas || productoAgrupado.cantidad || 0);
 
-        console.log(`🔍 Procesando producto: ${nombre} (${codigo}) - Piezas totales: ${piezasTotal}`);
 
         // Validar que haya piezas válidas
         if (!piezasTotal || piezasTotal <= 0) {
@@ -3929,7 +3945,6 @@ router.post("/importar", authRequired, requierePermiso("action:activar-productos
           // Si hay error, usar hora actual
         }
         
-        console.log(`🕐 Hora de solicitud obtenida: ${horaSolicitud} (cuando se agregó a devoluciones)`);
         
         // ⚠️ LÓGICA CLARA: Pasar piezas TAL CUAL - SIN CONVERSIONES
         // Ejemplo: Si hay 10 piezas de resveratrol en devoluciones
@@ -3944,7 +3959,6 @@ router.post("/importar", authRequired, requierePermiso("action:activar-productos
         // Ejemplo: Si en devoluciones hay cantidad = 9, entonces piezas_por_caja = 9
         const piezasPorCaja = piezasTotal;  // Usar la cantidad de devoluciones como piezas por caja
         
-        console.log(`📊 Valores calculados: cajas=${cajas}, piezas=${piezas}, piezasTotal=${piezasTotal}, piezas_por_caja=${piezasPorCaja}`);
         
         // Combinar nombre y presentación si existe
         const nombreCompleto = obtenerNombreCompleto(nombre, presentacion);
@@ -3956,7 +3970,6 @@ router.post("/importar", authRequired, requierePermiso("action:activar-productos
         const tipoObservacion = areaObjetivo || tipo || "Devoluciones";
         const observacion = `Devolución ${tipoObservacion}`;
         
-        console.log(`💾 Insertando nuevo registro: ${nombreCompleto} - cajas=${cajas}, piezas=${piezas}, piezas_por_caja=${piezasPorCaja}, observación="${observacion}"`);
         
         // SIEMPRE insertar nuevo registro (no verificar si existe)
         const result = dbDia
@@ -3994,13 +4007,11 @@ router.post("/importar", authRequired, requierePermiso("action:activar-productos
         totalPiezas += piezas;
 
         productosImportados++;
-        console.log(`✅ Producto importado: ${nombreCompleto} (${cajas} cajas, ${piezas} piezas)`);
       } catch (err) {
         console.error(`❌ Error insertando producto "${productoAgrupado.nombre}":`, err);
       }
     }
 
-    console.log(`📦 Total productos importados: ${productosImportados} (${totalCajas} cajas, ${totalPiezas} piezas)`);
 
     // Eliminar de productos_general los productos importados (solo si es Clientes y son activos)
     let eliminadosGeneral = 0;
@@ -4028,7 +4039,6 @@ router.post("/importar", authRequired, requierePermiso("action:activar-productos
             }
           }
         }
-        console.log(`🗑️ ${eliminadosGeneral} productos eliminados de productos_general`);
       } catch (err) {
         console.error("⚠️ Error eliminando de productos_general:", err);
       }
