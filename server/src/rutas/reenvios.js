@@ -129,6 +129,34 @@ function registrarCambioEstado(reenvioId, estadoAnterior, estadoNuevo, usuario, 
   }
 }
 
+// Función helper para emitir eventos de sincronización granular
+function notificarActualizacionReenvio(reenvioId, accion = "actualizado") {
+  try {
+    if (!reenvioId) return;
+    
+    // Obtener el reenvío actualizado
+    const reenvio = dbReenvios
+      .prepare("SELECT * FROM reenvios WHERE id = ?")
+      .get(reenvioId);
+    
+    if (reenvio) {
+      // Emitir evento granular según la acción
+      if (accion === "agregado") {
+        getIO().emit("reenvio_agregado", reenvio);
+      } else if (accion === "actualizado") {
+        getIO().emit("reenvio_actualizado", reenvio);
+      } else if (accion === "eliminado") {
+        getIO().emit("reenvio_eliminado", reenvioId);
+      }
+      
+      // Emitir evento general para reportes (sin recargar lista completa)
+      getIO().emit("reportes_actualizados");
+    }
+  } catch (err) {
+    console.error("Error notificando actualización de reenvío:", err);
+  }
+}
+
 router.get("/", (req, res) => {
   const rows = dbReenvios.prepare("SELECT * FROM reenvios ORDER BY id DESC").all();
   res.json(rows);
@@ -164,8 +192,8 @@ router.post(
       registroId: info.lastInsertRowid,
     });
 
-    getIO().emit("reenvios_actualizados");
-    getIO().emit("reportes_actualizados");
+    // Emitir evento granular de nuevo reenvío
+    notificarActualizacionReenvio(info.lastInsertRowid, "agregado");
 
     res.json({ ok: true, id: info.lastInsertRowid });
   }
@@ -195,8 +223,8 @@ router.put(
       registroId: req.params.id,
     });
 
-    getIO().emit("reenvios_actualizados");
-    getIO().emit("reportes_actualizados"); // También actualizar reportes
+    // Emitir evento granular de actualización
+    notificarActualizacionReenvio(req.params.id, "actualizado");
 
     res.json({ ok: true });
   }
@@ -230,8 +258,8 @@ router.put(
       registroId: req.params.id,
     });
 
-    getIO().emit("reenvios_actualizados");
-    getIO().emit("reportes_actualizados"); // También actualizar reportes
+    // Emitir evento granular de actualización
+    notificarActualizacionReenvio(req.params.id, "actualizado");
 
     res.json({ ok: true });
   }
@@ -275,8 +303,8 @@ router.put(
       registroId: req.params.id,
     });
 
-    getIO().emit("reenvios_actualizados");
-    getIO().emit("reportes_actualizados"); // También actualizar reportes
+    // Emitir evento granular de actualización
+    notificarActualizacionReenvio(req.params.id, "actualizado");
 
     res.json({ ok: true });
   }
@@ -314,8 +342,8 @@ router.post(
       registroId: req.params.id,
     });
 
-    getIO().emit("reenvios_actualizados");
-    getIO().emit("reportes_actualizados");
+    // Emitir evento granular de actualización
+    notificarActualizacionReenvio(req.params.id, "actualizado");
 
     res.json({ ok: true });
   }
@@ -350,7 +378,8 @@ router.put(
       registroId: req.params.id,
     });
 
-    getIO().emit("reenvios_actualizados");
+    // Emitir evento granular de actualización
+    notificarActualizacionReenvio(req.params.id, "actualizado");
 
     res.json({ ok: true });
   }
@@ -381,9 +410,8 @@ router.delete(
         registroId: req.params.id,
       });
 
-      // Emitir evento de socket para sincronización en tiempo real
-      getIO().emit("reenvios_actualizados");
-      getIO().emit("reportes_actualizados");
+      // Emitir evento granular de actualización
+      notificarActualizacionReenvio(req.params.id, "actualizado");
 
       return res.json({ ok: true, msg: "Cancelado" });
     }
@@ -401,8 +429,8 @@ router.delete(
       registroId: req.params.id,
     });
 
-    getIO().emit("reenvios_actualizados");
-    getIO().emit("reportes_actualizados");
+    // Emitir evento granular de eliminación
+    notificarActualizacionReenvio(req.params.id, "eliminado");
 
     res.json({ ok: true, msg: "Eliminado" });
   }
@@ -443,9 +471,8 @@ router.post(
         registroId: id,
       });
 
-      // Emitir evento de socket para sincronización en tiempo real
-      getIO().emit("reenvios_actualizados");
-      getIO().emit("reportes_actualizados");
+      // Emitir evento granular de actualización
+      notificarActualizacionReenvio(id, "actualizado");
 
       return res.json({ ok: true, type: "mismo" });
     }
@@ -483,8 +510,9 @@ router.post(
       registroId: info.lastInsertRowid,
     });
 
-    getIO().emit("reenvios_actualizados");
-    getIO().emit("reportes_actualizados");
+    // Emitir eventos granulares
+    notificarActualizacionReenvio(id, "actualizado");
+    notificarActualizacionReenvio(info.lastInsertRowid, "agregado");
 
     res.json({ ok: true, type: "nuevo", newId: info.lastInsertRowid });
   }
@@ -564,7 +592,19 @@ router.get("/foto/:id/:archivo", (req, res) => {
   res.setHeader('Content-Type', contentType);
   res.setHeader('Cache-Control', 'public, max-age=31536000');
   
-  res.sendFile(path.resolve(file));
+  res.sendFile(path.resolve(file), (err) => {
+    if (err) {
+      // Ignorar errores de conexión abortada
+      if (err.code === 'ECONNABORTED' || err.code === 'EPIPE' || err.code === 'ERR_HTTP_REQUEST_TIMEOUT') {
+        console.warn(`⚠️ Conexión interrumpida: ${err.code}`);
+        return;
+      }
+      console.error(`Error enviando foto:`, err);
+      if (!res.headersSent) {
+        res.status(500).send("Error cargando foto");
+      }
+    }
+  });
 });
 
 router.post(
@@ -601,7 +641,8 @@ router.post(
       registroId: req.params.id,
     });
 
-    getIO().emit("reenvios_actualizados");
+    // Emitir evento granular de actualización
+    notificarActualizacionReenvio(req.params.id, "actualizado");
 
     res.json({ ok: true, count: files.length });
   }
@@ -940,7 +981,8 @@ router.delete(
         registroId: reenvioId,
       });
 
-      getIO().emit("reenvios_actualizados");
+      // Emitir evento granular de actualización
+      notificarActualizacionReenvio(reenvioId, "actualizado");
 
       res.json({ ok: true });
     } catch (err) {
@@ -956,12 +998,32 @@ router.delete(
 const handleCerrarReenvios = (req, res) => {
     const fechaCorte = req.body?.fecha || dayjs().format("YYYY-MM-DD");
 
-    const rows = dbReenvios
-      .prepare(
-        `SELECT * FROM reenvios 
-         WHERE estatus IN ('Enviado','Cancelado','Reemplazado')`
-      )
-      .all();
+    // Verificar si hay reenvíos pendientes (Listo para enviar)
+    const reenviosPendientes = dbReenvios
+      .prepare(`SELECT COUNT(*) as count FROM reenvios WHERE estatus = 'Listo para enviar'`)
+      .get();
+
+    if (reenviosPendientes.count > 0 && !req.body?.confirmarEliminacion) {
+      return res.status(200).json({ 
+        requireConfirmation: true,
+        pendientes: reenviosPendientes.count,
+        message: `Hay ${reenviosPendientes.count} reenvío(s) sin enviar. ¿Desea eliminarlos o dejarlos para el siguiente día?`
+      });
+    }
+
+    // Obtener solo los reenvíos que se van a cerrar
+    let rows;
+    if (reenviosPendientes.count > 0 && req.body?.dejarPendientes) {
+      // Solo cerrar los que ya fueron enviados, cancelados o reemplazados
+      rows = dbReenvios
+        .prepare(`SELECT * FROM reenvios WHERE estatus IN ('Enviado','Cancelado','Reemplazado')`)
+        .all();
+    } else {
+      // Cerrar todos (incluyendo pendientes)
+      rows = dbReenvios
+        .prepare(`SELECT * FROM reenvios WHERE estatus IN ('Enviado','Cancelado','Reemplazado','Listo para enviar')`)
+        .all();
+    }
 
     if (!rows.length) return res.json({ ok: true, cantidad: 0, fechaCorte });
 
@@ -1007,12 +1069,10 @@ const handleCerrarReenvios = (req, res) => {
               foto.fecha || dayjs().format("YYYY-MM-DD"),
               foto.hora || dayjs().format("HH:mm:ss")
             );
-            console.log(`📸 Foto de reenvío guardada en histórico: ${foto.archivo} para pedido ${foto.pedido}`);
           } catch (fotoErr) {
             console.error(`❌ Error guardando foto ${foto.archivo} en histórico:`, fotoErr);
           }
         }
-        console.log(`📸 ${fotosDelDia.length} fotos de reenvíos guardadas en histórico`);
       }
     } catch (e) {
       console.warn("⚠️ Error guardando fotos de reenvíos en histórico:", e.message);
@@ -1049,7 +1109,29 @@ const handleCerrarReenvios = (req, res) => {
 
     // Validar que todos los IDs existen antes de eliminar
     if (ids.length === 0) {
-      return res.status(400).json({ error: "No se proporcionaron IDs para eliminar" });
+      // Si no hay registros para cerrar, emitir eventos y retornar
+      const io = getIO();
+      setTimeout(() => {
+        io.emit("reenvios_actualizados");
+        io.emit("reportes_actualizados");
+      }, 100);
+      
+      io.emit("reenvios_actualizados");
+      io.emit("reportes_actualizados");
+      
+      const detalleAuditoria = reenviosPendientes.count > 0 && req.body?.dejarPendientes
+        ? `Cerró el día de REENVÍOS (dejó ${reenviosPendientes.count} pendientes)`
+        : `Cerró el día de REENVÍOS (0 registros)`;
+      
+      registrarAccion({
+        usuario: req.user?.name,
+        accion: "CERRAR_DIA_REENVIOS",
+        detalle: detalleAuditoria,
+        tabla: "reenvios",
+        registroId: null,
+      });
+      
+      return res.json({ ok: true, cantidad: 0, fechaCorte });
     }
 
     // Verificar que todos los IDs existen (reutilizamos placeholders ya definido arriba)
@@ -1077,10 +1159,14 @@ const handleCerrarReenvios = (req, res) => {
 
     deleteReenvios(ids);
 
+    const detalleAuditoria = reenviosPendientes.count > 0 && req.body?.dejarPendientes
+      ? `Cerró el día de REENVÍOS (dejó ${reenviosPendientes.count} pendientes, movió ${ids.length} al histórico)`
+      : `Cerró el día de REENVÍOS (${ids.length} registros)`;
+
     registrarAccion({
       usuario: req.user?.name,
       accion: "CERRAR_DIA_REENVIOS",
-      detalle: `Registros: ${ids.length}`,
+      detalle: detalleAuditoria,
       tabla: "reenvios",
       registroId: null,
     });
@@ -1091,7 +1177,6 @@ const handleCerrarReenvios = (req, res) => {
     setTimeout(() => {
       io.emit("reenvios_actualizados");
       io.emit("reportes_actualizados");
-      console.log("📡 Eventos de reenvíos y reportes emitidos después del cierre del día");
     }, 100);
     
     // También emitir inmediatamente
@@ -1153,7 +1238,20 @@ router.get("/historico/foto/:pedido/:archivo", (req, res) => {
     };
     
     res.setHeader('Content-Type', contentTypeMap[ext] || 'image/jpeg');
-    res.sendFile(path.resolve(fotoPath));
+    
+    res.sendFile(path.resolve(fotoPath), (err) => {
+      if (err) {
+        // Ignorar errores de conexión abortada
+        if (err.code === 'ECONNABORTED' || err.code === 'EPIPE' || err.code === 'ERR_HTTP_REQUEST_TIMEOUT') {
+          console.warn(`⚠️ Conexión interrumpida al servir foto: ${err.code}`);
+          return;
+        }
+        console.error(`Error enviando foto:`, err);
+        if (!res.headersSent) {
+          res.status(500).send("Error cargando foto");
+        }
+      }
+    });
   } catch (err) {
     console.error("Error sirviendo foto histórica:", err);
     res.status(500).send("Error cargando foto");

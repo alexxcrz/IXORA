@@ -147,6 +147,7 @@ select:focus {
   gap: var(--espacio-xs);
   flex-wrap: wrap;
   flex: 1;
+  background: transparent !important;
 }
 
 .tab-btn {

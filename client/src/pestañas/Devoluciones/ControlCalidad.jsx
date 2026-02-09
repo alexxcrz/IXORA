@@ -15,6 +15,9 @@ export default function ControlCalidad({ serverUrl, pushToast, socket }) {
   const [registros, setRegistros] = useState([]);
   const [loading, setLoading] = useState(true);
   
+  // Estado para procesos en curso
+  const [calidadEnProceso, setCalidadEnProceso] = useState([]);
+  
   // Estado para el modal de nuevo registro
   const [modalNuevoRegistro, setModalNuevoRegistro] = useState({
     open: false,
@@ -125,6 +128,18 @@ export default function ControlCalidad({ serverUrl, pushToast, socket }) {
   useEffect(() => {
     cargarRegistros();
     cargarOpcionesDropdowns();
+    // Cargar procesos guardados en localStorage
+    if (areaSeleccionada) {
+      try {
+        const procesosGuardados = localStorage.getItem('calidad_en_proceso');
+        if (procesosGuardados) {
+          const procesos = JSON.parse(procesosGuardados);
+          setCalidadEnProceso(procesos);
+        }
+      } catch (error) {
+        console.error('Error cargando procesos guardados:', error);
+      }
+    }
   }, [areaSeleccionada, serverUrl]); // Dependencias directas en lugar de funciones
 
   // Escuchar eventos de actualización de registros de calidad
@@ -139,11 +154,181 @@ export default function ControlCalidad({ serverUrl, pushToast, socket }) {
     socket.on('calidad_registros_actualizados', handleCalidadActualizada);
     socket.on('devoluciones_actualizadas', handleCalidadActualizada);
     
+    // Eventos para procesos de calidad en curso
+    const handleCalidadEnProceso = (data) => {
+      if (!data || !data.pedido) return;
+      
+      setCalidadEnProceso((prev) => {
+        const existe = prev.find((p) => p.pedido === data.pedido);
+        if (existe) return prev;
+        const nuevaLista = [...prev, data];
+        
+        // Guardar en localStorage
+        try {
+          localStorage.setItem('calidad_en_proceso', JSON.stringify(nuevaLista));
+        } catch (error) {
+          console.error('Error guardando procesos:', error);
+        }
+        
+        return nuevaLista;
+      });
+    };
+
+    const handleCalidadProcesoTerminado = (data) => {
+      if (!data || !data.pedido) return;
+      
+      setCalidadEnProceso((prev) => {
+        const nuevaLista = prev.filter((p) => p.pedido !== data.pedido);
+        
+        // Actualizar localStorage
+        try {
+          localStorage.setItem('calidad_en_proceso', JSON.stringify(nuevaLista));
+        } catch (error) {
+          console.error('Error actualizando procesos:', error);
+        }
+        
+        return nuevaLista;
+      });
+    };
+
+    socket.on("calidad_en_proceso", handleCalidadEnProceso);
+    socket.on("calidad_proceso_terminado", handleCalidadProcesoTerminado);
+    
     return () => {
       socket.off('calidad_registros_actualizados', handleCalidadActualizada);
       socket.off('devoluciones_actualizadas', handleCalidadActualizada);
+      socket.off("calidad_en_proceso", handleCalidadEnProceso);
+      socket.off("calidad_proceso_terminado", handleCalidadProcesoTerminado);
     };
   }, [socket]); // Removido cargarRegistros de dependencias
+
+  // ==========================
+  // FUNCIONES DE NOTIFICACIÓN DE PROCESO
+  // ==========================
+  const notificarInicioProceso = (pedido) => {
+    if (socket && pedido) {
+      socket.emit("calidad_iniciada", {
+        pedido: pedido,
+        usuario: "Usuario", // Obtener del contexto si está disponible
+        area: areaSeleccionada
+      });
+    }
+  };
+
+  const notificarFinProceso = (pedido) => {
+    if (socket && pedido) {
+      socket.emit("calidad_finalizada", {
+        pedido: pedido,
+        area: areaSeleccionada
+      });
+    }
+  };
+
+  // Regresar a un registro en proceso
+  const regresarAProceso = async (pedidoNumero) => {
+    try {
+      const registro = registros.find((r) => r.pedido === pedidoNumero);
+      
+      if (registro) {
+        // Si existe el registro, abrir el modal de evidencias
+        setModalEvidencias({ 
+          open: true,
+          evidencias: Array.isArray(registro.evidencias) ? registro.evidencias : [],
+          indiceActual: 0,
+          registroId: registro.id,
+          modoEdicion: false,
+          nuevasEvidencias: []
+        });
+      } else {
+        // Intentar cargar progreso guardado
+        const progreso = cargarProgresoLocal(pedidoNumero);
+        
+        if (progreso) {
+          // Restaurar progreso
+          abrirModalNuevoRegistro();
+          setModalNuevoRegistro(prev => ({
+            ...prev,
+            form: {
+              ...prev.form,
+              pedido: progreso.pedido,
+              codigo: progreso.codigo || '',
+              producto: progreso.producto || '',
+              presentacion: progreso.presentacion || '',
+              cantidad: progreso.cantidad || 0,
+              lote: progreso.lote || '',
+              caducidad: progreso.caducidad || '',
+              laboratorio: progreso.laboratorio || '',
+              clasificacion_etiqueta: progreso.clasificacion_etiqueta || '',
+              defecto: progreso.defecto || '',
+              destino: progreso.destino || '',
+              comentarios_calidad: progreso.comentarios_calidad || ''
+            }
+          }));
+          pushToast?.(`✅ Progreso restaurado`, "ok");
+        } else {
+          // Si no hay progreso, abrir modal vacío
+          abrirModalNuevoRegistro();
+          setModalNuevoRegistro(prev => ({
+            ...prev,
+            form: { ...prev.form, pedido: pedidoNumero }
+          }));
+        }
+      }
+    } catch (error) {
+      console.error("Error regresando al proceso:", error);
+      pushToast?.("❌ Error al regresar al proceso", "error");
+    }
+  };
+
+  // Guardar progreso en localStorage
+  const guardarProgresoLocal = (pedidoKey) => {
+    if (!pedidoKey) return;
+    
+    try {
+      const progreso = {
+        ...modalNuevoRegistro.form,
+        timestamp: Date.now()
+      };
+      
+      localStorage.setItem(`calidad_progreso_${pedidoKey}`, JSON.stringify(progreso));
+    } catch (error) {
+      console.error("Error guardando progreso:", error);
+    }
+  };
+
+  // Cargar progreso desde localStorage
+  const cargarProgresoLocal = (pedidoKey) => {
+    if (!pedidoKey) return null;
+    
+    try {
+      const stored = localStorage.getItem(`calidad_progreso_${pedidoKey}`);
+      if (!stored) return null;
+      
+      const progreso = JSON.parse(stored);
+      
+      // Verificar que no sea muy antiguo (más de 24 horas)
+      const horasTranscurridas = (Date.now() - progreso.timestamp) / (1000 * 60 * 60);
+      if (horasTranscurridas > 24) {
+        localStorage.removeItem(`calidad_progreso_${pedidoKey}`);
+        return null;
+      }
+      
+      return progreso;
+    } catch (error) {
+      console.error("Error cargando progreso:", error);
+      return null;
+    }
+  };
+
+  // Limpiar progreso guardado
+  const limpiarProgresoLocal = (pedidoKey) => {
+    if (!pedidoKey) return;
+    try {
+      localStorage.removeItem(`calidad_progreso_${pedidoKey}`);
+    } catch (error) {
+      console.error("Error limpiando progreso:", error);
+    }
+  };
 
   // Cerrar dropdowns al hacer clic fuera y actualizar posición al hacer scroll
   useEffect(() => {
@@ -184,6 +369,18 @@ export default function ControlCalidad({ serverUrl, pushToast, socket }) {
       };
     }
   }, [dropdownAbierto]);
+
+  // Auto-guardar progreso cuando cambia el formulario
+  useEffect(() => {
+    const pedido = modalNuevoRegistro.form.pedido.trim();
+    if (modalNuevoRegistro.open && pedido) {
+      const timeoutId = setTimeout(() => {
+        guardarProgresoLocal(pedido);
+      }, 1000); // Guardar después de 1 segundo de inactividad
+      
+      return () => clearTimeout(timeoutId);
+    }
+  }, [modalNuevoRegistro.form, modalNuevoRegistro.open]);
 
   // Agregar nueva opción a un dropdown
   const agregarNuevaOpcion = async (tipo, valor, campo) => {
@@ -276,6 +473,8 @@ export default function ControlCalidad({ serverUrl, pushToast, socket }) {
       evidencias: [],
       subiendo: false
     });
+    // Notificar inicio después de un pequeño delay cuando se ingrese el pedido
+    // (se manejará en el onChange del input de pedido)
     // Enfocar el input de código después de un breve delay
     setTimeout(() => {
       codigoInputRefModal.current?.focus();
@@ -634,6 +833,8 @@ export default function ControlCalidad({ serverUrl, pushToast, socket }) {
       }
       
       // Cerrar modal y recargar
+      notificarFinProceso(form.pedido);
+      limpiarProgresoLocal(form.pedido.trim());
       setModalNuevoRegistro({
         open: false,
         form: {
@@ -660,6 +861,8 @@ export default function ControlCalidad({ serverUrl, pushToast, socket }) {
     } catch (error) {
       console.error('Error guardando registro:', error);
       pushToast(`❌ Error al guardar registro: ${error.message || 'Error desconocido'}`, 'error');
+      notificarFinProceso(form.pedido);
+      limpiarProgresoLocal(form.pedido.trim());
       setModalNuevoRegistro(prev => ({ ...prev, subiendo: false }));
     }
   };
@@ -865,8 +1068,8 @@ export default function ControlCalidad({ serverUrl, pushToast, socket }) {
           style={{
             padding: '6px 10px',
             borderRadius: 'var(--radio-md)',
-            border: '1px solid var(--azul-primario)',
-            backgroundColor: 'var(--azul-primario)',
+            border: '1px solid var(--borde-visible)',
+            backgroundColor: 'transparent',
             color: 'var(--texto-principal)',
             fontSize: '0.85rem',
             cursor: 'pointer',
@@ -1016,6 +1219,32 @@ export default function ControlCalidad({ serverUrl, pushToast, socket }) {
           Mostrando registros de: <strong>{areaSeleccionada}</strong> ({registros.length} {registros.length === 1 ? 'registro' : 'registros'})
         </p>
       </div>
+
+      {/* Indicador de registros de calidad en proceso */}
+      {calidadEnProceso.length > 0 && (
+        <div className="calidad-en-proceso-indicador">
+          {calidadEnProceso.map((proceso, idx) => (
+            <div 
+              key={idx} 
+              className="proceso-item"
+              onClick={() => regresarAProceso(proceso.pedido)}
+              title="Click para regresar al registro en proceso"
+            >
+              <span className="proceso-icon">🔬</span>
+              <span className="proceso-texto">
+                Registrando en {proceso.area}: 
+                <strong> {proceso.pedido}</strong>
+                {proceso.usuario && ` (${proceso.usuario})`}
+              </span>
+              <span className="proceso-loading">
+                <span className="dot">.</span>
+                <span className="dot">.</span>
+                <span className="dot">.</span>
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
         
       {/* Botón para agregar nuevo registro */}
       <div style={{ marginBottom: '16px' }}>
@@ -1283,9 +1512,9 @@ export default function ControlCalidad({ serverUrl, pushToast, socket }) {
                             })}
                             style={{
                               padding: '4px 8px',
-                              background: 'var(--azul-primario)',
+                              background: 'transparent',
                               color: 'var(--texto-principal)',
-                              border: 'none',
+                              border: '1px solid var(--borde-visible)',
                               borderRadius: 'var(--radio-sm)',
                               cursor: 'pointer',
                               fontSize: '0.65rem',
@@ -1294,11 +1523,11 @@ export default function ControlCalidad({ serverUrl, pushToast, socket }) {
                               whiteSpace: 'nowrap'
                             }}
                             onMouseEnter={(e) => {
-                              e.currentTarget.style.background = 'var(--azul-secundario)';
+                              e.currentTarget.style.background = 'var(--fondo-card-hover)';
                               e.currentTarget.style.transform = 'translateY(-1px)';
                             }}
                             onMouseLeave={(e) => {
-                              e.currentTarget.style.background = 'var(--azul-primario)';
+                              e.currentTarget.style.background = 'transparent';
                               e.currentTarget.style.transform = 'translateY(0)';
                             }}
                           >
@@ -1328,7 +1557,7 @@ export default function ControlCalidad({ serverUrl, pushToast, socket }) {
                               whiteSpace: 'nowrap'
                             }}
                             onMouseEnter={(e) => {
-                              e.currentTarget.style.background = 'var(--azul-primario)';
+                              e.currentTarget.style.background = 'var(--fondo-card-hover)';
                               e.currentTarget.style.transform = 'translateY(-1px)';
                             }}
                             onMouseLeave={(e) => {
@@ -1506,10 +1735,17 @@ export default function ControlCalidad({ serverUrl, pushToast, socket }) {
                   <input
                     type="text"
                     value={modalNuevoRegistro.form.pedido}
-                    onChange={(e) => setModalNuevoRegistro(prev => ({
-                      ...prev,
-                      form: { ...prev.form, pedido: e.target.value }
-                    }))}
+                    onChange={(e) => {
+                      const nuevoPedido = e.target.value;
+                      setModalNuevoRegistro(prev => ({
+                        ...prev,
+                        form: { ...prev.form, pedido: nuevoPedido }
+                      }));
+                      // Notificar inicio cuando se ingresa un pedido
+                      if (nuevoPedido.trim() && !modalNuevoRegistro.form.pedido.trim()) {
+                        notificarInicioProceso(nuevoPedido);
+                      }
+                    }}
                     placeholder="Número de pedido"
                     style={{ width: '100%', padding: '6px', marginTop: '4px', fontSize: '0.8rem' }}
                   />
@@ -1710,6 +1946,11 @@ export default function ControlCalidad({ serverUrl, pushToast, socket }) {
                     className="btn-modal-action btn-modal-cancel"
                     onClick={() => {
                       if (!modalNuevoRegistro.subiendo) {
+                        const pedido = modalNuevoRegistro.form.pedido.trim();
+                        if (pedido) {
+                          notificarFinProceso(pedido);
+                          limpiarProgresoLocal(pedido);
+                        }
                         if (Array.isArray(modalNuevoRegistro.evidencias)) {
                           modalNuevoRegistro.evidencias.forEach(ev => {
                             if (ev && ev.preview) {
@@ -1865,9 +2106,9 @@ export default function ControlCalidad({ serverUrl, pushToast, socket }) {
                     onClick={() => setModalEvidencias(prev => ({ ...prev, modoEdicion: !prev.modoEdicion }))}
                     style={{
                       padding: '4px 8px',
-                      background: modalEvidencias.modoEdicion ? 'var(--exito)' : 'var(--azul-primario)',
+                      background: modalEvidencias.modoEdicion ? 'var(--exito)' : 'transparent',
                       color: 'var(--texto-principal)',
-                      border: 'none',
+                      border: '1px solid var(--borde-visible)',
                       borderRadius: 'var(--radio-sm)',
                       cursor: 'pointer',
                       fontSize: '0.7rem',
@@ -2097,9 +2338,9 @@ export default function ControlCalidad({ serverUrl, pushToast, socket }) {
                       top: '50%',
                       transform: 'translateY(-50%)',
                       padding: '10px 15px',
-                      background: 'var(--azul-primario)',
-                      color: 'var(--texto-principal)',
-                      border: 'none',
+                      background: 'rgba(0, 0, 0, 0.5)',
+                      color: '#ffffff',
+                      border: '1px solid var(--borde-visible)',
                       borderRadius: 'var(--radio-full)',
                       cursor: 'pointer',
                       fontSize: '1.2rem',
@@ -2126,9 +2367,9 @@ export default function ControlCalidad({ serverUrl, pushToast, socket }) {
                       top: '50%',
                       transform: 'translateY(-50%)',
                       padding: '10px 15px',
-                      background: 'var(--azul-primario)',
-                      color: 'var(--texto-principal)',
-                      border: 'none',
+                      background: 'rgba(0, 0, 0, 0.5)',
+                      color: '#ffffff',
+                      border: '1px solid var(--borde-visible)',
                       borderRadius: 'var(--radio-full)',
                       cursor: 'pointer',
                       fontSize: '1.2rem',
@@ -2172,9 +2413,9 @@ export default function ControlCalidad({ serverUrl, pushToast, socket }) {
                 }}
                 style={{
                   padding: '6px 12px',
-                  background: 'linear-gradient(135deg, var(--azul-primario), var(--azul-secundario))',
+                  background: 'transparent',
                   color: 'var(--texto-principal)',
-                  border: 'none',
+                  border: '1px solid var(--borde-visible)',
                   borderRadius: 'var(--radio-sm)',
                   cursor: 'pointer',
                   fontSize: '0.75rem',

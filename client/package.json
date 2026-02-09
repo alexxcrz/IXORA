@@ -6,20 +6,9 @@
     "start": "cross-env NODE_NO_WARNINGS=1 HOST=0.0.0.0 react-scripts start",
     "start:ip": "node scripts/detect-ip.js && cross-env NODE_NO_WARNINGS=1 HOST=0.0.0.0 BROWSER=none DANGEROUSLY_DISABLE_HOST_CHECK=true react-scripts start",
     "build": "react-scripts build",
-    "test": "react-scripts test",
-    "build:apk": "npm run build && npx cap sync android && cd android && gradlew.bat assembleDebug",
-    "build:apk:release": "npm run build && npx cap sync android && cd android && gradlew.bat assembleRelease"
+    "test": "react-scripts test"
   },
   "dependencies": {
-    "@capacitor/android": "^7.4.4",
-    "@capacitor/app": "^7.0.0",
-    "@capacitor/browser": "^7.0.0",
-    "@capacitor/camera": "^7.0.0",
-    "@capacitor/cli": "^7.4.4",
-    "@capacitor/core": "^7.4.4",
-    "@capacitor/filesystem": "^7.0.0",
-    "@capacitor/local-notifications": "^7.0.4",
-    "@capacitor/push-notifications": "^7.0.4",
     "better-sqlite3": "^12.4.1",
     "cors": "^2.8.5",
     "dayjs": "^1.11.18",

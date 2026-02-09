@@ -9,24 +9,9 @@
 export const isDarkMode = () => {
   if (typeof window === 'undefined') return false;
   
-  // Primero intentar con matchMedia (estándar web)
+  // Detectar usando matchMedia (estándar web)
   if (window.matchMedia) {
     return window.matchMedia('(prefers-color-scheme: dark)').matches;
-  }
-  
-  // Fallback: detectar modo oscuro en Android/iOS usando Capacitor
-  if (window.Capacitor && window.Capacitor.isNativePlatform()) {
-    // En Android, verificar el tema del sistema
-    if (window.Capacitor.getPlatform() === 'android') {
-      try {
-        // El tema se detecta automáticamente por el sistema
-        // Si estamos en modo oscuro, el sistema aplicará el tema dark
-        return document.documentElement.classList.contains('dark') || 
-               document.body.classList.contains('dark');
-      } catch (e) {
-        console.debug('Error detectando modo oscuro en Android:', e);
-      }
-    }
   }
   
   // Fallback final: revisar localStorage (por si el usuario tiene preferencia guardada)

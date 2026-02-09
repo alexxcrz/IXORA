@@ -90,7 +90,8 @@ export default function RegistrosPicking({
   moduloPicking,
 }) {
   const { showAlert, showConfirm } = useAlert();
-  const [filtro, setFiltro] = useState("pendientes"); // pendientes, surtidos, importacion, devoluciones
+  const [filtro, setFiltro] = useState("pendientes"); // pendientes, surtido, importacion, devoluciones, no-disponibles
+  const [busqueda, setBusqueda] = useState("");
   const canalActual = (canal || "picking").toString().trim().toLowerCase();
 
   const productosFiltrados = (productos || []).filter(
@@ -877,16 +878,8 @@ export default function RegistrosPicking({
 
     if (scanTimeoutRef.current) clearTimeout(scanTimeoutRef.current);
 
-    // Detectar si estamos en la app móvil Android usando Capacitor
-    const isMobileApp = typeof window !== 'undefined' && 
-      window.Capacitor && 
-      window.Capacitor.isNativePlatform && 
-      window.Capacitor.isNativePlatform() &&
-      window.Capacitor.getPlatform() === 'android';
-
-    // En la app móvil, usar un delay más corto para detectar escaneo rápido
-    // En web, usar el delay normal
-    const delay = isMobileApp ? 100 : SCAN_DELAY;
+    // Usar delay para detectar escaneo rápido
+    const delay = SCAN_DELAY;
 
     scanTimeoutRef.current = setTimeout(() => {
       const finalCode = scanBufferRef.current.trim();
@@ -1002,7 +995,19 @@ export default function RegistrosPicking({
     // Recargar productos para asegurar que se actualice desde el servidor
     await cargarProductos();
     
-    pushToast(`🚫 ${prodModal.codigo} marcado como NO disponible`, "err");
+    // Mostrar mensaje específico según el motivo
+    let mensaje = "";
+    if (motivoLimpio === "Agotado") {
+      mensaje = `❌ ${prodModal.codigo} se marcó como agotado`;
+    } else if (motivoLimpio === "No surtido en batería" || motivoLimpio === "No surtido en rack") {
+      mensaje = `⚠️ ${prodModal.codigo} marcado como no surtido en rack`;
+    } else if (motivoLimpio === "Cambio de lote") {
+      mensaje = `🔄 ${prodModal.codigo} marcado con cambio de lote`;
+    } else {
+      mensaje = `🚫 ${prodModal.codigo} marcado como NO disponible`;
+    }
+    
+    pushToast(mensaje, "err");
     beepAlerta();
 
     setModalAbierto(false);
@@ -1050,56 +1055,23 @@ export default function RegistrosPicking({
 
   return (
     <div className="card">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-        <h2 style={{ margin: 0 }}>Registros del día</h2>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+      <div className="registros-header">
+        <h2 className="registros-titulo">Registros del día</h2>
+        <div className="registros-acciones">
           {cambiarModulo && (
             <button
               onClick={() => cambiarModulo(moduloPicking || "escaneo")}
-              style={{
-                fontSize: '18px',
-                background: 'var(--color-primario, #3b82f6)',
-                color: '#fff',
-                border: 'none',
-                cursor: 'pointer',
-                padding: '8px 16px',
-                borderRadius: '8px',
-                fontWeight: '500',
-                transition: 'all 0.2s ease',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-              }}
+              className="btn-picking"
               title="Ir a Picking"
             >
-              🔎 Picking
+              ✓ <span className="btn-picking-texto">Picking</span>
             </button>
           )}
           {filtro === "pendientes" && (
             <>
               <button
                 onClick={toggleVoz}
-                style={{
-                  fontSize: '24px',
-                  background: vozEscuchando ? 'rgba(76, 175, 80, 0.1)' : 'transparent',
-                  border: vozEscuchando ? '2px solid rgba(76, 175, 80, 0.5)' : '2px solid transparent',
-                  cursor: 'pointer',
-                  color: vozEscuchando ? '#4CAF50' : '#888',
-                  transition: 'all 0.3s ease',
-                  position: 'relative',
-                  padding: '10px',
-                  borderRadius: '50%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  minWidth: '44px',
-                  minHeight: '44px',
-                  ...(vozEscuchando && {
-                    boxShadow: '0 0 20px rgba(76, 175, 80, 0.9), 0 0 40px rgba(76, 175, 80, 0.6), 0 0 60px rgba(76, 175, 80, 0.3)',
-                    animation: 'pulse-glow 2s ease-in-out infinite'
-                  })
-                }}
+                className={`btn-microfono ${vozEscuchando ? 'activo' : ''}`}
                 title={vozEscuchando ? 'Micrófono activo - Click para desactivar' : 'Micrófono inactivo - Click para activar'}
               >
                 🎤
@@ -1155,6 +1127,14 @@ export default function RegistrosPicking({
         </button>
 
         <button
+          className={filtro === "surtido" ? "tab-activa" : ""}
+          onClick={() => setFiltro("surtido")}
+        >
+          <span className="tab-icon">✅</span>
+          <span className="tab-label">Surtido</span>
+        </button>
+
+        <button
           className={filtro === "devoluciones" ? "tab-activa" : ""}
           onClick={() => setFiltro("devoluciones")}
         >
@@ -1171,12 +1151,33 @@ export default function RegistrosPicking({
         </button>
 
         <button
-          className={filtro === "todos" ? "tab-activa" : ""}
-          onClick={() => setFiltro("todos")}
+          className={filtro === "no-disponibles" ? "tab-activa" : ""}
+          onClick={() => setFiltro("no-disponibles")}
         >
-          <span className="tab-icon">📋</span>
-          <span className="tab-label">Todos</span>
+          <span className="tab-icon">🚫</span>
+          <span className="tab-label">No disponibles</span>
         </button>
+      </div>
+
+      <div style={{ marginBottom: '15px' }}>
+        <input
+          type="text"
+          placeholder="🔍 Buscar por código, nombre o lote..."
+          value={busqueda}
+          onChange={(e) => setBusqueda(e.target.value)}
+          style={{
+            width: '100%',
+            padding: '10px 15px',
+            fontSize: '0.95rem',
+            border: '2px solid var(--borde-sutil)',
+            borderRadius: '8px',
+            background: 'var(--fondo-card)',
+            color: 'var(--texto-principal)',
+            transition: 'border-color 0.2s ease',
+          }}
+          onFocus={(e) => e.target.style.borderColor = 'var(--azul-primario)'}
+          onBlur={(e) => e.target.style.borderColor = 'var(--borde-sutil)'}
+        />
       </div>
 
       <div className="registros-contadores">
@@ -1228,13 +1229,10 @@ export default function RegistrosPicking({
                   return p.surtido === 0 && p.disponible !== 0;
                 }
 
-                if (filtro === "surtidos") {
+                if (filtro === "surtido") {
                   const esDevolucion = p.origen === 'devoluciones';
-                  // Excluir productos de importación de la pestaña de surtidos normales
-                  // IMPORTANTE: Usar siempre el flag esImportacion que ya se calculó en productosConCategoria
-                  // Este flag ya tiene toda la lógica de detección aplicada
                   const esImportado = p.esImportacion === true;
-                  
+                  // Solo mostrar productos surtidos (excluir devoluciones e importación)
                   return p.surtido === 1 && !esDevolucion && !esImportado;
                 }
 
@@ -1244,14 +1242,33 @@ export default function RegistrosPicking({
 
                 if (filtro === "importacion") {
                   // SOLO mostrar productos de importación que estén surtidos
-                  // IMPORTANTE: Usar siempre el flag esImportacion que ya se calculó en productosConCategoria
-                  // Este flag ya tiene toda la lógica de detección aplicada (categoría, subcategoría, columna importacion)
                   const esImportado = p.esImportacion === true;
-                  
                   return p.surtido === 1 && esImportado;
                 }
 
+                if (filtro === "no-disponibles") {
+                  // Mostrar productos marcados como no disponibles
+                  return p.disponible === 0;
+                }
+
                 return true;
+              })
+              .filter((p) => {
+                // Filtro de búsqueda
+                if (!busqueda.trim()) return true;
+                
+                const terminoBusqueda = busqueda.toLowerCase().trim();
+                const codigo = (p.codigo || '').toLowerCase();
+                const nombre = (p.nombre || '').toLowerCase();
+                const lote = (p.lote || '').toLowerCase();
+                
+                return codigo.includes(terminoBusqueda) || 
+                       nombre.includes(terminoBusqueda) || 
+                       lote.includes(terminoBusqueda);
+              })
+              .sort((a, b) => {
+                // Ordenar: NO surtidos (0) primero, surtidos (1) después
+                return a.surtido - b.surtido;
               })
               .map((p) => {
                 const filaRoja = p.disponible === 0;
@@ -1525,6 +1542,20 @@ export default function RegistrosPicking({
                             );
 
                             await cargarProductos();
+                            
+                            // Mostrar mensaje específico según el motivo
+                            let mensaje = "";
+                            if (motivoLimpio === "Agotado") {
+                              mensaje = `❌ ${p.codigo} se marcó como agotado`;
+                            } else if (motivoLimpio === "No surtido en batería") {
+                              mensaje = `⚠️ ${p.codigo} marcado como no surtido en rack`;
+                            } else if (motivoLimpio === "Cambio de lote") {
+                              mensaje = `🔄 ${p.codigo} marcado con cambio de lote`;
+                            } else {
+                              mensaje = `🚫 ${p.codigo} marcado como NO disponible`;
+                            }
+                            
+                            pushToast(mensaje, "err");
                             beepAlerta();
                           }}
                           defaultValue=""
@@ -1873,4 +1904,5 @@ export default function RegistrosPicking({
     </div>
   );
 }
+
 

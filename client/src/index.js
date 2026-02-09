@@ -6,6 +6,7 @@ import { applySystemDarkMode } from "./utils/darkMode";
 import ErrorBoundary from "./components/ErrorBoundary";
 import logger from "./utils/logger";
 
+// Build version: 7.0.1
 // PROTECCIÓN: Manejador global de errores MUY AGRESIVO para evitar crashes
 // Este logging será visible en adb logcat
 window.addEventListener('error', (event) => {
@@ -150,69 +151,6 @@ window.addEventListener('unhandledrejection', (event) => {
   }
 });
 
-// PROTECCIÓN: Logging MUY DETALLADO para Android - detectar cuando la app se está cerrando
-if (typeof window !== 'undefined' && window.Capacitor && window.Capacitor.isNativePlatform()) {
-  try {
-    
-    // PROTECCIÓN: Verificar que localStorage esté disponible antes de usarlo
-    try {
-      localStorage.setItem('__test__', 'test');
-      localStorage.removeItem('__test__');
-    } catch (localStorageErr) {
-      console.error('[IXORA_ANDROID] ❌ localStorage NO está disponible:', localStorageErr);
-    }
-    
-    // Detectar si la app se está cerrando
-    window.addEventListener('beforeunload', () => {
-      console.error('[IXORA_ANDROID] ⚠️⚠️⚠️ APP SE ESTÁ CERRANDO (beforeunload) ⚠️⚠️⚠️');
-      console.error('[IXORA_ANDROID] Stack trace:', new Error().stack);
-    }, true);
-    
-    window.addEventListener('unload', () => {
-      console.error('[IXORA_ANDROID] ⚠️⚠️⚠️ APP SE ESTÁ DESCARGANDO (unload) ⚠️⚠️⚠️');
-      console.error('[IXORA_ANDROID] Stack trace:', new Error().stack);
-    }, true);
-    
-    // Detectar errores de WebView
-    if (window.WebViewJavascriptBridge) {
-      try {
-        window.WebViewJavascriptBridge.onError = (error) => {
-          console.error('[IXORA_ANDROID] WebView Error:', error);
-        };
-      } catch (webViewErr) {
-        console.error('[IXORA_ANDROID] Error configurando WebView error handler:', webViewErr);
-      }
-    }
-    
-    // Interceptar console.error para asegurar que se vea en logcat
-    try {
-      const originalConsoleError = console.error;
-      console.error = function(...args) {
-        try {
-          originalConsoleError.apply(console, args);
-          // Forzar que se vea en logcat de Android
-          if (window.Android && typeof window.Android.logError === 'function') {
-            try {
-              window.Android.logError(JSON.stringify(args));
-            } catch (e) {
-              // Silenciar errores del log nativo
-            }
-          }
-        } catch (consoleErr) {
-          // Si falla, al menos intentar el original
-          try {
-            originalConsoleError.apply(console, args);
-          } catch (e) {}
-        }
-      };
-    } catch (consoleErr) {
-      console.error('[IXORA_ANDROID] Error interceptando console.error:', consoleErr);
-    }
-  } catch (initErr) {
-    console.error('[IXORA_ANDROID] Error inicializando Android logging:', initErr);
-  }
-}
-
 // Aplicar modo oscuro del sistema INMEDIATAMENTE antes de que React renderice
 try {
   applySystemDarkMode();
@@ -223,7 +161,10 @@ try {
 // Esto evita el flash de colores por defecto y conflictos
 try {
   cargarTema();
+  // Marcar que el tema está listo
+  document.documentElement.removeAttribute('data-theme-loading');
 } catch (error) {
+  console.error('[IXORA] Error cargando tema:', error);
 }
 
 // PROTECCIÓN: Renderizar con múltiples capas de protección

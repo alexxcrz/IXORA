@@ -606,7 +606,6 @@ try {
       dbInv.exec("PRAGMA foreign_keys = ON;");
       console.log("✅ Migración de productos_lotes completada.");
     } else {
-      console.log("✅ productos_lotes ya tiene inventario_id, verificando datos...");
       // Verificar si hay lotes sin inventario_id y actualizarlos
       const lotesSinInventario = dbInv
         .prepare("SELECT COUNT(*) as total FROM productos_lotes WHERE inventario_id IS NULL OR inventario_id = 0")
@@ -674,7 +673,6 @@ try {
   dbInv.exec("CREATE INDEX IF NOT EXISTS idx_lotes_historial_lote_id ON lotes_historial(lote_id);");
   dbInv.exec("CREATE INDEX IF NOT EXISTS idx_lotes_historial_codigo ON lotes_historial(codigo_producto);");
   dbInv.exec("CREATE INDEX IF NOT EXISTS idx_lotes_historial_fecha ON lotes_historial(fecha);");
-  console.log("✅ Tabla lotes_historial creada/verificada correctamente.");
 } catch (e) {
   console.error("❌ Error creando tabla lotes_historial:", e);
   console.error("   Stack:", e.stack);
@@ -1654,6 +1652,23 @@ dbUsers.exec(`
   CREATE INDEX IF NOT EXISTS idx_push_tokens_usuario ON push_tokens(usuario_id);
 `);
 
+dbUsers.exec(`
+  CREATE TABLE IF NOT EXISTS confirmation_codes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    usuario_id INTEGER NOT NULL,
+    codigo TEXT NOT NULL UNIQUE,
+    accion TEXT NOT NULL,
+    detalles TEXT,
+    creado_en TEXT DEFAULT (datetime('now', 'localtime')),
+    expira_en TEXT,
+    usado INTEGER DEFAULT 0,
+    intentos_fallidos INTEGER DEFAULT 0,
+    FOREIGN KEY (usuario_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS idx_confirmation_usuario ON confirmation_codes(usuario_id);
+  CREATE INDEX IF NOT EXISTS idx_confirmation_codigo ON confirmation_codes(codigo);
+`);
+
 // 🔹 FUNCIÓN HELPER: Asignar automáticamente nuevos permisos al rol CEO
 function asignarPermisoACEO(permString) {
   try {
@@ -1857,6 +1872,8 @@ const BASE_PERMS = [
   "admin.sesiones.ver",
   "admin.sesiones.cerrar",
   "admin.sesiones.cerrar_todas",
+  // Permisos de confirmación
+  "admin.confirmacion.recibir_codigos",
   // Permisos de auditoría
   "admin.actividad.ver",
   "admin.actividad.registrar",
@@ -2088,6 +2105,10 @@ try {
 } catch (e) {}
 
 try {
+  dbUsers.exec(`ALTER TABLE users ADD COLUMN nip_hash TEXT;`);
+} catch (e) {}
+
+try {
   dbUsers.exec(`
     CREATE TABLE IF NOT EXISTS user_voice_config (
       user_id INTEGER PRIMARY KEY,
@@ -2122,13 +2143,17 @@ const IXORA_PHONE = "0000000000";
 let ixoraUser = dbUsers.prepare("SELECT id FROM users WHERE phone=?").get(IXORA_PHONE);
 
 if (!ixoraUser) {
+  console.log("🆕 Creando usuario IXORA...");
   const ixoraInfo = dbUsers
-    .prepare("INSERT INTO users (name, phone, nickname, active, es_sistema) VALUES (?,?,?,1,1)")
-    .run("IXORA", IXORA_PHONE, "IXORA");
+    .prepare("INSERT INTO users (name, phone, nickname, active, es_sistema, photo) VALUES (?,?,?,1,1,?)")
+    .run("IXORA", IXORA_PHONE, "IXORA", "user_6.png");
   ixoraUser = { id: ixoraInfo.lastInsertRowid };
 } else {
-  dbUsers.prepare("UPDATE users SET es_sistema=1, active=1, nickname='IXORA' WHERE phone=?").run(IXORA_PHONE);
+  const result = dbUsers.prepare("UPDATE users SET es_sistema=1, active=1, nickname='IXORA', photo='user_6.png' WHERE phone=?").run(IXORA_PHONE);
 }
+
+// Verificar que IXORA está correctamente configurado
+const ixoraVerify = dbUsers.prepare("SELECT id, name, phone, es_sistema, photo FROM users WHERE phone=?").get(IXORA_PHONE);
 
 // Tabla de personalización
 dbUsers.exec(`

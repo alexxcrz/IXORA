@@ -8,8 +8,6 @@ export default function ModalReuniones({ mostrar, cerrar }) {
   const { authFetch, user } = useAuth();
   const { showAlert, showConfirm } = useAlert();
   const [serverUrl, setServerUrl] = useState(null);
-  const [reunionesProximas, setReunionesProximas] = useState([]);
-  const [reunionesHistorial, setReunionesHistorial] = useState([]);
   const [usuarios, setUsuarios] = useState([]);
   const [cargando, setCargando] = useState(false);
   const [reunionTerminando, setReunionTerminando] = useState(null);
@@ -44,8 +42,6 @@ export default function ModalReuniones({ mostrar, cerrar }) {
   useEffect(() => {
     if (mostrar && serverUrl) {
       cargarReuniones();
-      cargarReunionesProximas();
-      cargarReunionesHistorial();
       cargarUsuarios();
     }
   }, [mostrar, serverUrl]);
@@ -65,24 +61,6 @@ export default function ModalReuniones({ mostrar, cerrar }) {
       await authFetch(`${serverUrl}/reuniones`);
     } catch (error) {
       console.error("Error cargando reuniones:", error);
-    }
-  };
-
-  const cargarReunionesProximas = async () => {
-    try {
-      const data = await authFetch(`${serverUrl}/reuniones/proximas`);
-      setReunionesProximas(data || []);
-    } catch (error) {
-      console.error("Error cargando reuniones próximas:", error);
-    }
-  };
-
-  const cargarReunionesHistorial = async () => {
-    try {
-      const data = await authFetch(`${serverUrl}/reuniones/historial`);
-      setReunionesHistorial(data || []);
-    } catch (error) {
-      console.error("Error cargando historial:", error);
     }
   };
 
@@ -259,8 +237,6 @@ export default function ModalReuniones({ mostrar, cerrar }) {
       // Recargar reuniones con un pequeño delay para asegurar que la BD esté actualizada
       await new Promise(resolve => setTimeout(resolve, 100));
       await cargarReuniones();
-      await cargarReunionesProximas();
-      await cargarReunionesHistorial();
       
       // Emitir evento para que otros componentes se actualicen
       window.dispatchEvent(new CustomEvent('reunion-actualizada'));
@@ -275,6 +251,7 @@ export default function ModalReuniones({ mostrar, cerrar }) {
     }
   };
 
+  /* eslint-disable-next-line no-unused-vars */
   const editarReunion = (reunion) => {
     setReunionEditando(reunion);
     // Determinar tipo de videollamada basado en si tiene link o no
@@ -295,6 +272,7 @@ export default function ModalReuniones({ mostrar, cerrar }) {
     });
   };
 
+  /* eslint-disable-next-line no-unused-vars */
   const terminarReunion = async (reunion) => {
     if (!reunionTerminando) {
       setReunionTerminando(reunion);
@@ -313,8 +291,6 @@ export default function ModalReuniones({ mostrar, cerrar }) {
       setReunionTerminando(null);
       setObservacionesTerminar("");
       await cargarReuniones();
-      await cargarReunionesProximas();
-      await cargarReunionesHistorial();
       window.dispatchEvent(new CustomEvent('reunion-actualizada'));
     } catch (error) {
       console.error("Error terminando reunión:", error);
@@ -322,6 +298,7 @@ export default function ModalReuniones({ mostrar, cerrar }) {
     }
   };
 
+  /* eslint-disable-next-line no-unused-vars */
   const cancelarReunion = async (reunion) => {
     const confirmar = await showConfirm(
       `¿Estás seguro de cancelar la reunión "${reunion.titulo}"?`,
@@ -337,8 +314,7 @@ export default function ModalReuniones({ mostrar, cerrar }) {
       
       showAlert("Reunión cancelada exitosamente", "success");
       await cargarReuniones();
-      await cargarReunionesProximas();
-      await cargarReunionesHistorial();
+
       window.dispatchEvent(new CustomEvent('reunion-actualizada'));
     } catch (error) {
       console.error("Error cancelando reunión:", error);
@@ -346,6 +322,7 @@ export default function ModalReuniones({ mostrar, cerrar }) {
     }
   };
 
+  /* eslint-disable-next-line no-unused-vars */
   const abrirChatConCreador = (reunion, onChatOpen) => {
     // Esta función será pasada desde el componente padre para abrir el chat
     if (onChatOpen) {

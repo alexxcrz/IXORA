@@ -100,19 +100,8 @@ export default function IxoraIAWidget({ serverUrl, pushToast, contexto = {}, onC
       
       // Solicitar permiso de micrófono explícitamente y empezar reconocimiento
       const solicitarPermisoMicrofono = async () => {
-        // Detectar si estamos en Android nativo usando Capacitor
-        const isNativeAndroid = typeof window !== 'undefined' && 
-          window.Capacitor && 
-          window.Capacitor.isNativePlatform && 
-          window.Capacitor.isNativePlatform() &&
-          window.Capacitor.getPlatform() === 'android';
-
-        console.log('🔍 Detectando plataforma:', {
-          isNativeAndroid,
-          hasCapacitor: !!window.Capacitor,
-          platform: window.Capacitor?.getPlatform(),
-          isNative: window.Capacitor?.isNativePlatform?.()
-        });
+        // Web-only (no Android nativo)
+        const isNativeAndroid = false;
 
         // Si estamos en Android nativo, el permiso se solicitará automáticamente con getUserMedia
         // Android mostrará el diálogo nativo de permisos cuando se llame a getUserMedia

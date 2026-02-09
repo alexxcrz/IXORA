@@ -216,7 +216,25 @@ const eliminarNotifsPrioridadMensaje = (tipo, mensajeId, chatTarget) => {
 };
 
 // ==========================================
-// OBTENER TODOS LOS USUARIOS DE IXORA
+// OBTENER TODOS LOS USUARIOS PARA CHAT (incluye IXORA)
+// ==========================================
+router.get("/chat/usuarios", authRequired, (req, res) => {
+  try {
+    // Obtener TODOS los usuarios incluyendo sistema (IXORA)
+    const usuarios = dbUsers
+      .prepare(
+        "SELECT id, name, nickname, photo, active FROM users ORDER BY active DESC, name ASC"
+      )
+      .all();
+    res.json(usuarios);
+  } catch (e) {
+    console.error("Error obteniendo usuarios:", e);
+    res.status(500).json({ error: "Error obteniendo usuarios" });
+  }
+});
+
+// ==========================================
+// OBTENER TODOS LOS USUARIOS DE IXORA (sin sistema)
 // ==========================================
 router.get("/usuarios", authRequired, (req, res) => {
   try {

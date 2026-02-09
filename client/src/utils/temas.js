@@ -13,9 +13,9 @@ export const temas = {
       "--azul-secundario": "#2563eb",
       "--azul-hover": "#1d4ed8",
       "--azul-claro": "#60a5fa",
-      "--azul-sutil": "rgba(59, 130, 246, 0.05)",
-      "--azul-borde": "rgba(59, 130, 246, 0.3)",
-      "--azul-primario-transparente": "rgba(59, 130, 246, 0.15)",
+      "--azul-sutil": "rgba(255, 255, 255, 0.03)",
+      "--azul-borde": "rgba(255, 255, 255, 0.1)",
+      "--azul-primario-transparente": "rgba(255, 255, 255, 0.05)",
       "--overlay-modal": "rgba(21, 25, 46, 0.85)",
       "--texto-principal": "#f1f5f9",
       "--texto-secundario": "#cbd5e1",
@@ -37,7 +37,7 @@ export const temas = {
       "--sombra-md": "0 4px 8px rgba(0, 0, 0, 0.5)",
       "--sombra-lg": "0 8px 16px rgba(0, 0, 0, 0.6)",
       "--sombra-xl": "0 16px 32px rgba(0, 0, 0, 0.7)",
-      "--sombra-azul": "0 4px 16px rgba(59, 130, 246, 0.2)",
+      "--sombra-azul": "0 4px 16px rgba(0, 0, 0, 0.5)",
     }
   },
   
@@ -495,9 +495,9 @@ export const temas = {
       "--azul-secundario": "#2563eb",
       "--azul-hover": "#1d4ed8",
       "--azul-claro": "#60a5fa",
-      "--azul-sutil": "rgba(59, 130, 246, 0.1)",
-      "--azul-borde": "rgba(59, 130, 246, 0.3)",
-      "--azul-primario-transparente": "rgba(59, 130, 246, 0.15)",
+      "--azul-sutil": "rgba(255, 255, 255, 0.03)",
+      "--azul-borde": "rgba(255, 255, 255, 0.1)",
+      "--azul-primario-transparente": "rgba(255, 255, 255, 0.05)",
       
       "--overlay-modal": "rgba(15, 23, 42, 0.9)",
       
@@ -521,7 +521,7 @@ export const temas = {
       "--sombra-md": "0 4px 8px rgba(0, 0, 0, 0.5)",
       "--sombra-lg": "0 8px 16px rgba(0, 0, 0, 0.6)",
       "--sombra-xl": "0 16px 32px rgba(0, 0, 0, 0.7)",
-      "--sombra-azul": "0 4px 16px rgba(59, 130, 246, 0.2)",
+      "--sombra-azul": "0 4px 16px rgba(0, 0, 0, 0.5)",
     }
   },
   

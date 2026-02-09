@@ -3,6 +3,7 @@ import { useAuth } from "../../AuthContext";
 import "./Administrador.css";
 import Personalizacion from "./Personalizacion";
 import { useAlert } from "../../components/AlertModal";
+import ConfirmationCodeModal from "../../components/ConfirmationCodeModal";
 
 const TAB_LABELS = {
   "tab:escaneo": "Picking🔎",
@@ -120,6 +121,7 @@ const PERMISOS_POR_MODULO = {
     "admin.sesiones.ver": "Ver sesiones",
     "admin.sesiones.cerrar": "Cerrar sesiones",
     "admin.sesiones.cerrar_todas": "Cerrar todas las sesiones",
+    "admin.confirmacion.recibir_codigos": "Recibir códigos de confirmación",
     "admin.fotos.subir": "Subir fotos de perfil",
     "admin.actividad.registrar": "Registrar actividad",
     "admin.actividad.ver": "Ver auditoría",
@@ -240,7 +242,7 @@ const detectarTabsYPermisos = (permsAll) => {
 };
 
 function Administrador({ serverUrl, pushToast, socket }) {
-  const { token, user } = useAuth();
+  const { token, user, perms } = useAuth();
   const { showConfirm } = useAlert();
 
   const [usuarios, setUsuarios] = useState([]);
@@ -272,6 +274,11 @@ function Administrador({ serverUrl, pushToast, socket }) {
   const [tempPasswordInput, setTempPasswordInput] = useState("");
   const [resettingPassword, setResettingPassword] = useState(false);
 
+  // 🆕 Estado para modal de contraseña al crear nuevo usuario
+  const [modalPasswordNuevoUsuario, setModalPasswordNuevoUsuario] = useState(false);
+  const [nuevoUsuarioCreado, setNuevoUsuarioCreado] = useState(null); // { id, name }
+  const [passwordNuevoUsuario, setPasswordNuevoUsuario] = useState("");
+  const [guarandoPasswordNuevoUsuario, setGuardandoPasswordNuevoUsuario] = useState(false);
   // 🔵 NUEVOS ESTADOS (Sesiones + Foto perfil)
   const [modalSesiones, setModalSesiones] = useState(false);
   const [sesionesUsuario, setSesionesUsuario] = useState([]);
@@ -316,6 +323,11 @@ function Administrador({ serverUrl, pushToast, socket }) {
   const [ipsBloqueadas, setIpsBloqueadas] = useState([]);
   const [loadingIPs, setLoadingIPs] = useState(false);
   const [estadisticasSeguridad, setEstadisticasSeguridad] = useState(null);
+
+  // 🔵 ESTADOS PARA CONFIRMACIÓN CON CÓDIGOS
+  const [showConfirmationCodeModal, setShowConfirmationCodeModal] = useState(false);
+  const [confirmationCodeAction, setConfirmationCodeAction] = useState(null); // { accion, detalles, callback }
+  const [confirmingAction, setConfirmingAction] = useState(false);
 
   // 🔵 ESTADOS PARA GESTIÓN DE ROLES
   const [modalRol, setModalRol] = useState(false);
@@ -371,6 +383,15 @@ function Administrador({ serverUrl, pushToast, socket }) {
         ]);
 
         if (!mounted) return;
+        
+        // Debug: Log de IXORA
+        const ixora = u?.find(usr => usr.nickname === 'IXORA');
+        if (ixora) {
+          console.log('📸 IXORA en frontend:', { id: ixora.id, name: ixora.name, photo: ixora.photo, es_sistema: ixora.es_sistema });
+        } else {
+          console.log('⚠️ IXORA no encontrado en la lista de usuarios');
+        }
+        
         setUsuarios(u || []);
         setRoles(r || []);
         
@@ -805,6 +826,7 @@ function Administrador({ serverUrl, pushToast, socket }) {
       setEditNickname(u.nickname || "");
       setEditUsername(u.username || "");
       setEditActive(typeof u.active === "number" ? u.active : 1);
+      // setNipEdicion(""); - Removed NIP system
       
       // Limpiar foto de perfil al abrir modal de edición (se mostrará la foto existente si hay)
       setFotoPerfil(null);
@@ -963,10 +985,13 @@ function Administrador({ serverUrl, pushToast, socket }) {
       }
       
       // Determinar qué permisos son directos:
-      // 1. Si un permiso está en editPerms pero NO está en permisosDeRoles, es directo (nuevo permiso directo)
-      // 2. Si un permiso está en editPerms Y estaba en permisosDirectosOriginales, es directo (se mantiene)
-      // 3. Si un permiso está en editPerms Y en permisosDeRoles pero NO estaba en permisosDirectosOriginales, NO es directo (viene solo del rol)
+      // - Permisos en editPerms que NO vienen de los roles actuales = directos
+      // - El permiso de confirmación SIEMPRE es directo (no existe en roles)
       const permisosDirectos = editPerms.filter(perm => {
+        // El permiso de confirmación siempre se guarda como directo
+        if (perm === "admin.confirmacion.recibir_codigos") {
+          return true;
+        }
         // Si no está en roles, es directo
         if (!permisosDeRoles.has(perm)) {
           return true;
@@ -1019,17 +1044,11 @@ function Administrador({ serverUrl, pushToast, socket }) {
       
       // Actualizar estado local SIN recargar (evita salto de scroll)
       if (isNuevo) {
-        // Agregar nuevo usuario al estado
-        setUsuarios(prev => [...prev, {
-          id: userId,
-          name: editName,
-          phone: editPhone,
-          active: editActive ? 1 : 0,
-          nickname: editNickname.trim() || null,
-          username: editUsername.trim() || null,
-          roles: editRoles,
-          permisos: editPerms,
-        }]);
+        // ✨ Si es nuevo usuario, mostrar modal para ingresar contraseña
+        // NO agregar al estado local aún para evitar duplicados
+        setNuevoUsuarioCreado({ id: userId, name: editName });
+        setModalPasswordNuevoUsuario(true);
+        setModalUser(false); // Cerrar el modal de creación
       } else {
         // Actualizar usuario existente
         setUsuarios(prev => prev.map(u => 
@@ -1046,9 +1065,9 @@ function Administrador({ serverUrl, pushToast, socket }) {
               }
             : u
         ));
+        
+        setModalUser(false);
       }
-      
-      setModalUser(false);
       // Resetear los campos del formulario
       setEditUser(null);
       setEditName("");
@@ -1071,21 +1090,53 @@ function Administrador({ serverUrl, pushToast, socket }) {
   };
 
   // ───────────────────────────
-  // BORRAR USUARIO
+  // 🆕 GUARDAR CONTRASEÑA NUEVO USUARIO
   // ───────────────────────────
-  const borrarUsuario = async (u) => {
-    const confirmado = await showConfirm(`¿Eliminar usuario ${u.name}?`, "Confirmar eliminación");
-    if (!confirmado) return;
+  const guardarPasswordNuevoUsuario = async () => {
+    if (!passwordNuevoUsuario || passwordNuevoUsuario.length < 6) {
+      showConfirm("La contraseña debe tener al menos 6 caracteres", "Error");
+      return;
+    }
+
+    setGuardandoPasswordNuevoUsuario(true);
     try {
-      await authFetch(`${serverUrl}/admin/users/${u.id}`, {
-        method: "DELETE",
+      await authFetch(`${serverUrl}/admin/users/${nuevoUsuarioCreado.id}/reset-password`, {
+        method: "POST",
+        body: JSON.stringify({
+          temporaryPassword: passwordNuevoUsuario,
+        }),
       });
-      // Eliminar del estado local SIN recargar (evita salto de scroll)
-      setUsuarios(prev => prev.filter(usr => usr.id !== u.id));
-      notify("🗑️ Usuario eliminado");
+
+      // Actualizar el usuario para marcarlo como activo
+      await authFetch(`${serverUrl}/admin/users/${nuevoUsuarioCreado.id}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          active: 1,
+        }),
+      });
+
+      // Recargar la lista de usuarios desde el servidor
+      let usuariosActualizados = [];
+      try {
+        usuariosActualizados = await authFetch(`${serverUrl}/admin/users`);
+        setUsuarios(usuariosActualizados || []);
+      } catch (reloadErr) {
+        console.error("Error recargando usuarios:", reloadErr);
+      }
+
+      notify(`✅ Contraseña establecida y usuario ${nuevoUsuarioCreado.name} activado`);
+      
+      // Cerrar modal de password
+      setModalPasswordNuevoUsuario(false);
+      
+      // NIP system removed - close completely
+      setNuevoUsuarioCreado(null);
+      setPasswordNuevoUsuario("");
     } catch (err) {
-      console.error(err);
-      notify("❌ " + (err.message || "Error eliminando usuario"), "err");
+      console.error("Error guardando contraseña:", err);
+      showConfirm("❌ " + (err.message || "Error guardando contraseña"), "Error");
+    } finally {
+      setGuardandoPasswordNuevoUsuario(false);
     }
   };
 
@@ -1105,19 +1156,108 @@ function Administrador({ serverUrl, pushToast, socket }) {
       return;
     }
 
+    // Solicitar confirmación con código (si el usuario actual tiene permiso)
+    if (user && perms && perms.includes("admin.confirmacion.recibir_codigos")) {
+      solicitudConfirmacionConCodigo(
+        "reset_password",
+        `Restablecer contraseña: ${editUser.name}`,
+        async () => {
+          try {
+            setResettingPassword(true);
+            await authFetch(`${serverUrl}/admin/users/${editUser.id}/reset-password`, {
+              method: "POST",
+              body: JSON.stringify({ temporaryPassword: tempPasswordInput }),
+            });
+            notify("✅ Contraseña restablecida correctamente");
+            setTempPasswordInput("");
+          } catch (err) {
+            console.error(err);
+            notify("❌ " + (err.message || "Error restableciendo contraseña"), "err");
+          } finally {
+            setResettingPassword(false);
+          }
+        }
+      );
+    } else {
+      // Sin confirmación de código
+      try {
+        setResettingPassword(true);
+        await authFetch(`${serverUrl}/admin/users/${editUser.id}/reset-password`, {
+          method: "POST",
+          body: JSON.stringify({ temporaryPassword: tempPasswordInput }),
+        });
+        notify("✅ Contraseña restablecida correctamente");
+        setTempPasswordInput("");
+      } catch (err) {
+        console.error(err);
+        notify("❌ " + (err.message || "Error restableciendo contraseña"), "err");
+      } finally {
+        setResettingPassword(false);
+      }
+    }
+  };
+
+  // ───────────────────────────
+  // BORRAR USUARIO
+  // ───────────────────────────
+  const borrarUsuario = async (u) => {
+    const confirmado = await showConfirm(`¿Eliminar usuario ${u.name}?`, "Confirmar eliminación");
+    if (!confirmado) return;
+
+    // Solicitar confirmación con código (si el usuario actual tiene permiso)
+    if (user && perms && perms.includes("admin.confirmacion.recibir_codigos")) {
+      solicitudConfirmacionConCodigo(
+        "delete_user",
+        `Eliminar usuario: ${u.name}`,
+        async () => {
+          try {
+            await authFetch(`${serverUrl}/admin/users/${u.id}`, {
+              method: "DELETE",
+            });
+            // Eliminar del estado local SIN recargar (evita salto de scroll)
+            setUsuarios(prev => prev.filter(usr => usr.id !== u.id));
+            notify("🗑️ Usuario eliminado");
+          } catch (err) {
+            console.error(err);
+            notify("❌ " + (err.message || "Error eliminando usuario"), "err");
+          }
+        }
+      );
+    } else {
+      // Sin confirmación de código, eliminar directamente
+      try {
+        await authFetch(`${serverUrl}/admin/users/${u.id}`, {
+          method: "DELETE",
+        });
+        setUsuarios(prev => prev.filter(usr => usr.id !== u.id));
+        notify("🗑️ Usuario eliminado");
+      } catch (err) {
+        console.error(err);
+        notify("❌ " + (err.message || "Error eliminando usuario"), "err");
+      }
+    }
+  };
+
+  // ───────────────────────────
+  // SOLICITAR CONFIRMACIÓN CON CÓDIGO
+  // ───────────────────────────
+  const solicitudConfirmacionConCodigo = (accion, detalles, callback) => {
+    setConfirmationCodeAction({ accion, detalles, callback });
+    setShowConfirmationCodeModal(true);
+  };
+
+  const handleConfirmationCodeConfirmed = async () => {
+    if (!confirmationCodeAction || !confirmationCodeAction.callback) return;
+    
+    setConfirmingAction(true);
     try {
-      setResettingPassword(true);
-      await authFetch(`${serverUrl}/admin/users/${editUser.id}/reset-password`, {
-        method: "POST",
-        body: JSON.stringify({ temporaryPassword: tempPasswordInput }),
-      });
-      notify("✅ Contraseña restablecida correctamente");
-      setTempPasswordInput("");
+      await confirmationCodeAction.callback();
     } catch (err) {
-      console.error(err);
-      notify("❌ " + (err.message || "Error restableciendo contraseña"), "err");
+      console.error("Error ejecutando acción confirmada:", err);
     } finally {
-      setResettingPassword(false);
+      setConfirmingAction(false);
+      setShowConfirmationCodeModal(false);
+      setConfirmationCodeAction(null);
     }
   };
 
@@ -1672,6 +1812,12 @@ function Administrador({ serverUrl, pushToast, socket }) {
                 {usuarios.map((u) => {
                   // 🔥 Cache-busting para evitar fotos antiguas
                   const photoUrl = u.photo ? `${serverUrl}/uploads/perfiles/${u.photo}?t=${u.photoTimestamp || u.id}` : null;
+                  
+                  // Debug: Log para usuario IXORA
+                  if (u.nickname === 'IXORA') {
+                    console.log('📸 Renderizando IXORA:', { photo: u.photo, photoUrl, es_sistema: u.es_sistema });
+                  }
+                  
                   return (
                   <tr key={u.id}>
                     <td>
@@ -1725,7 +1871,7 @@ function Administrador({ serverUrl, pushToast, socket }) {
                         Sesiones
                       </button>
 
-                      {u.id !== user?.id && (
+                      {u.id !== user?.id && !u.es_sistema && (
                         <button
                           className="btn-small btn-danger"
                           onClick={() => borrarUsuario(u)}
@@ -2478,7 +2624,7 @@ function Administrador({ serverUrl, pushToast, socket }) {
                         'devoluciones_regulatorio': 'Devoluciones',
                         'reenvios': 'Reenvíos',
                         'productos_ref': 'Inventario',
-                        'productos': 'Picking',
+                        'productos': 'Escaneo',
                         'sesiones': 'CEO',
                       };
                       return nombres[tabla] || tabla;
@@ -3151,6 +3297,12 @@ function Administrador({ serverUrl, pushToast, socket }) {
               >
                 Permisos
               </button>
+              <button
+                className={modalTab === "confirmacion" ? "active" : ""}
+                onClick={() => setModalTab("confirmacion")}
+              >
+                🔐 Confirmación
+              </button>
             </div>
 
             {/* CONTENIDO SEGÚN PESTAÑA */}
@@ -3422,7 +3574,7 @@ function Administrador({ serverUrl, pushToast, socket }) {
                             )}
                             
                             {/* Permiso de activar/desactivar productos para estas pestañas */}
-                            {(tab === "tab:devoluciones" || tab === "tab:inventario") && editPerms && editPerms.includes("registros.activar") && (
+                            {(tab === "tab:devoluciones" || tab === "tab:inventario" || tab === "tab:activaciones") && editPerms && (
                               <div className="checkbox-grid">
                                 <label className="perm-item">
                                   <label className="switch">
@@ -3473,7 +3625,25 @@ function Administrador({ serverUrl, pushToast, socket }) {
                       </div>
                     );
                   })}
+                </>
+              )}
 
+              {modalTab === "confirmacion" && (
+                <>
+                  <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "15px", backgroundColor: "rgba(0, 255, 136, 0.08)", borderRadius: "8px", marginBottom: "20px" }}>
+                    <label className="switch">
+                      <input
+                        type="checkbox"
+                        checked={editPerms.includes("admin.confirmacion.recibir_codigos")}
+                        onChange={() => togglePerm("admin.confirmacion.recibir_codigos")}
+                      />
+                      <span className="slider"></span>
+                    </label>
+                    <span style={{ fontWeight: "600", color: "#00ff88" }}>Activar confirmación por código</span>
+                  </div>
+                  <p style={{ color: "var(--texto-secundario)", fontSize: "0.9rem", marginTop: "10px" }}>
+                    Cuando esté activado, recibirás códigos temporales vía chat para confirmar acciones.
+                  </p>
                 </>
               )}
             </div>
@@ -3483,7 +3653,10 @@ function Administrador({ serverUrl, pushToast, socket }) {
               <button className="btn-primary" onClick={guardarUsuario} disabled={savingUser}>
                 {savingUser ? "Guardando..." : "Guardar cambios"}
               </button>
-              <button className="btn-danger" onClick={() => setModalUser(false)}>
+              <button className="btn-danger" onClick={() => {
+                setModalUser(false);
+                // setNipEdicion(""); - Removed NIP system
+              }}>
                 Cerrar
               </button>
             </div>
@@ -3648,6 +3821,73 @@ function Administrador({ serverUrl, pushToast, socket }) {
           </div>
         </div>
       )}
+
+      {/* 🆕 MODAL: CONTRASEÑA PARA NUEVO USUARIO */}
+      {modalPasswordNuevoUsuario && nuevoUsuarioCreado && (
+        <div className="admin-modal-backdrop" onClick={() => setModalPasswordNuevoUsuario(false)}>
+          <div className="admin-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "450px" }}>
+            <h3>Establecer Contraseña Temporal</h3>
+            <p style={{ color: "#aaa", marginBottom: "20px" }}>
+              Usuario: <strong>{nuevoUsuarioCreado.name}</strong>
+            </p>
+
+            <div className="form-row" style={{ marginBottom: "20px" }}>
+              <label>Contraseña Temporal (mín. 6 caracteres)</label>
+              <input
+                type="password"
+                value={passwordNuevoUsuario}
+                onChange={(e) => setPasswordNuevoUsuario(e.target.value)}
+                placeholder="Ingresa una contraseña temporal"
+                onKeyPress={(e) => {
+                  if (e.key === "Enter" && passwordNuevoUsuario.length >= 6) {
+                    guardarPasswordNuevoUsuario();
+                  }
+                }}
+              />
+            </div>
+
+            <div className="modal-actions">
+              <button 
+                className="btn-primary" 
+                onClick={guardarPasswordNuevoUsuario}
+                disabled={guarandoPasswordNuevoUsuario || !passwordNuevoUsuario || passwordNuevoUsuario.length < 6}
+                style={{
+                  opacity: (guarandoPasswordNuevoUsuario || !passwordNuevoUsuario || passwordNuevoUsuario.length < 6) ? 0.5 : 1,
+                  cursor: (guarandoPasswordNuevoUsuario || !passwordNuevoUsuario || passwordNuevoUsuario.length < 6) ? "not-allowed" : "pointer",
+                }}
+              >
+                {guarandoPasswordNuevoUsuario ? "Guardando..." : "Guardar y Activar"}
+              </button>
+              <button 
+                className="btn-danger" 
+                onClick={() => {
+                  setModalPasswordNuevoUsuario(false);
+                  setNuevoUsuarioCreado(null);
+                  setPasswordNuevoUsuario("");
+                }}
+                disabled={guarandoPasswordNuevoUsuario}
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* NIP Modal removed - using temporary codes via chat instead */}
+
+      {/* MODAL DE CONFIRMACIÓN CON CÓDIGO */}
+      <ConfirmationCodeModal
+        isOpen={showConfirmationCodeModal}
+        onClose={() => {
+          setShowConfirmationCodeModal(false);
+          setConfirmationCodeAction(null);
+        }}
+        onConfirm={handleConfirmationCodeConfirmed}
+        accion={confirmationCodeAction?.accion}
+        detalles={confirmationCodeAction?.detalles}
+        loading={confirmingAction}
+      />
     </div>
   );
 }

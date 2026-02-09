@@ -3,7 +3,6 @@ import { authRequired } from "../middleware/autenticacion.js";
 import { requierePermiso } from "../middleware/permisos.js";
 import dayjs from "dayjs";
 import { dbDevol, dbInv, dbDia, dbHist, dbUsers } from "../config/baseDeDatos.js";
-import { procesarDocumentoIA, reinicializarGemini } from "../utilidades/escaneoIA.js";
 import { getIO } from "../config/socket.js";
 import multer from "multer";
 import path from "path";
@@ -1940,8 +1939,27 @@ router.get("/foto/:id/:archivo", (req, res) => {
     res.setHeader('Content-Type', contentType);
     res.setHeader('Cache-Control', 'public, max-age=31536000');
     
+    // Listener para detectar cuando la conexión se cierra
+    let connectionClosed = false;
+    
+    req.on('close', () => {
+      connectionClosed = true;
+      console.warn(`⚠️ Conexión cerrada por cliente al servir foto`);
+    });
+    
+    req.on('aborted', () => {
+      connectionClosed = true;
+      console.warn(`⚠️ Conexión abortada por cliente al servir foto`);
+    });
+    
     res.sendFile(file, { root: process.cwd() }, (err) => {
       if (err) {
+        // Ignorar errores de conexión abortada (ECONNABORTED, EPIPE)
+        if (err.code === 'ECONNABORTED' || err.code === 'EPIPE' || err.code === 'ERR_HTTP_REQUEST_TIMEOUT') {
+          console.warn(`⚠️ Conexión interrumpida al servir foto: ${err.code}`);
+          return;
+        }
+        
         console.error(`❌ Error enviando archivo:`, err);
         if (!res.headersSent) {
           res.status(500).json({ error: "Error enviando archivo", details: err.message });
@@ -2580,161 +2598,6 @@ router.put("/clientes/productos/estado", authRequired, requierePermiso("action:a
   }
 });
 
-
-// =========================================================
-// IA ROUTES (Mantenidos para no romper otras funcionalidades)
-// =========================================================
-router.post("/scan", authRequired, async (req, res) => {
-  const { imageBase64 } = req.body;
-  if (!imageBase64) return res.status(400).json({ error: "Falta imagen" });
-  try {
-    const productos = await procesarDocumentoIA(imageBase64);
-    res.json({ productos });
-  } catch (err) {
-    console.error("❌ Error procesando imagen con IA:", err);
-    
-    // Manejar error de API key inválida
-    if (err.message && (err.message.includes("API key") || err.message.includes("inválida") || err.message.includes("sin permisos"))) {
-      return res.status(401).json({ 
-        error: "API key inválida", 
-        message: err.message,
-        details: "La API key de Gemini es inválida o no tiene permisos. Verifica que la clave sea correcta. Si acabas de cambiar la API key, reinicia el servidor."
-      });
-    }
-    
-    // Manejar error de cuota específicamente
-    if (err.tipoError === "cuota_excedida" || (err.message && err.message.includes("cuota"))) {
-      const respuesta = { 
-        error: "Cuota de API excedida", 
-        message: err.message,
-        details: err.message || "La cuota de la API de Gemini se ha agotado. Por favor, intenta más tarde."
-      };
-      
-      // Incluir tiempo de espera si está disponible
-      if (err.tiempoEspera) {
-        respuesta.tiempoEspera = err.tiempoEspera;
-        respuesta.reintentarEn = `${err.tiempoEspera} segundos`;
-      }
-      
-      // Incluir información sobre el tipo de cuota
-      if (err.esCuotaDiaria !== undefined) {
-        respuesta.esCuotaDiaria = err.esCuotaDiaria;
-      }
-      if (err.esCuotaPorMinuto !== undefined) {
-        respuesta.esCuotaPorMinuto = err.esCuotaPorMinuto;
-      }
-      
-      // Si es cuota diaria, no tiene sentido mostrar tiempo de espera
-      if (err.esCuotaDiaria) {
-        respuesta.details = "La cuota diaria se ha agotado completamente. Se renueva cada día. Usa el escaneo manual mientras tanto.";
-        delete respuesta.tiempoEspera;
-        delete respuesta.reintentarEn;
-      }
-      
-      return res.status(429).json(respuesta);
-    }
-    
-    res.status(500).json({ error: "Error procesando imagen", details: err.message });
-  }
-});
-
-// NOTA: El endpoint POST /scan/ia es duplicado de /scan (línea 2556)
-// Este endpoint duplicado ha sido eliminado para evitar confusión y mantener una sola implementación
-// Si necesitas acceso alternativo, usa /scan
-
-// Endpoint para reinicializar Gemini con la nueva API key
-router.post("/scan/reinicializar", authRequired, (req, res) => {
-  try {
-    const exito = reinicializarGemini();
-    if (exito) {
-      res.json({ 
-        success: true, 
-        message: "Gemini API reinicializada correctamente con la nueva API key" 
-      });
-    } else {
-      res.status(400).json({ 
-        error: "No se pudo reinicializar", 
-        message: "GEMINI_API_KEY no está configurada en las variables de entorno" 
-      });
-    }
-  } catch (err) {
-    console.error("❌ Error reinicializando Gemini:", err);
-    res.status(500).json({ 
-      error: "Error reinicializando Gemini", 
-      details: err.message 
-    });
-  }
-});
-
-router.post("/guardarIA/:categoria", authRequired, (req, res) => {
-  const { categoria } = req.params;
-  const { productos } = req.body;
-
-  if (!Array.isArray(productos) || productos.length === 0) {
-    return res.status(400).json({ error: "Formato inválido" });
-  }
-
-  const tablaDia = getTablaDia(categoria);
-  if (!tablaDia) {
-    return res.status(400).json({ error: "Categoría inválida" });
-  }
-
-  const grouped = groupProductos(productos);
-  const findNombreInv = dbInv.prepare(
-    `SELECT nombre, COALESCE(presentacion, '') AS presentacion FROM productos_ref WHERE codigo=?`
-  );
-  const selectExistente = dbDia.prepare(
-    `SELECT id FROM ${tablaDia} WHERE codigo=? AND lote IS ?`
-  );
-  const updateExistente = dbDia.prepare(
-    `UPDATE ${tablaDia} SET cantidad=cantidad + ?, hora_ultima=? WHERE id=?`
-  );
-  const insertNuevo = dbDia.prepare(
-    `INSERT INTO ${tablaDia} (codigo, nombre, lote, cantidad, hora_ultima, activo)
-     VALUES (?,?,?,?,?,1)`
-  );
-
-  const tx = dbDia.transaction((arr) => {
-    const hora = dayjs().format("HH:mm:ss");
-
-    for (const p of arr) {
-      const codigo = p.codigo || null;
-      const loteFinal = normalizeLote(p.lote);
-      let nombre = p.nombre;
-
-      if (!nombre && codigo) {
-      const row = findNombreInv.get(codigo);
-      if (row?.nombre) {
-        // Combinar nombre y presentación si existe
-        nombre = obtenerNombreCompleto(row.nombre, row.presentacion || "");
-      }
-      }
-
-      const existente = selectExistente.get(codigo, loteFinal);
-      if (existente?.id) {
-        updateExistente.run(Number(p.cantidad) || 0, hora, existente.id);
-      } else {
-        insertNuevo.run(
-          codigo,
-          nombre || "",
-          loteFinal,
-          Number(p.cantidad) || 0,
-          hora
-        );
-      }
-    }
-  });
-
-  try {
-    tx(grouped);
-    getIO().emit("devoluciones_actualizadas", categoria);
-    res.json({ ok: true });
-  } catch (err) {
-    console.error("guardarIA error:", err);
-    res.status(500).json({ error: "Error guardando IA" });
-  }
-});
-
 // =====================================================
 // ENDPOINT DE DIAGNÓSTICO - Buscar pedidos en todas las tablas
 // =====================================================
@@ -3028,8 +2891,7 @@ router.post("/cerrar-dia", authRequired, (req, res) => {
                 `)
                 .all();
             }
-            console.log(`📦 Registros de calidad del día: ${productosDelDia.length}`);
-          } catch (err) {
+            } catch (err) {
             console.error(`❌ Error consultando calidad_registros:`, err);
             productosDelDia = [];
           }
@@ -3098,7 +2960,6 @@ router.post("/cerrar-dia", authRequired, (req, res) => {
               }
               
               productosDelDia = dbDia.prepare(query).all(area);
-              console.log(`📦 Productos del día en ${tablaDia} (${area}): ${productosDelDia.length}`);
             } catch (err) {
               console.error(`❌ Error consultando ${tablaDia}:`, err);
               console.error(`❌ Stack:`, err.stack);
@@ -3272,7 +3133,6 @@ router.post("/cerrar-dia", authRequired, (req, res) => {
           if (tablaDia && tableExists(dbDia, tablaDia)) {
             // Eliminar TODOS los productos de la tabla del día (ya fueron movidos a histórico)
             const eliminados = dbDia.prepare(`DELETE FROM ${tablaDia}`).run();
-            console.log(`🗑️ ${eliminados.changes} productos eliminados de ${tablaDia} (${area})`);
           }
         }
 
@@ -3280,7 +3140,6 @@ router.post("/cerrar-dia", authRequired, (req, res) => {
         if (area !== "Clientes") {
           totalMovidos += productosDelDia.length;
           resumenPorArea[area] = productosDelDia.length;
-          console.log(`✅ ${productosDelDia.length} productos de ${area} movidos al histórico`);
         }
       } else {
         if (area !== "Clientes") {
@@ -3292,7 +3151,6 @@ router.post("/cerrar-dia", authRequired, (req, res) => {
       // Las otras áreas (Calidad, Reacondicionados, Retail, Cubbo, Regulatorio) NO manejan pedidos
       // Solo los PRODUCTOS tienen reglas (activo = 1 OR apto = 0)
       if (area === "Clientes") {
-        console.log(`🔍 Buscando pedidos para mover al histórico en área: ${area}`);
         let pedidosDelDia = [];
         try {
           // Mover TODOS los pedidos de Clientes, tengan o no productos
@@ -3303,7 +3161,6 @@ router.post("/cerrar-dia", authRequired, (req, res) => {
               WHERE area = ?
             `)
             .all(area);
-          console.log(`📦 Todos los pedidos en ${area}: ${pedidosDelDia.length}`);
           if (pedidosDelDia.length > 0) {
           }
         } catch (queryErr) {
@@ -3999,10 +3856,6 @@ router.post("/importar", authRequired, requierePermiso("action:activar-productos
             categoria || null  // ⚠️ Categoría del inventario
           );
         
-        // Verificar que se insertó correctamente
-        const insertado = dbDia.prepare("SELECT cajas, piezas FROM productos WHERE id = ?").get(result.lastInsertRowid);
-        console.log(`✅ Verificación después de insertar: cajas=${insertado?.cajas}, piezas=${insertado?.piezas}`);
-
         totalCajas += cajas;
         totalPiezas += piezas;
 

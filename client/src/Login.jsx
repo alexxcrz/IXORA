@@ -593,7 +593,6 @@ export default function Login() {
 
       const data = await res.json();
 
-
       // LOGIN REAL
       console.log("🔐 [LOGIN] Recibiendo respuesta del servidor (password)...");
       console.log(`   Token recibido (primeros 30): ${data.token?.substring(0, 30) || 'NULL'}...`);
@@ -612,6 +611,7 @@ export default function Login() {
       showAlert(`Error conectando al servidor: ${errorMsg}. Verifica que el servidor esté corriendo en ${SERVER}.`, "error", { title: "Error de conexión" });
     }
   };
+
 
   // OTP CHANGE + AUTOVERIFY
   const handleOtpChange = (value, index) => {
@@ -1140,6 +1140,10 @@ export default function Login() {
           </div>
         </div>
       </div>
+
+      {/* Modal de Setup NIP */}
+      {/* NIP Modal removed - using temporary codes via chat instead */}
     </div>
   );
 }
+

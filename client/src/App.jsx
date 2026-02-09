@@ -6,6 +6,7 @@ import "./estilos/global.css";
 import { NotificationProvider } from "./components/Notifications";
 import WidgetsMenu from "./components/WidgetsMenu";
 import { AlertModalProvider, useAlert } from "./components/AlertModal";
+import ConfirmationCodeModal from "./components/ConfirmationCodeModal";
 
 import Picking from "./pestañas/Picking/Picking";
 import RegistrosPicking from "./pestañas/RegistrosPicking/RegistrosPicking";
@@ -127,7 +128,7 @@ function AppProtegida() {
     } catch (e) {
       return null;
     }
-  }, []);
+  }, [user]); // Recalcular cuando user cambia (incluyendo logout)
   
   const urlParams = useMemo(() => {
     try {
@@ -203,7 +204,7 @@ function AppProtegida() {
         const userLocal = localStorage.getItem("user");
         if (userLocal) {
           try {
-            const userParsed = JSON.parse(userLocal);
+            JSON.parse(userLocal);
             // Si hay usuario en localStorage, mantener intentandoRestaurar en true
             // para dar tiempo a que AuthContext lo cargue
             // Esperar más tiempo antes de marcar como false
@@ -330,15 +331,15 @@ function AppProtegida() {
 }
 
 const TITULO_TABS = {
-  escaneo: "Picking",
-  escaneo_retail: "Picking Retail",
-  escaneo_fulfillment: "Picking Fulfillment",
-  registros: "Registros Picking",
+  escaneo: "Escaneo",
+  escaneo_retail: "Escaneo Retail",
+  escaneo_fulfillment: "Escaneo Fulfillment",
+  registros: "Registros Escaneo",
   registros_retail: "Registros Retail",
   registros_fulfillment: "Registros Fulfillment",
   devoluciones: "Devoluciones",
   reenvios: "Reenvíos",
-  reportes: "Reportes Picking",
+  reportes: "Reportes Escaneo",
   rep_devol: "Reportes Devoluciones",
   rep_reenvios: "Reportes Reenvíos",
   inventario: "Inventario",
@@ -364,6 +365,70 @@ function App() {
   const { logout, user, perms, authFetch, abrirEditarPerfil, refrescarPermisos } = useAuth();
   const { showAlert } = useAlert();
 
+  // 🔔 Solicitar permiso de notificaciones al cargar
+  useEffect(() => {
+    if ("Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission().catch(err => console.log('Notification permission request error:', err));
+    }
+  }, []);
+
+  // 🔔 Listener global para notificación de nuevo usuario (se emite desde servidor al login)
+  useEffect(() => {
+    if (!socket || typeof socket.on !== 'function') {
+      return;
+    }
+
+    const handleUsuarioUnido = ({ nickname: nuevoNick, photo }) => {
+      if (!nuevoNick) return;
+      
+      console.log(`🔔 Nuevo usuario conectado: ${nuevoNick}`);
+      
+      // Reproducir sonido de notificación
+      try {
+        const audio = new Audio('/sounds/chat_notif.mp3');
+        audio.volume = 1; // Volumen máximo
+        const playPromise = audio.play();
+        if (playPromise !== undefined) {
+          playPromise.catch(err => console.log('Audio play prevented:', err));
+        }
+        console.log(`✓ Sonido reproducido para: ${nuevoNick}`);
+      } catch (e) {
+        console.error('Error reproduciendo sonido:', e);
+      }
+
+      // Mostrar alerta visual (fallback para todos)
+      try {
+        showAlert(`✨ ${nuevoNick} se ha unido a IXORA`, "info");
+      } catch (e) {
+        console.error('Error mostrando alert:', e);
+      }
+
+      // Mostrar notificación del navegador también
+      if ("Notification" in window && Notification.permission === "granted") {
+        try {
+          new Notification(`✨ ${nuevoNick} se ha unido a IXORA`, {
+            body: "Un nuevo usuario se ha conectado al sistema",
+            icon: photo ? photo : "/favicon.ico",
+            tag: "usuario_unido",
+            requireInteraction: false,
+          });
+        } catch (e) {
+          console.error('Error mostrando notification:', e);
+        }
+      }
+    };
+
+    socket.on("usuario_unido", handleUsuarioUnido);
+    console.log("✓ Listener usuario_unido registrado globalmente");
+
+    return () => {
+      try {
+        socket.off("usuario_unido", handleUsuarioUnido);
+      } catch (e) {
+        // ignore
+      }
+    };
+  }, [showAlert]);
 
   const can = (perm) => perms?.includes(perm);
 
@@ -524,7 +589,6 @@ function App() {
       try {
         // Obtener la URL actual del servidor
         const currentUrl = await getServerUrl();
-        const savedUrl = localStorage.getItem('server_url');
         
         // Si la URL cambió o el socket no está conectado, reconectar
         if (socket && socket.io) {
@@ -723,11 +787,20 @@ function App() {
   }, [menuOpen]);
 
   const getTabFromURL = () => {
+    // Primero intentar leer desde pathname (formato /inventario)
+    const pathname = window.location.pathname;
+    const tabFromPath = pathname.substring(1); // Quitar el / inicial
+    if (tabFromPath && TITULO_TABS[tabFromPath]) {
+      return tabFromPath;
+    }
+    
+    // Fallback: intentar leer desde query params (formato ?tab=inventario) para compatibilidad
     const urlParams = new URLSearchParams(window.location.search);
     const tabFromURL = urlParams.get('tab');
     if (tabFromURL && TITULO_TABS[tabFromURL]) {
       return tabFromURL;
     }
+    
     return "escaneo";
   };
 
@@ -764,85 +837,14 @@ function App() {
     setActiveTab(tab);
     cerrarMenu();
     const url = new URL(window.location);
-    url.searchParams.set('tab', tab);
+    url.pathname = `/${tab}`;
+    url.search = ''; // Limpiar query params
     // Usar pushState para permitir navegación con botón de regreso
     window.history.pushState({ tab }, '', url);
   }, [activeTab]);
 
-  // Manejar botón de regreso de Android
-  useEffect(() => {
-    // Detectar si estamos en Android nativo
-    const isNativeAndroid = typeof window !== 'undefined' && 
-      window.Capacitor && 
-      window.Capacitor.isNativePlatform && 
-      window.Capacitor.isNativePlatform() &&
-      window.Capacitor.getPlatform() === 'android';
-
-    if (!isNativeAndroid) return;
-
-    let backButtonListener = null;
-
-    // Manejar el botón de regreso de Android
-    const handleBackButton = async () => {
-      try {
-        // Intentar importar dinámicamente el plugin de App
-        let App;
-        try {
-          const appModule = await import('@capacitor/app');
-          App = appModule.App;
-        } catch (importError) {
-          // Fallback: usar window.history.back() si el plugin no está disponible
-          document.addEventListener('backbutton', (e) => {
-            e.preventDefault();
-            if (tabHistoryRef.current.length > 1) {
-              window.history.back();
-            }
-          }, false);
-          return;
-        }
-        
-        // Escuchar el evento de botón de regreso
-        backButtonListener = await App.addListener('backButton', ({ canGoBack }) => {
-          // Si el menú está abierto, cerrarlo primero
-          if (menuOpen) {
-            cerrarMenu();
-            return;
-          }
-
-          // Si hay historial de pestañas, navegar a la anterior usando window.history.back()
-          if (tabHistoryRef.current.length > 1) {
-            window.history.back();
-          } else {
-            // Si no hay historial, salir de la app
-            if (App && App.exitApp) {
-              App.exitApp();
-            }
-          }
-        });
-      } catch (error) {
-        // Fallback: usar evento personalizado de Android
-        document.addEventListener('backbutton', (e) => {
-          e.preventDefault();
-          if (menuOpen) {
-            cerrarMenu();
-            return;
-          }
-          if (tabHistoryRef.current.length > 1) {
-            window.history.back();
-          }
-        }, false);
-      }
-    };
-
-    handleBackButton();
-
-    // Limpiar listener al desmontar
-    return () => {
-      if (backButtonListener) {
-        backButtonListener.remove();
-      }
-    };
-  }, [activeTab, menuOpen, setMenuOpen]);
+  // Manejo del botón de regreso de Android deshabilitado (web-only)
+  // useEffect removido
 
   useLayoutEffect(() => {
     const tabFromURL = getTabFromURL();
@@ -853,7 +855,8 @@ function App() {
       if (initialTab !== activeTab) {
         setActiveTab(initialTab);
         const url = new URL(window.location);
-        url.searchParams.set('tab', initialTab);
+        url.pathname = `/${initialTab}`;
+        url.search = '';
         window.history.replaceState({ tab: initialTab }, '', url);
       }
       return; // No verificar permisos para tienda
@@ -886,7 +889,8 @@ function App() {
       if (initialTab !== activeTab) {
         setActiveTab(initialTab);
         const url = new URL(window.location);
-        url.searchParams.set('tab', initialTab);
+        url.pathname = `/${initialTab}`;
+        url.search = '';
         window.history.replaceState({ tab: initialTab }, '', url);
       }
     } else {
@@ -894,7 +898,8 @@ function App() {
       if (firstAllowedTab && firstAllowedTab !== activeTab) {
         setActiveTab(firstAllowedTab);
         const url = new URL(window.location);
-        url.searchParams.set('tab', firstAllowedTab);
+        url.pathname = `/${firstAllowedTab}`;
+        url.search = '';
         window.history.replaceState({ tab: firstAllowedTab }, '', url);
       }
     }
@@ -1001,7 +1006,8 @@ function App() {
           if (!requiredPerm || can(requiredPerm) || previousTab === 'tienda') {
             setActiveTab(previousTab);
             const url = new URL(window.location);
-            url.searchParams.set('tab', previousTab);
+            url.pathname = `/${previousTab}`;
+            url.search = '';
             window.history.replaceState({ tab: previousTab }, '', url);
             return;
           }
@@ -1625,10 +1631,9 @@ function App() {
       setDevoluciones((prev) => prev.filter((x) => x.id !== id));
     });
 
-    socket.on("reenvios_actualizados", () =>
-      window.dispatchEvent(new Event("recargarReenvios"))
-    );
-
+    // Los listeners de reenvios ahora se manejan directamente en Reenvios.jsx
+    // para evitar recargas innecesarias de la página
+    
     socket.on("reportes_actualizados", () => {
       if (cargarDiasCerradosRef.current) {
         cargarDiasCerradosRef.current();
@@ -1716,30 +1721,23 @@ function App() {
   }, [user, authFetch, perms, SERVER_URL]);
 
   const inputFechaRef = useRef(null);
-  const [mostrarModalPassword, setMostrarModalPassword] = useState(false);
-  const [passwordInput, setPasswordInput] = useState("");
+  const [mostrarModalCodigo, setMostrarModalCodigo] = useState(false);
   const [fechaPendiente, setFechaPendiente] = useState(null);
   const [cambiandoFecha, setCambiandoFecha] = useState(false);
 
-  const solicitarPasswordYCambiarFecha = async (nuevaFecha) => {
+  const solicitarCodigoYCambiarFecha = async (nuevaFecha) => {
     if (!perms || !perms.includes("tab:admin")) {
       await showAlert("Solo los administradores pueden cambiar la fecha cuando ya hay una activa", "warning", { title: "Acceso denegado" });
       return;
     }
 
     setFechaPendiente(nuevaFecha);
-    setPasswordInput("");
-    setMostrarModalPassword(true);
+    setMostrarModalCodigo(true);
   };
 
-  const confirmarCambioFecha = async () => {
-    if (!passwordInput.trim()) {
-      await showAlert("Debes ingresar tu contraseña de administrador", "warning", { title: "Contraseña requerida" });
-      return;
-    }
-
-    if (!fechaPendiente) {
-      setMostrarModalPassword(false);
+  const confirmarCambioFechaConCodigo = async (codigo) => {
+    if (!fechaPendiente && fechaPendiente !== "") {
+      setMostrarModalCodigo(false);
       return;
     }
 
@@ -1747,8 +1745,8 @@ function App() {
       setCambiandoFecha(true);
 
       const body = fechaPendiente === "" 
-        ? { fecha: "", password: passwordInput.trim() }
-        : { fecha: fechaPendiente, password: passwordInput.trim() };
+        ? { fecha: "", confirmationCode: codigo }
+        : { fecha: fechaPendiente, confirmationCode: codigo };
 
       const data = await authFetch(`${SERVER_URL}/fecha-actual`, {
         method: "POST",
@@ -1763,13 +1761,13 @@ function App() {
         pushToast("✅ Fecha establecida correctamente");
       }
       await cargarProductos();
-      setMostrarModalPassword(false);
-      setPasswordInput("");
+      setMostrarModalCodigo(false);
       setFechaPendiente(null);
     } catch (err) {
       console.error("Error cambiando fecha:", err);
       const mensaje = err.message || err.error || "Error al cambiar la fecha";
       await showAlert(mensaje, "error", { title: "Error" });
+      throw err;
     } finally {
       setCambiandoFecha(false);
     }
@@ -1830,7 +1828,7 @@ function App() {
         return;
       }
 
-      await solicitarPasswordYCambiarFecha("");
+      await solicitarCodigoYCambiarFecha("");
       if (inputFechaRef.current) {
         inputFechaRef.current.value = fecha || "";
       }
@@ -1838,12 +1836,12 @@ function App() {
     }
 
     if (fecha !== nueva) {
-      await solicitarPasswordYCambiarFecha(nueva);
+      await solicitarCodigoYCambiarFecha(nueva);
       if (inputFechaRef.current) {
         inputFechaRef.current.value = fecha || "";
       }
     }
-  }, [fecha, SERVER_URL, authFetch, showAlert, pushToast, cargarProductos, solicitarPasswordYCambiarFecha]);
+  }, [fecha, SERVER_URL, authFetch, showAlert, pushToast, cargarProductos, solicitarCodigoYCambiarFecha]);
 
   const diasPorMes = useMemo(() => {
     const map = {};
@@ -2237,7 +2235,7 @@ function App() {
           pushToast={pushToast}
           cambiarModulo={cambiarModulo}
           canal="retail"
-          titulo="Picking Retail"
+          titulo="Escaneo Retail"
           mostrarBusquedaNombre
           moduloRegistros="registros_retail"
         />
@@ -2251,7 +2249,7 @@ function App() {
           pushToast={pushToast}
           cambiarModulo={cambiarModulo}
           canal="fulfillment"
-          titulo="Picking Fulfillment"
+          titulo="Escaneo Fulfillment"
           mostrarBusquedaNombre
           moduloRegistros="registros_fulfillment"
         />
@@ -2339,6 +2337,7 @@ function App() {
           setDevoluciones={setDevoluciones}
           pushToast={pushToast}
           socket={socket}
+          user={user}
         />
       )}
 
@@ -2472,7 +2471,7 @@ function App() {
                       }}
                     >
                       <span className="menu-icon">🔎</span>
-                      Picking
+                      Escaneo
                     </a>
                   )}
                   {can("tab:escaneo") && debeMostrarPestaña("tab:escaneo") && (
@@ -2488,7 +2487,7 @@ function App() {
                       }}
                     >
                       <span className="menu-icon">🛍️</span>
-                      Picking Retail
+                      Escaneo Retail
                     </a>
                   )}
                   {can("tab:escaneo") && debeMostrarPestaña("tab:escaneo") && (
@@ -2504,7 +2503,7 @@ function App() {
                       }}
                     >
                       <span className="menu-icon">📦</span>
-                      Picking Fulfillment
+                      Escaneo Fulfillment
                     </a>
                   )}
                 </>
@@ -2917,77 +2916,22 @@ function App() {
         })}
       </div>
 
-      {mostrarModalPassword && (
-        <div 
-          className="alert-modal-overlay" 
-          onClick={() => {
-            setMostrarModalPassword(false);
-            setPasswordInput("");
-            setFechaPendiente(null);
-          }}
-        >
-          <div className="alert-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="alert-modal-header">
-              <h3>Confirmar cambio de fecha</h3>
-            </div>
-            <div className="alert-modal-body">
-              <div className="alert-modal-icon alert-modal-icon-warning">
-                🔒
-              </div>
-              <p className="alert-modal-message">
-                {fechaPendiente && fechaPendiente !== ""
-                  ? `Se requiere contraseña de administrador para cambiar la fecha a: ${fechaPendiente ? (formatearFechaCompleta(fechaPendiente) || fechaPendiente) : ''}`
-                  : fecha
-                    ? `Se requiere contraseña de administrador para eliminar la fecha actual: ${(formatearFechaCompleta(fecha) || fecha)}`
-                    : "Se requiere contraseña de administrador para establecer una nueva fecha"}
-              </p>
-              <input
-                type="password"
-                value={passwordInput}
-                onChange={(e) => setPasswordInput(e.target.value)}
-                placeholder="Contraseña de administrador"
-                style={{
-                  width: "100%",
-                  padding: "12px",
-                  marginTop: "12px",
-                  border: "1px solid var(--borde-medio)",
-                  borderRadius: "var(--radio-full)",
-                  background: "var(--fondo-input)",
-                  color: "var(--texto-principal)",
-                  fontSize: "1rem",
-                  outline: "none",
-                }}
-                onKeyPress={(e) => {
-                  if (e.key === "Enter" && !cambiandoFecha) {
-                    confirmarCambioFecha();
-                  }
-                }}
-                autoFocus
-              />
-            </div>
-            <div className="alert-modal-actions">
-              <button
-                className="alert-modal-btn alert-modal-btn-cancel"
-                onClick={() => {
-                  setMostrarModalPassword(false);
-                  setPasswordInput("");
-                  setFechaPendiente(null);
-                }}
-                disabled={cambiandoFecha}
-              >
-                Cancelar
-              </button>
-              <button
-                className="alert-modal-btn alert-modal-btn-confirm"
-                onClick={confirmarCambioFecha}
-                disabled={cambiandoFecha || !passwordInput.trim()}
-              >
-                {cambiandoFecha ? "Cambiando..." : "Confirmar"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Modal de código de confirmación para cambiar fecha */}
+      <ConfirmationCodeModal
+        isOpen={mostrarModalCodigo}
+        onClose={() => {
+          setMostrarModalCodigo(false);
+          setFechaPendiente(null);
+        }}
+        onConfirm={confirmarCambioFechaConCodigo}
+        accion="cambiar_fecha"
+        detalles={fechaPendiente && fechaPendiente !== "" 
+          ? `Cambiar fecha a: ${fechaPendiente}` 
+          : fecha 
+            ? `Eliminar fecha: ${fecha}` 
+            : "Establecer nueva fecha"}
+        loading={cambiandoFecha}
+      />
 
       {activeTab !== "tienda" && (
         <>

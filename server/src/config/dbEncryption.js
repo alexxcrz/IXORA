@@ -38,15 +38,9 @@ const DB_ENCRYPTION_KEY = process.env.DB_ENCRYPTION_KEY || (() => {
 })();
 
 // Carpeta donde se almacenan las bases de datos
-// ORDEN ORIGINAL: server/, luego databases/, luego server/databases/
-const DATABASES_DIR_SERVER = path.join(process.cwd(), "server", "databases");
 const DATABASES_DIR_ROOT = path.join(process.cwd(), "databases");
-const DATABASES_DIR_SERVER_FOLDER = path.join(process.cwd(), "server");
 
-// Asegurar que las carpetas existen
-if (!fs.existsSync(DATABASES_DIR_SERVER)) {
-  fs.mkdirSync(DATABASES_DIR_SERVER, { recursive: true });
-}
+// Asegurar que la carpeta existe
 if (!fs.existsSync(DATABASES_DIR_ROOT)) {
   fs.mkdirSync(DATABASES_DIR_ROOT, { recursive: true });
 }
@@ -58,7 +52,6 @@ if (!fs.existsSync(DATABASES_DIR_ROOT)) {
  * @returns {Database} - Instancia de base de datos cifrada
  */
 export function createEncryptedDatabase(dbPath, options = {}) {
-  // ORDEN ORIGINAL: Buscar primero en server/, luego databases/, luego server/databases/
   let finalPath = dbPath;
   const fileName = path.basename(dbPath);
   
@@ -66,20 +59,18 @@ export function createEncryptedDatabase(dbPath, options = {}) {
   if (path.isAbsolute(dbPath)) {
     finalPath = dbPath;
   } else {
-    // Ruta relativa: Buscar en orden ORIGINAL y usar la que tenga más datos
+    // Ruta relativa: Buscar en databases/ o raíz
     const posiblesUbicaciones = [
-      path.join(DATABASES_DIR_SERVER_FOLDER, fileName), // Primero: server/ (ORIGINAL)
-      path.join(DATABASES_DIR_ROOT, fileName),          // Segundo: databases/ (raíz)
-      path.join(DATABASES_DIR_SERVER, fileName),        // Tercero: server/databases/ (nueva)
-      path.join(process.cwd(), fileName)                // Cuarto: raíz
+      path.join(DATABASES_DIR_ROOT, fileName),          // databases/ (raíz)
+      path.join(process.cwd(), fileName)                // raíz
     ];
     
     // Encontrar todas las ubicaciones donde existe el archivo
     const archivosExistentes = posiblesUbicaciones.filter(p => fs.existsSync(p));
     
     if (archivosExistentes.length === 0) {
-      // No existe en ninguna ubicación, crear en server/ (ubicación original)
-      finalPath = path.join(DATABASES_DIR_SERVER_FOLDER, fileName);
+      // No existe en ninguna ubicación, crear en databases/
+      finalPath = path.join(DATABASES_DIR_ROOT, fileName);
     } else {
       // Encontrar el archivo con más datos
       let archivoConMasDatos = archivosExistentes[0];
@@ -158,7 +149,7 @@ export function createEncryptedDatabase(dbPath, options = {}) {
   // El usuario debe decidir si quiere restaurar desde backup o intentar recuperar datos
   if (archivoCorrupto) {
     try {
-      const backupDir = path.join(DATABASES_DIR_SERVER_FOLDER, "backups");
+      const backupDir = path.join(DATABASES_DIR_ROOT, "backups");
       if (!fs.existsSync(backupDir)) {
         fs.mkdirSync(backupDir, { recursive: true });
       }
@@ -219,7 +210,7 @@ export function createEncryptedDatabase(dbPath, options = {}) {
         // Hacer backup del archivo corrupto (si no se hizo antes)
         if (fs.existsSync(finalPath)) {
           try {
-            const backupDir = path.join(DATABASES_DIR_SERVER_FOLDER, "backups");
+            const backupDir = path.join(DATABASES_DIR_ROOT, "backups");
             if (!fs.existsSync(backupDir)) {
               fs.mkdirSync(backupDir, { recursive: true });
             }
@@ -236,11 +227,11 @@ export function createEncryptedDatabase(dbPath, options = {}) {
           console.error(`\n❌ CRÍTICO: El archivo ${finalPath} está corrupto y no se puede abrir después de ${maxIntentos} intentos.`);
           console.error(`   Se ha respaldado el archivo corrupto en la carpeta de backups.`);
           console.error(`   ⚠️  ADVERTENCIA: Se creará un archivo nuevo VACÍO. Todos los datos del archivo corrupto se perderán.`);
-          console.error(`   Si necesitas recuperar datos, revisa los backups en: ${path.join(DATABASES_DIR_SERVER_FOLDER, "backups")}\n`);
+          console.error(`   Si necesitas recuperar datos, revisa los backups en: ${path.join(DATABASES_DIR_ROOT, "backups")}\n`);
           
           // Mover el archivo corrupto a un lugar seguro (no eliminarlo)
           try {
-            const backupDir = path.join(DATABASES_DIR_SERVER_FOLDER, "backups");
+            const backupDir = path.join(DATABASES_DIR_ROOT, "backups");
             if (!fs.existsSync(backupDir)) {
               fs.mkdirSync(backupDir, { recursive: true });
             }
@@ -320,24 +311,18 @@ export function createEncryptedDatabase(dbPath, options = {}) {
  * @returns {boolean} - true si está cifrada, false si no
  */
 export function isDatabaseEncrypted(dbPath) {
-  // Normalizar la ruta igual que en createEncryptedDatabase (orden original)
+  // Normalizar la ruta igual que en createEncryptedDatabase
   let finalPath = dbPath;
   const fileName = path.basename(dbPath);
   
   if (!path.isAbsolute(dbPath)) {
-    // Buscar en orden original: server/, databases/, server/databases/
-    const pathServer = path.join(DATABASES_DIR_SERVER_FOLDER, fileName);
+    // Buscar en databases/
     const pathRoot = path.join(DATABASES_DIR_ROOT, fileName);
-    const pathServerDatabases = path.join(DATABASES_DIR_SERVER, fileName);
     
-    if (fs.existsSync(pathServer)) {
-      finalPath = pathServer;
-    } else if (fs.existsSync(pathRoot)) {
+    if (fs.existsSync(pathRoot)) {
       finalPath = pathRoot;
-    } else if (fs.existsSync(pathServerDatabases)) {
-      finalPath = pathServerDatabases;
     } else {
-      finalPath = pathServer; // Default a server/
+      finalPath = pathRoot; // Default a databases/
     }
   }
   
@@ -359,24 +344,18 @@ export function isDatabaseEncrypted(dbPath) {
  * @returns {boolean} - true si la migración fue exitosa
  */
 export function migrateToEncrypted(dbPath) {
-  // Normalizar la ruta igual que en createEncryptedDatabase (orden original)
+  // Normalizar la ruta igual que en createEncryptedDatabase
   let finalPath = dbPath;
   const fileName = path.basename(dbPath);
   
   if (!path.isAbsolute(dbPath)) {
-    // Buscar en orden original: server/, databases/, server/databases/
-    const pathServer = path.join(DATABASES_DIR_SERVER_FOLDER, fileName);
+    // Buscar en databases/
     const pathRoot = path.join(DATABASES_DIR_ROOT, fileName);
-    const pathServerDatabases = path.join(DATABASES_DIR_SERVER, fileName);
     
-    if (fs.existsSync(pathServer)) {
-      finalPath = pathServer;
-    } else if (fs.existsSync(pathRoot)) {
+    if (fs.existsSync(pathRoot)) {
       finalPath = pathRoot;
-    } else if (fs.existsSync(pathServerDatabases)) {
-      finalPath = pathServerDatabases;
     } else {
-      finalPath = pathServer; // Default a server/
+      finalPath = pathRoot; // Default a databases/
     }
   }
   
@@ -446,8 +425,8 @@ export function migrateToEncrypted(dbPath) {
     dbUnencrypted.close();
     dbEncrypted.close();
     
-    // Hacer backup de la original (en carpeta server/backups si existe)
-    const backupsDir = path.join(DATABASES_DIR_SERVER_FOLDER, "backups");
+    // Hacer backup de la original (en carpeta databases/backups)
+    const backupsDir = path.join(DATABASES_DIR_ROOT, "backups");
     if (!fs.existsSync(backupsDir)) {
       fs.mkdirSync(backupsDir, { recursive: true });
     }

@@ -271,6 +271,7 @@ export default function ReunionesPerfilUsuario({ reuniones, serverUrl, authFetch
               .map(reunion => {
                 const fechaHora = new Date(`${reunion.fecha}T${reunion.hora}`);
                 const userNickname = user?.nickname || user?.name;
+                /* eslint-disable-next-line no-unused-vars */
                 const esCreador = reunion.creador_nickname === userNickname;
                 
                 return (

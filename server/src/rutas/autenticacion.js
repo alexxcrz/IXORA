@@ -619,7 +619,10 @@ router.post("/auth/login", strictAntiVPNMiddleware, bruteForceProtection, async 
     // 🔥 RECALCULAR ROLES Y PERMISOS
     pack = getUserBundleByUsername(username);
 
-    // 🔥 GENERAR TOKEN
+    // � Verificar si el usuario es admin o CEO - Requiere NIP
+    const isAdminOrCEO = pack.roles && (pack.roles.includes("admin") || pack.roles.includes("CEO"));
+    
+    // �🔥 GENERAR TOKEN
     const token = signToken({
       id: pack.user.id,
       phone: pack.user.phone,
@@ -633,6 +636,13 @@ router.post("/auth/login", strictAntiVPNMiddleware, bruteForceProtection, async 
 
     // 🔥 GUARDAR NUEVA SESIÓN - CRÍTICO: Asegurar que se guarde correctamente
     try {
+      // Verificar si el usuario tiene sesiones previas
+      const existingSessions = dbUsers.prepare(`
+        SELECT COUNT(*) as count FROM user_sessions WHERE user_id = ?
+      `).get(pack.user.id);
+      
+      const isFirstLogin = !existingSessions || existingSessions.count === 0;
+      
       // Insertar la sesión
       dbUsers.prepare(`
         INSERT INTO user_sessions (user_id, token, user_agent, last_seen_at, created_at)
@@ -656,6 +666,22 @@ router.post("/auth/login", strictAntiVPNMiddleware, bruteForceProtection, async 
           `).run(pack.user.id, token, req.headers["user-agent"] || "desconocido");
         } catch (err2) {
           console.error("❌ Error en segundo intento de crear sesión:", err2);
+        }
+      }
+
+      // 🎯 Si es el primer login, emitir evento de "usuario_unido" a todos los usuarios conectados
+      if (isFirstLogin) {
+        try {
+          const io = getIO();
+          if (io) {
+            console.log(`✨ [AUTH] Primer login detectado para usuario ${pack.user.name}. Emitiendo evento usuario_unido...`);
+            io.emit("usuario_unido", {
+              nickname: pack.user.nickname || pack.user.name,
+              photo: pack.user.photo || null,
+            });
+          }
+        } catch (e) {
+          console.error("Error emitiendo evento usuario_unido:", e);
         }
       }
     } catch (err) {
@@ -869,6 +895,286 @@ router.get("/auth/user", authRequired, (req, res) => {
   } catch (err) {
     console.error("Error obteniendo datos del usuario:", err);
     res.status(500).json({ error: "Error obteniendo datos del usuario" });
+  }
+});
+
+// =====================================================
+// 🔐 ESTABLECER NIP PARA ADMIN/CEO
+// =====================================================
+router.post("/auth/set-nip", authRequired, async (req, res) => {
+  try {
+    const { nip } = req.body || {};
+    const userId = req.user.id;
+
+    // Validar que sea admin o CEO
+    const pack = getUserBundleById(userId);
+    if (!pack || !pack.roles || (!pack.roles.includes("admin") && !pack.roles.includes("CEO"))) {
+      return res.status(403).json({ error: "Solo admin o CEO pueden establecer NIP" });
+    }
+
+    // Validar NIP: debe ser 6 dígitos
+    if (!nip || typeof nip !== "string" || !/^\d{6}$/.test(nip)) {
+      return res.status(400).json({ error: "NIP debe ser 6 dígitos" });
+    }
+
+    // Hashear el NIP igual que las contraseñas
+    const nipHash = await hashPassword(nip);
+
+    // Guardar el NIP en la base de datos
+    dbUsers.prepare(`
+      UPDATE users SET nip_hash = ? WHERE id = ?
+    `).run(nipHash, userId);
+
+    console.log(`🔐 [AUTH] NIP establecido para usuario ${pack.user.name} (ID: ${userId})`);
+
+    res.json({ ok: true, message: "NIP establecido correctamente" });
+  } catch (err) {
+    console.error("Error estableciendo NIP:", err);
+    res.status(500).json({ error: "Error estableciendo NIP" });
+  }
+});
+
+// =====================================================
+// 🔐 VERIFICAR NIP PARA ADMIN/CEO
+// =====================================================
+router.post("/auth/verify-nip", authRequired, async (req, res) => {
+  try {
+    const { nip } = req.body || {};
+    const userId = req.user.id;
+
+    // Validar que sea admin o CEO
+    const pack = getUserBundleById(userId);
+    if (!pack || !pack.roles || (!pack.roles.includes("admin") && !pack.roles.includes("CEO"))) {
+      return res.status(403).json({ error: "Solo admin o CEO pueden verificar NIP" });
+    }
+
+    // Validar NIP: debe ser 6 dígitos
+    if (!nip || typeof nip !== "string" || !/^\d{6}$/.test(nip)) {
+      return res.status(400).json({ error: "NIP debe ser 6 dígitos" });
+    }
+
+    // Obtener el NIP hash del usuario
+    const user = dbUsers.prepare(`
+      SELECT nip_hash FROM users WHERE id = ?
+    `).get(userId);
+
+    if (!user || !user.nip_hash) {
+      return res.status(400).json({ error: "Este usuario no tiene NIP configurado" });
+    }
+
+    // Verificar el NIP
+    const isValid = await verifyPassword(nip, user.nip_hash);
+    if (!isValid) {
+      console.log(`❌ [AUTH] NIP incorrecto para usuario ${pack.user.name}`);
+      return res.status(401).json({ error: "NIP incorrecto" });
+    }
+
+    console.log(`✅ [AUTH] NIP verificado correctamente para usuario ${pack.user.name}`);
+
+    res.json({ ok: true, message: "NIP verificado correctamente" });
+  } catch (err) {
+    console.error("Error verificando NIP:", err);
+    res.status(500).json({ error: "Error verificando NIP" });
+  }
+});
+
+// =====================================================
+// 🔹 GENERAR CÓDIGO DE CONFIRMACIÓN Y ENVIAR VIA CHAT
+// =====================================================
+router.post("/auth/confirmation-code/generate", authRequired, async (req, res) => {
+  try {
+    const { accion, detalles } = req.body;
+    const userId = req.user.id;
+
+    // Validar que la acción sea válida
+    const accionesValidas = ["delete_user", "reset_password", "change_permissions", "change_roles", "cambiar_fecha"];
+    if (!accionesValidas.includes(accion)) {
+      return res.status(400).json({ error: "Acción no válida" });
+    }
+
+    // Obtener información del usuario que solicita la acción
+    const usuarioSolicitante = getUserBundleById(userId);
+    if (!usuarioSolicitante) {
+      return res.status(404).json({ error: "Usuario no encontrado" });
+    }
+
+    // Generar código aleatorio de 6 dígitos
+    const codigo = Math.floor(100000 + Math.random() * 900000).toString();
+    
+    // Código expira en 10 minutos
+    const ahora = new Date();
+    const expiracion = new Date(ahora.getTime() + 10 * 60000);
+
+    console.log(`\n🔐 [GENERAR] Creando nuevo código...`);
+    console.log(`   Usuario ID: ${userId} (${usuarioSolicitante.user.name})`);
+    console.log(`   Código: ${codigo}`);
+    console.log(`   Acción: ${accion}`);
+
+    // Guardar el código en la base de datos
+    const resultado = dbUsers.prepare(`
+      INSERT INTO confirmation_codes (usuario_id, codigo, accion, detalles, expira_en)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(userId, codigo, accion, detalles || null, expiracion.toISOString());
+
+    console.log(`   ✅ Código guardado en BD (ID: ${resultado.lastInsertRowid})`);
+
+    // Buscar usuarios con permiso para recibir códigos
+    const usuariosConPermiso = dbUsers.prepare(`
+      SELECT DISTINCT u.id, u.name, u.nickname, u.photo
+      FROM users u
+      JOIN user_permissions up ON u.id = up.user_id
+      JOIN permissions p ON up.perm_id = p.id
+      WHERE p.perm = 'admin.confirmacion.recibir_codigos'
+      AND u.active = 1
+    `).all();
+
+    console.log(`\n📋 [CODIGOS] Buscando usuarios con permiso 'admin.confirmacion.recibir_codigos'...`);
+    console.log(`   Encontrados: ${usuariosConPermiso.length} usuario(s)`);
+    usuariosConPermiso.forEach(u => console.log(`   ✓ ${u.name} (${u.nickname || 'sin nickname'})`));
+
+    // Enviar mensaje privado de chat a cada usuario con permiso
+    const io = getIO();
+    for (const usuarioDestino of usuariosConPermiso) {
+      const destinoNickname = usuarioDestino.nickname || usuarioDestino.name;
+      
+      // Crear mensaje descriptivo
+      let mensajeAccion = "";
+      switch(accion) {
+        case "cambiar_fecha":
+          mensajeAccion = "cambiar la fecha del sistema";
+          break;
+        case "delete_user":
+          mensajeAccion = "eliminar un usuario";
+          break;
+        case "reset_password":
+          mensajeAccion = "restablecer contraseña de un usuario";
+          break;
+        default:
+          mensajeAccion = "realizar una acción administrativa";
+      }
+
+      const mensajeTexto = `🔐 ${usuarioSolicitante.user.name} quiere ${mensajeAccion}.\n\nCódigo de confirmación: ${codigo}\n\n⏱️ Válido por 10 minutos`;
+
+      try {
+        // Insertar mensaje en chat privado desde "IXORA"
+        const resultado = dbChat.prepare(`
+          INSERT INTO chat_privado 
+          (de_nickname, de_photo, para_nickname, mensaje, tipo_mensaje) 
+          VALUES (?, ?, ?, ?, ?)
+        `).run(
+          "IXORA",
+          null,
+          destinoNickname,
+          mensajeTexto,
+          "sistema"
+        );
+
+        const nuevoMensaje = dbChat.prepare("SELECT * FROM chat_privado WHERE id = ?")
+          .get(resultado.lastInsertRowid);
+
+        // Emitir via Socket.io
+        if (io) {
+          io.emit("chat_privado_nuevo", nuevoMensaje);
+          console.log(`  ✉️ [CHAT] Mensaje enviado a ${destinoNickname} via Socket.io`);
+        }
+
+        console.log(`  ✅ [CHAT] Código guardado en chat privado para ${destinoNickname}`);
+      } catch (chatErr) {
+        console.error(`  ❌ [CHAT] Error enviando mensaje a ${destinoNickname}:`, chatErr.message);
+      }
+    }
+
+    console.log(`✅ [AUTH] Código de confirmación generado para ${usuarioSolicitante.user.name} - Acción: ${accion}`);
+    console.log(`🔐 [CODIGO] Valor: ${codigo} (válido por 10 minutos)`);
+    console.log(`📤 [DISTRIBUCION] Mensajes enviados a ${usuariosConPermiso.length} usuario(s)\n`);
+
+    res.json({ 
+      ok: true, 
+      message: `Código enviado a ${usuariosConPermiso.length} usuario(s) con permiso`,
+      expires_in: 600
+    });
+  } catch (err) {
+    console.error("Error generando código de confirmación:", err);
+    res.status(500).json({ error: "Error generando código" });
+  }
+});
+
+// =====================================================
+// 🔹 VALIDAR CÓDIGO DE CONFIRMACIÓN
+// =====================================================
+router.post("/auth/confirmation-code/validate", authRequired, async (req, res) => {
+  try {
+    const { codigo, accion } = req.body;
+    const userId = req.user.id;
+
+    if (!codigo || !accion) {
+      return res.status(400).json({ error: "Código y acción son requeridos" });
+    }
+
+    console.log(`\n🔍 [VALIDAR] Buscando código...`);
+    console.log(`   Usuario ID: ${userId}`);
+    console.log(`   Código: ${codigo}`);
+    console.log(`   Acción: ${accion}`);
+
+    // Buscar el código en la base de datos
+    const codigoRecord = dbUsers.prepare(`
+      SELECT * FROM confirmation_codes 
+      WHERE usuario_id = ? AND codigo = ? AND accion = ? AND usado = 0
+    `).get(userId, codigo, accion);
+
+    if (!codigoRecord) {
+      console.log(`   ❌ Código no encontrado`);
+      
+      // Ver qué códigos existen para este usuario
+      const codigosExistentes = dbUsers.prepare(`
+        SELECT id, usuario_id, codigo, accion, usado, expira_en FROM confirmation_codes 
+        WHERE usuario_id = ? 
+        ORDER BY creado_en DESC LIMIT 5
+      `).all(userId);
+      
+      console.log(`   📋 Últimos 5 códigos para usuario ${userId}:`, codigosExistentes.length > 0 ? codigosExistentes : "Ninguno");
+      
+      // Incrementar intentos fallidos
+      dbUsers.prepare(`
+        UPDATE confirmation_codes 
+        SET intentos_fallidos = intentos_fallidos + 1
+        WHERE usuario_id = ? AND codigo = ? AND accion = ?
+      `).run(userId, codigo, accion);
+
+      return res.status(400).json({ error: "Código inválido o no encontrado" });
+    }
+
+    console.log(`   ✓ Código encontrado`);
+
+    // Verificar que no haya expirado
+    const ahora = new Date();
+    const expiracion = new Date(codigoRecord.expira_en);
+    if (ahora > expiracion) {
+      console.log(`   ❌ Código expirado`);
+      return res.status(400).json({ error: "Código expirado" });
+    }
+
+    console.log(`   ✓ Código válido y no expirado`);
+
+    // Verificar intentos fallidos (máximo 3)
+    if (codigoRecord.intentos_fallidos >= 3) {
+      return res.status(400).json({ error: "Demasiados intentos fallidos. Solicita un nuevo código" });
+    }
+
+    // ⚠️ NO marcar como usado aquí - solo validar
+    // El código se marcará como usado en el endpoint que realice la acción final
+    // Esto permite que se reutilice el código validado en la siguiente llamada
+
+    console.log(`✅ [AUTH] Código de confirmación validado para usuario ${userId} - Acción: ${accion}`);
+
+    res.json({ 
+      ok: true, 
+      message: "Código válido",
+      accion
+    });
+  } catch (err) {
+    console.error("Error validando código de confirmación:", err);
+    res.status(500).json({ error: "Error validando código" });
   }
 });
 

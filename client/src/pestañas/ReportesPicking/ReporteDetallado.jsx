@@ -83,7 +83,7 @@ export default function ReporteDetallado({ tipo, mes, SERVER_URL, onClose }) {
       yPos += 10;
       doc.setFontSize(12);
       doc.setFont(undefined, "normal");
-      const tipoTexto = tabActiva === "todo" ? "Picking" : tabActiva === "importacion" ? "Importación" : "Devoluciones";
+      const tipoTexto = tabActiva === "todo" ? "Escaneo" : tabActiva === "importacion" ? "Importación" : "Devoluciones";
       doc.text(`Tipo: ${tipoTexto}`, margin, yPos);
       yPos += 15;
 
@@ -347,7 +347,7 @@ export default function ReporteDetallado({ tipo, mes, SERVER_URL, onClose }) {
       const workbook = new ExcelJS.Workbook();
       
       const sheet1 = workbook.addWorksheet("Resumen");
-      const tipoTexto = tabActiva === "todo" ? "Picking" : tabActiva === "importacion" ? "Importación" : "Devoluciones";
+      const tipoTexto = tabActiva === "todo" ? "Escaneo" : tabActiva === "importacion" ? "Importación" : "Devoluciones";
       
       sheet1.addRow(["Reporte Detallado", datos.periodo]);
       sheet1.getRow(1).font = { bold: true, size: 14 };
@@ -599,7 +599,7 @@ export default function ReporteDetallado({ tipo, mes, SERVER_URL, onClose }) {
         })
       );
 
-      const tipoTexto = tabActiva === "todo" ? "Picking" : tabActiva === "importacion" ? "Importación" : "Devoluciones";
+      const tipoTexto = tabActiva === "todo" ? "Escaneo" : tabActiva === "importacion" ? "Importación" : "Devoluciones";
       children.push(
         new Paragraph({
           children: [

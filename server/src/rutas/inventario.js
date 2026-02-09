@@ -167,87 +167,70 @@ router.get("/producto/:codigo", (req, res) => {
 });
 
 /* ============================================================
-   🔍 BÚSQUEDA DE PRODUCTO POR NOMBRE (flexible)
+   🔍 BÚSQUEDA DE PRODUCTO POR NOMBRE (flexible) - OPTIMIZADO
    ============================================================ */
 router.get("/buscar-por-nombre/:nombre", (req, res) => {
   const nombreBuscado = (req.params.nombre || "").trim();
+  
   if (!nombreBuscado) return res.status(400).json({ error: "Falta nombre" });
 
-  // Normalizar el texto de búsqueda
-  const normalizarTexto = (texto = "") => {
-    return texto
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "") // quitar acentos
-      .replace(/[^a-z0-9\s]/g, " ") // quitar caracteres raros
-      .replace(/\s+/g, " ")
-      .trim();
-  };
+  // Normalizar el texto de búsqueda para SQL LIKE
+  const nombreParaSQL = nombreBuscado
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
 
-  const nombreNormalizado = normalizarTexto(nombreBuscado);
-  if (!nombreNormalizado) return res.status(400).json({ error: "Nombre inválido" });
-
-  // Traer SOLO productos de CEDIS (inventario_id = 1)
-  const productos = dbInv
-    .prepare(`SELECT codigo, nombre, presentacion, categoria, subcategoria, piezas_por_caja, COALESCE(activo,1) AS activo, COALESCE(inventario_id,1) AS inventario_id FROM productos_ref WHERE COALESCE(inventario_id,1) = 1`)
-    .all();
-
-  if (!productos || productos.length === 0) {
-    return res.status(404).json({ error: "No hay productos en inventario" });
+  if (!nombreParaSQL || nombreParaSQL.length < 2) {
+    return res.status(400).json({ error: "Término de búsqueda muy corto" });
   }
 
-  const palabras = nombreNormalizado.split(" ").filter((p) => p.length > 2);
+  // Buscar directamente en SQL con LIKE - MUY RÁPIDO
+  // Limitar a 10 resultados como en Picking
+  const limit = req.query.multiples === 'true' ? 10 : 1;
+  
+  try {
+    const productos = dbInv
+      .prepare(`
+        SELECT 
+          codigo, 
+          nombre, 
+          presentacion, 
+          categoria, 
+          subcategoria, 
+          piezas_por_caja, 
+          COALESCE(activo,1) AS activo, 
+          COALESCE(inventario_id,1) AS inventario_id 
+        FROM productos_ref 
+        WHERE COALESCE(inventario_id,1) = 1 
+          AND LOWER(nombre) LIKE '%' || ? || '%'
+        GROUP BY codigo
+        ORDER BY 
+          CASE 
+            WHEN LOWER(nombre) = ? THEN 0
+            WHEN LOWER(nombre) LIKE ? || '%' THEN 1
+            ELSE 2
+          END,
+          LENGTH(nombre)
+        LIMIT ?
+      `)
+      .all(nombreParaSQL, nombreParaSQL, nombreParaSQL, limit);
 
-  const candidatos = productos.map((prod) => {
-    const nombreProd = normalizarTexto(prod.nombre || "");
-    let coincidencias = 0;
-
-    for (const w of palabras) {
-      if (nombreProd.includes(w)) coincidencias++;
+    if (!productos || productos.length === 0) {
+      return res.status(404).json({ error: "Producto no encontrado" });
     }
 
-    const incluyeCompleto =
-      nombreProd.includes(nombreNormalizado) || nombreNormalizado.includes(nombreProd);
-
-    return {
-      prod,
-      nombreProd,
-      coincidencias,
-      incluyeCompleto,
-      len: nombreProd.length,
-    };
-  });
-
-  // 1) primero, los que incluyen el nombre completo
-  let mejores = candidatos.filter((c) => c.incluyeCompleto);
-  if (mejores.length > 0) {
-    mejores.sort((a, b) => a.len - b.len);
-    // Si se solicita múltiples resultados (query param), devolver array
+    // Si se solicitan múltiples resultados, devolver array
     if (req.query.multiples === 'true') {
-      return res.json(mejores.slice(0, 10).map(c => c.prod));
+      return res.json(productos);
     }
-    return res.json(mejores[0].prod);
+
+    // Si solo se solicita uno, devolver el primero
+    res.json(productos[0]);
+  } catch (err) {
+    console.error("❌ Error buscando producto:", err);
+    res.status(500).json({ error: "Error interno buscando producto" });
   }
-
-  // 2) luego, por # de palabras que coinciden
-  mejores = candidatos.filter((c) => c.coincidencias > 0);
-  if (mejores.length === 0) {
-    return res.status(404).json({ error: "Producto no encontrado" });
-  }
-
-  mejores.sort((a, b) => {
-    if (b.coincidencias !== a.coincidencias) {
-      return b.coincidencias - a.coincidencias;
-    }
-    return a.len - b.len;
-  });
-
-  // Si se solicita múltiples resultados, devolver array
-  if (req.query.multiples === 'true') {
-    return res.json(mejores.slice(0, 10).map(c => c.prod));
-  }
-
-  res.json(mejores[0].prod);
 });
 
 /* ============================================================
@@ -1907,14 +1890,31 @@ router.put(
         return res.status(400).json({ error: "Faltan código o ID de lote" });
       }
 
+      // Resolver alias: si el código es un alias, usar el código principal
+      let codigoReal = codigo;
+      try {
+        const alias = dbInv.prepare("SELECT codigo_principal FROM productos_alias WHERE codigo_alias = ?").get(codigo);
+        if (alias) {
+          codigoReal = alias.codigo_principal;
+        }
+      } catch (err) {
+        // Si la tabla productos_alias no existe, usar el código tal cual
+        if (!err.message?.includes('no such table')) {
+          throw err;
+        }
+      }
+
       // Verificar que el lote existe
       const lote = dbInv
         .prepare("SELECT * FROM productos_lotes WHERE id = ? AND codigo_producto = ?")
-        .get(id, codigo);
+        .get(id, codigoReal);
 
       if (!lote) {
         return res.status(404).json({ error: "Lote no encontrado" });
       }
+
+      // Obtener inventario_id del lote
+      const inventarioIdLote = lote.inventario_id || 1;
 
       // Determinar el nuevo estado: si viene activo en el body, usarlo; si no, alternar
       const nuevoEstado = activo !== undefined 
@@ -1926,7 +1926,7 @@ router.put(
         // Si el lote que se quiere activar no tiene caducidad, buscar si hay otros con caducidad
         const loteParaActivar = dbInv
           .prepare("SELECT * FROM productos_lotes WHERE id = ? AND codigo_producto = ?")
-          .get(id, codigo);
+          .get(id, codigoReal);
         
         // Buscar lote con caducidad más próxima
         const loteMasProximo = dbInv
@@ -1939,7 +1939,7 @@ router.put(
             ORDER BY caducidad ASC
             LIMIT 1
           `)
-          .get(codigo);
+          .get(codigoReal);
         
         // Si hay un lote con caducidad más próxima y el que se quiere activar no tiene caducidad o tiene una más lejana
         let loteAActivarse = loteParaActivar;
@@ -1958,26 +1958,26 @@ router.put(
           .prepare(
             "UPDATE productos_lotes SET activo = 0 WHERE codigo_producto = ?"
           )
-          .run(codigo);
+          .run(codigoReal);
 
         // Activar el lote seleccionado (o el de caducidad más próxima si aplica)
         dbInv
           .prepare(
             "UPDATE productos_lotes SET activo = 1 WHERE id = ? AND codigo_producto = ?"
           )
-          .run(loteAActivarse.id, codigo);
+          .run(loteAActivarse.id, codigoReal);
 
         // ⚠️ NO actualizar productos_ref.lote - el lote se obtiene desde productos_lotes
 
         // ⭐️ AUDITORÍA
         const loteActivadoFinal = dbInv
           .prepare("SELECT * FROM productos_lotes WHERE id = ? AND codigo_producto = ?")
-          .get(loteAActivarse.id, codigo);
+          .get(loteAActivarse.id, codigoReal);
         
         registrarAccion({
           usuario: req.user?.name,
           accion: "ACTIVAR_LOTE",
-          detalle: `Lote '${loteActivadoFinal.lote}' activado para producto ${codigo}${loteActivadoFinal.caducidad ? ` (Caducidad: ${loteActivadoFinal.caducidad})` : ''}${loteAActivarse.id !== id ? ' - Activado por caducidad más próxima' : ''}`,
+          detalle: `Lote '${loteActivadoFinal.lote}' activado para producto ${codigoReal}${loteActivadoFinal.caducidad ? ` (Caducidad: ${loteActivadoFinal.caducidad})` : ''}${loteAActivarse.id !== id ? ' - Activado por caducidad más próxima' : ''}`,
           tabla: "productos_lotes",
           registroId: loteAActivarse.id,
         });
@@ -1987,7 +1987,7 @@ router.put(
           .prepare(
             "UPDATE productos_lotes SET activo = 0 WHERE id = ? AND codigo_producto = ?"
           )
-          .run(id, codigo);
+          .run(id, codigoReal);
 
         // ⚠️ NO actualizar productos_ref.lote - el lote se obtiene desde productos_lotes
 
@@ -1995,7 +1995,7 @@ router.put(
         registrarAccion({
           usuario: req.user?.name,
           accion: "DESACTIVAR_LOTE",
-          detalle: `Lote '${lote.lote}' desactivado para producto ${codigo}`,
+          detalle: `Lote '${lote.lote}' desactivado para producto ${codigoReal}`,
           tabla: "productos_lotes",
           registroId: id,
         });

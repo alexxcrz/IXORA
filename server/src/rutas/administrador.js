@@ -1,5 +1,5 @@
 import express from "express";
-import { dbUsers, dbAud, dbRRHH, dbInv, dbHist, dbDia, dbDevol } from "../config/baseDeDatos.js";
+import { dbUsers, dbAud, dbRRHH, dbInv, dbHist, dbDia, dbDevol, dbChat } from "../config/baseDeDatos.js";
 import { authRequired, permit, hashPassword } from "../middleware/autenticacion.js";
 import { getIO, getUsuariosActivos } from "../config/socket.js";
 import { registrarAccion } from "../utilidades/auditoria.js";
@@ -301,13 +301,13 @@ router.post(
 router.get("/admin/usuarios", authRequired, (req, res) => {
   try {
     const rows = dbUsers.prepare(`
-      SELECT u.id, u.name AS nombre, u.phone AS telefono,
+      SELECT u.id, u.name AS nombre, u.phone AS telefono, u.es_sistema, u.photo,
             (SELECT r.name
              FROM roles r
              JOIN user_roles ur ON ur.role_id=r.id
              WHERE ur.user_id=u.id LIMIT 1) AS rol
       FROM users u
-      ORDER BY u.id ASC
+      ORDER BY u.es_sistema DESC, u.id ASC
     `).all();
 
     res.json(rows);
@@ -357,12 +357,12 @@ router.get(
       }
 
       // Construir query dinámicamente según las columnas disponibles
-      const selectColumns = ['id', 'name', 'phone', 'active', 'nickname', 'photo', 'created_at'];
+      const selectColumns = ['id', 'name', 'phone', 'active', 'nickname', 'photo', 'created_at', 'es_sistema'];
       if (hasUsername || tableInfo.some(col => col.name === 'username')) {
         selectColumns.push('username');
       }
       
-      const query = `SELECT ${selectColumns.join(',')} FROM users ORDER BY name ASC`;
+      const query = `SELECT ${selectColumns.join(',')} FROM users ORDER BY es_sistema DESC, name ASC`;
       const rows = dbUsers.prepare(query).all();
 
       res.json(rows);
@@ -386,7 +386,7 @@ router.get(
       const hasUsername = tableInfo.some(col => col.name === 'username');
       
       // Construir query dinámicamente según las columnas disponibles
-      const selectColumns = ['id', 'name', 'phone', 'active', 'nickname', 'photo', 'created_at'];
+      const selectColumns = ['id', 'name', 'phone', 'active', 'nickname', 'photo', 'created_at', 'es_sistema'];
       if (hasUsername || tableInfo.some(col => col.name === 'username')) {
         selectColumns.push('username');
       }
@@ -592,9 +592,14 @@ router.delete(
       const { id } = req.params;
       
       // Validar que el usuario existe antes de eliminar
-      const usuario = dbUsers.prepare("SELECT id FROM users WHERE id=?").get(id);
+      const usuario = dbUsers.prepare("SELECT id, es_sistema, nickname FROM users WHERE id=?").get(id);
       if (!usuario) {
         return res.status(404).json({ error: "Usuario no encontrado" });
+      }
+      
+      // No permitir eliminar usuarios del sistema
+      if (usuario.es_sistema) {
+        return res.status(400).json({ error: "No puedes eliminar un usuario del sistema" });
       }
       
       // No permitir auto-eliminación
@@ -604,26 +609,40 @@ router.delete(
       }
       
       // Usar transacción para asegurar atomicidad
-      const deleteUser = dbUsers.transaction((userId) => {
+      const deleteUser = dbUsers.transaction((userId, userNickname) => {
+        // Eliminar permisos, roles y sesiones del usuario
         dbUsers.prepare("DELETE FROM user_permissions WHERE user_id=?").run(userId);
         dbUsers.prepare("DELETE FROM user_roles WHERE user_id=?").run(userId);
         dbUsers.prepare("DELETE FROM user_sessions WHERE user_id=?").run(userId);
+        
+        // Eliminar al usuario de todos los grupos de chat
+        if (userNickname) {
+          try {
+            dbChat.prepare("DELETE FROM chat_grupos_miembros WHERE usuario_nickname=?").run(userNickname);
+            console.log(`✅ Usuario ${userNickname} eliminado de todos los grupos de chat`);
+          } catch (err) {
+            console.error(`⚠️ Error al eliminar usuario ${userNickname} de grupos de chat:`, err);
+          }
+        }
+        
+        // Eliminar el usuario
         dbUsers.prepare("DELETE FROM users WHERE id=?").run(userId);
       });
       
-      deleteUser(id);
+      deleteUser(id, usuario.nickname);
       
       registrarAccion({
         usuario: req.user?.name || req.user?.username || "Admin",
         accion: "ELIMINAR_USUARIO",
-        detalle: `Usuario eliminado: ID ${id}`,
+        detalle: `Usuario eliminado: ID ${id}, Nickname: ${usuario.nickname}`,
         tabla: "users",
         registroId: id,
       });
       
       // Emitir evento de actualización
       getIO().emit("usuarios_actualizados");
-      getIO().emit("usuario_eliminado", { id });
+      getIO().emit("usuario_eliminado", { id, nickname: usuario.nickname });
+      getIO().emit("grupos_actualizados"); // Notificar actualización de grupos
       
       res.json({ ok: true });
     } catch (err) {

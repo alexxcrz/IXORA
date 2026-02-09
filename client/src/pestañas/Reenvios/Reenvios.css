@@ -112,7 +112,7 @@
 }
 
 .contador-item.activo.contador-total {
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+  box-shadow: var(--sombra-md);
 }
 
 /* DHL - Amarillo */
@@ -162,21 +162,130 @@
 }
 
 .contador-item.contador-total {
-  background: #2563eb !important; /* Azul sólido para el cuerpo */
-  border-color: #1d4ed8 !important;
-  color: white !important;
+  background: transparent !important;
+  border: 2px solid var(--borde-visible) !important;
+  color: var(--texto-principal) !important;
 }
 
 .contador-item.contador-total .contador-label,
 .contador-item.contador-total .contador-valor {
-  color: white !important;
+  color: var(--texto-principal) !important;
 }
 
 .contador-item.contador-total.activo {
   background: #1d4ed8 !important; /* Un poco más oscuro cuando está activo */
   border-color: #1e40af !important;
   color: white !important;
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+  box-shadow: var(--sombra-md);
+}
+
+/* ===========================================
+   INDICADOR DE REENVÍOS EN PROCESO
+=========================================== */
+
+.reenvios-en-proceso-indicador {
+  background: var(--fondo-secundario);
+  border: 1px solid var(--borde-sutil);
+  border-radius: var(--radio-md);
+  padding: 8px 12px;
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  box-shadow: var(--sombra-xs);
+  animation: slideDown 0.3s ease-out;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.proceso-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--fondo-card);
+  padding: 6px 10px;
+  border-radius: var(--radio-sm);
+  border: 1px solid var(--borde-sutil);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.proceso-item:hover {
+  background: var(--fondo-hover);
+  border-color: var(--borde-principal);
+  box-shadow: var(--sombra-sm);
+  transform: translateY(-1px);
+}
+
+.proceso-icon {
+  font-size: 1rem;
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+
+.proceso-texto {
+  flex: 1;
+  font-size: 0.8rem;
+  color: var(--texto-principal);
+  font-weight: 500;
+}
+
+.proceso-texto strong {
+  color: var(--texto-principal);
+  font-weight: 700;
+}
+
+.proceso-loading {
+  display: flex;
+  gap: 1px;
+  align-items: center;
+}
+
+.proceso-loading .dot {
+  font-size: 1.2rem;
+  color: var(--texto-secundario);
+  animation: blink 1.4s infinite both;
+  line-height: 1;
+}
+
+.proceso-loading .dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.proceso-loading .dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes blink {
+  0%, 80%, 100% {
+    opacity: 0.2;
+  }
+  40% {
+    opacity: 1;
+  }
+}
+
+/* ===========================================
+   ESTILOS PARA BOTONES
+=========================================== */
+
+.btn-cerrar-dia {
+  background: #ef4444 !important;
+  color: white !important;
+  font-weight: bold !important;
+}
+
+.btn-cerrar-dia:hover {
+  background: #dc2626 !important;
 }
 
 @media (max-width: 768px) {
@@ -204,14 +313,26 @@
 
   .reenvios-header-actions {
     width: 100%;
+    display: flex;
     flex-direction: row;
     gap: 8px;
   }
 
-  .reenvios-header-actions button {
-    flex: 1;
-    width: auto;
+  .reenvios-header-actions .btn-primary,
+  .reenvios-header-actions .btn {
+    flex: 1 1 50%;
     min-width: 0;
+    font-size: 0.85rem;
+    padding: 10px 8px;
+  }
+  
+  /* Indicador en móvil - posición entre botones e input */
+  .reenvios-en-proceso-indicador {
+    order: 2; /* Después de los botones pero antes del contador */
+  }
+  
+  .reenvios-buscador-container {
+    order: 3; /* Después del indicador */
   }
 
   .reenvios-contador {
@@ -486,7 +607,7 @@
 .estatus-reemplazado .badge-estatus { background: #6366f1; }
 .estatus-cancelado .badge-estatus { background: #dc2626; }
 .estatus-detenido .badge-estatus { background: #f59e0b; }
-.estatus-listo-para-enviar .badge-estatus { background: #3b82f6; }
+.estatus-listo-para-enviar .badge-estatus { background: transparent; border: 1px solid var(--borde-visible); color: var(--texto-principal); }
 
 /* Botón "Marcar como enviado" en la tarjeta */
 .btn-marcar-enviado {
@@ -1154,8 +1275,9 @@ body:has(.edit-modal-overlay) [style*="z-index: 99"]:not(.edit-modal-overlay):no
 }
 
 .step.active {
-  background: var(--azul-primario);
-  color: var(--texto-boton);
+  background: transparent;
+  border: 2px solid var(--borde-visible);
+  color: var(--texto-principal);
 }
 
 /* ===========================================
@@ -1333,7 +1455,7 @@ body:has(.edit-modal-overlay) [style*="z-index: 99"]:not(.edit-modal-overlay):no
 .edit-modal-body input:focus {
   outline: none;
   border-color: var(--azul-primario);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  box-shadow: var(--sombra-sm);
 }
 
 .edit-modal-body .edit-btn-ok {
@@ -1352,7 +1474,7 @@ body:has(.edit-modal-overlay) [style*="z-index: 99"]:not(.edit-modal-overlay):no
 
 .edit-modal-body .edit-btn-ok:hover {
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+  box-shadow: var(--sombra-md);
 }
 
 .edit-modal-body .edit-btn-ok:active {

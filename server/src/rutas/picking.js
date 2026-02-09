@@ -1,6 +1,7 @@
 // src/rutas/picking.js
 import express from "express";
 import dayjs from "dayjs";
+import crypto from "crypto";
 import { dbDia, dbInv, dbHist, dbDevol } from "../config/baseDeDatos.js";
 import { getIO } from "../config/socket.js";
 import { getFechaActual, setFechaActual } from "../utilidades/estado.js";
@@ -160,6 +161,21 @@ router.get("/productos/existe/:codigo", (req, res) => {
     hora_solicitud: producto.hora_solicitud || null,
     hora_surtido: producto.hora_surtido || null
   });
+});
+
+// Endpoint para obtener productos NO disponibles del día
+// Muestra todos los productos marcados como no disponible (cambio de lote, agotados, etc.)
+router.get("/productos/no-disponibles", (req, res) => {
+  try {
+    const canal = normalizarCanal(req.query?.canal);
+    const productos = dbDia
+      .prepare("SELECT * FROM productos WHERE disponible = 0 AND canal = ? ORDER BY hora_solicitud DESC")
+      .all(canal);
+    res.json(productos);
+  } catch (err) {
+    console.error("Error obteniendo productos no disponibles:", err);
+    res.status(500).json({ error: "Error obteniendo productos no disponibles" });
+  }
 });
 
 // Endpoint para buscar producto del día por código o alias (para surtido)
@@ -769,6 +785,78 @@ router.put(
 
     getIO().emit("producto_actualizado", actualizado);
 
+    // ⭐ NOTIFICACIÓN - Notificar SOLO cuando se marca como "Agotado" desde picking
+    // Para "No surtido en rack" y "Cambio de lote" NO se envía notificación
+    if (nuevaObs === "Agotado") {
+      try {
+        const usuarioActual = req.user?.name || req.user?.nickname || "Usuario";
+        
+        // Obtener todos los usuarios activos
+        const usuarios = dbUsers
+          .prepare(
+            "SELECT id, nickname, name FROM users WHERE active = 1"
+          )
+          .all();
+
+        const nombreProducto = actualizado?.nombre || actualizado?.codigo || "Producto";
+        const codigoProducto = actualizado?.codigo || "N/A";
+        const titulo = "⚠️ Producto Marcado Agotado";
+        const mensaje = `${nombreProducto} (${codigoProducto}) ha sido marcado como agotado desde surtido de picking por ${usuarioActual}`;
+        const tipo = "warning";
+
+      // Notificar a todos los usuarios
+      usuarios.forEach((u) => {
+        try {
+          const replyToken = crypto.randomBytes(16).toString("hex");
+          const dataJson = JSON.stringify({
+            tipo: "picking",
+            producto_id: actualizado?.id,
+            codigo: codigoProducto,
+            motivo: nuevaObs
+          });
+
+          // Guardar notificación en BD
+          const result = dbUsers.prepare(`
+            INSERT INTO notificaciones 
+            (usuario_id, titulo, mensaje, tipo, es_confirmacion, admin_only, reply_token, data)
+            VALUES (?, ?, ?, ?, 0, 0, ?, ?)
+          `).run(
+            u.id,
+            titulo,
+            mensaje,
+            tipo,
+            replyToken,
+            dataJson
+          );
+
+          // Enviar notificación en tiempo real vía Socket.IO
+          try {
+            const io = getIO();
+            if (io && typeof io.emit === "function") {
+              io.emit("nueva_notificacion", {
+                userId: u.id,
+                usuario_id: u.id,
+                id: result.lastInsertRowid,
+                titulo,
+                mensaje,
+                tipo,
+                admin_only: false,
+                data: JSON.parse(dataJson),
+                timestamp: new Date().toISOString()
+              });
+            }
+          } catch (err) {
+            // Silent error handling
+          }
+        } catch (err) {
+          // Silent error handling
+        }
+      });
+      } catch (err) {
+        // Silent error handling - no fallar si hay error en notificaciones
+      }
+    }
+
     // ⭐ AUDITORÍA
     registrarAccion({
       usuario: req.user,
@@ -1122,8 +1210,6 @@ router.put(
   "/dia/devoluciones/:tipo/activar",
   requierePermiso("tab:devoluciones", "action:activar-productos"),
   (req, res) => {
-    console.log("🔵 PUT /dia/devoluciones/:tipo/activar - tipo:", req.params.tipo);
-    console.log("🔵 Body recibido:", JSON.stringify(req.body));
     const cfg = getTablasDevoluciones(req.params.tipo);
     if (!cfg) {
       console.error("❌ Tipo de devolución inválido:", req.params.tipo);
@@ -1168,7 +1254,6 @@ router.put(
         cambios: { tipo: req.params.tipo, activo: activoBD === 1 ? 'activado' : 'desactivado' }
       });
 
-      console.log("✅ Devoluciones actualizadas por nombre:", actualizados.length);
       return res.json({ ok: true, registros: actualizados });
     }
 
@@ -1219,7 +1304,6 @@ router.put(
       cambios: { tipo: req.params.tipo, activo: activoBD === 1 ? 'activado' : 'desactivado', cantidad: ids.length }
     });
 
-    console.log("✅ Devoluciones actualizadas:", actualizados.length);
     res.json({ ok: true, registros: actualizados });
   }
 );
@@ -1353,7 +1437,7 @@ router.post("/fecha-actual/validar-password", authRequired, async (req, res) => 
 });
 
 router.post("/fecha-actual", authRequired, async (req, res) => {
-  const { fecha, password } = req.body;
+  const { fecha, confirmationCode } = req.body;
   const userId = req.user?.id;
 
   if (!userId) {
@@ -1363,13 +1447,13 @@ router.post("/fecha-actual", authRequired, async (req, res) => {
   // Guardar fecha anterior antes de cambiarla
   const fechaAnterior = getFechaActual();
 
-  // Si NO hay fecha activa, cualquiera puede establecer una (sin contraseña)
+  // Si NO hay fecha activa, cualquiera puede establecer una (sin código)
   if (!fechaAnterior || fechaAnterior === "") {
     if (!fecha || fecha === "") {
       return res.status(400).json({ error: "Debes proporcionar una fecha" });
     }
 
-    // Establecer fecha sin requerir contraseña
+    // Establecer fecha sin requerir código
     setFechaActual(fecha, userId);
     getIO().emit("fecha_actualizada", fecha);
 
@@ -1390,28 +1474,53 @@ router.post("/fecha-actual", authRequired, async (req, res) => {
     return res.json({ success: true, fecha });
   }
 
-  // Si YA hay fecha activa, se requiere contraseña de admin para cambiarla
+  // Si YA hay fecha activa, se requiere código temporal de admin para cambiarla
   // Verificar que el usuario es admin
   if (!tienePermiso(userId, "tab:admin")) {
     return res.status(403).json({ error: "Solo administradores pueden cambiar la fecha cuando ya hay una activa" });
   }
 
-  // Verificar contraseña
-  if (!password) {
-    return res.status(400).json({ error: "Se requiere contraseña de administrador para cambiar la fecha activa" });
+  // Verificar código de confirmación
+  if (!confirmationCode) {
+    return res.status(400).json({ error: "Se requiere código de confirmación para cambiar la fecha activa", requiresCode: true });
   }
 
-  const user = dbUsers.prepare("SELECT * FROM users WHERE id = ?").get(userId);
-  if (!user || !user.password_hash) {
-    return res.status(400).json({ error: "El usuario no tiene contraseña configurada" });
+  // Validar el código de confirmación
+  console.log(`\n🔍 [FECHA] Validando código...`);
+  console.log(`   Usuario ID: ${userId}`);
+  console.log(`   Código: ${confirmationCode}`);
+
+  const codigo = dbUsers.prepare(`
+    SELECT * FROM confirmation_codes 
+    WHERE codigo = ? AND accion = 'cambiar_fecha' AND usado = 0
+    ORDER BY creado_en DESC LIMIT 1
+  `).get(confirmationCode);
+
+  if (!codigo) {
+    console.log(`   ❌ Código no encontrado`);
+    return res.status(401).json({ error: "Código inválido o ya utilizado" });
   }
 
-  const passwordValida = await verifyPassword(password, user.password_hash);
-  if (!passwordValida) {
-    return res.status(401).json({ error: "Contraseña incorrecta" });
+  console.log(`   ✓ Código encontrado (Usuario: ${codigo.usuario_id})`);
+
+  // Verificar que no haya expirado (10 minutos)
+  const ahora = new Date();
+  const expiracion = new Date(codigo.expira_en);
+  if (ahora > expiracion) {
+    console.log(`   ❌ Código expirado`);
+    return res.status(401).json({ error: "El código ha expirado" });
   }
 
-  // Si se está eliminando la fecha (cadena vacía), permitirlo con contraseña
+  console.log(`   ✓ Código válido`);
+
+  // Marcar código como usado
+  dbUsers.prepare(`
+    UPDATE confirmation_codes 
+    SET usado = 1 
+    WHERE id = ?
+  `).run(codigo.id);
+
+  // Si se está eliminando la fecha (cadena vacía), permitirlo con código
   if (fecha === "" || fecha === null) {
     setFechaActual("", userId);
     getIO().emit("fecha_actualizada", "");
@@ -1433,7 +1542,7 @@ router.post("/fecha-actual", authRequired, async (req, res) => {
     return res.json({ success: true, fecha: "" });
   }
 
-  // Cambiar a una fecha diferente (requiere contraseña)
+  // Cambiar a una fecha diferente (requiere código)
   setFechaActual(fecha, userId);
   getIO().emit("fecha_actualizada", fecha);
 
@@ -1466,8 +1575,30 @@ router.post(
       const f = req.body?.fecha || getFechaActual();
       if (!f) return res.status(400).json({ error: "Falta fecha" });
 
+    // ⚠️ VERIFICAR SI HAY PRODUCTOS SIN SURTIR
+    const productosSinSurtir = dbDia.prepare("SELECT COUNT(*) as count FROM productos WHERE surtido = 0").get();
+    
+    if (productosSinSurtir.count > 0 && !req.body?.confirmarEliminacion) {
+      return res.status(200).json({ 
+        requireConfirmation: true,
+        sinSurtir: productosSinSurtir.count,
+        message: `Hay ${productosSinSurtir.count} producto(s) sin surtir. ¿Desea eliminarlos o dejarlos para el siguiente día?`
+      });
+    }
+
     /* ----- PASAR PRODUCTOS AL HISTÓRICO ----- */
-    const registros = dbDia.prepare("SELECT * FROM productos").all();
+    let registros;
+    
+    // Si eligió dejar los sin surtir, solo tomar los surtidos
+    if (productosSinSurtir.count > 0 && req.body?.dejarSinSurtir) {
+      registros = dbDia.prepare("SELECT * FROM productos WHERE surtido = 1").all();
+    } else {
+      // Si no hay sin surtir o eligió eliminarlos, tomar todos
+      registros = dbDia.prepare("SELECT * FROM productos").all();
+    }
+
+    // Capturar la hora actual del traspaso
+    const horaTraspaso = dayjs().format("HH:mm:ss");
 
     const insProd = dbHist.prepare(`
       INSERT INTO productos_historico
@@ -1489,7 +1620,8 @@ router.post(
           r.surtido,
           r.disponible,
           r.hora_solicitud,
-          r.hora_surtido,
+          // Usar hora del traspaso para productos surtidos, mantener original para no surtidos
+          r.surtido === 1 ? horaTraspaso : r.hora_surtido,
           f,
           r.lote ?? null,
           r.origen || 'normal',
@@ -1505,51 +1637,58 @@ router.post(
     /* Las devoluciones tienen su propio endpoint de cierre: /devoluciones/cerrar-dia */
     /* Esto permite cerrar escaneo sin afectar devoluciones */
 
-    // Limpiar SOLO productos de picking usando transacción
-    // ⚠️ OPERACIÓN CRÍTICA: Elimina TODOS los productos del día
-    const deleteAllProductos = dbDia.transaction(() => {
-      const info = dbDia.prepare("DELETE FROM productos").run();
+    // Limpiar productos según la decisión del usuario
+    // ⚠️ OPERACIÓN CRÍTICA: Solo elimina productos que se movieron al histórico
+    const deleteProductos = dbDia.transaction(() => {
+      let info;
+      if (productosSinSurtir.count > 0 && req.body?.dejarSinSurtir) {
+        // Solo eliminar productos surtidos
+        info = dbDia.prepare("DELETE FROM productos WHERE surtido = 1").run();
+      } else {
+        // Eliminar TODOS los productos del día
+        info = dbDia.prepare("DELETE FROM productos").run();
+      }
       return info.changes;
     });
     
-    const eliminados = deleteAllProductos();
-    // Limpiar fecha (persistente en BD)
-    const userId = req.user?.id;
-    setFechaActual("", userId);
+    const eliminados = deleteProductos();
+    
+    // Emitir eventos solo para picking DESPUÉS de completar todas las operaciones
+    const io = getIO();
+    
+    // ⚠️ IMPORTANTE: Ya NO limpiar la fecha al cerrar el día
+    // La fecha debe permanecer fija y continuar con el tiempo real
+    // Solo se puede cambiar manualmente desde la interfaz
+    // const userId = req.user?.id;
+    // setFechaActual("", userId);
 
     // ⚠️ IMPORTANTE: NO eliminar devoluciones desde aquí
     // Las devoluciones tienen su propio endpoint de cierre: /devoluciones/cerrar-dia
     // Cada módulo debe cerrar su día de forma independiente
-
-    // Emitir eventos solo para picking DESPUÉS de completar todas las operaciones
-    const io = getIO();
     
     // Sincronizar productos de picking
     io.emit("productos_actualizados", []);
     io.emit("picking_actualizado");
     io.emit("cerrar_dia");
     
-    // Sincronizar fecha (pero NO afectar devoluciones)
-    io.emit("fecha_actualizada", "");
-    
     // IMPORTANTE: Emitir reportes_actualizados DESPUÉS de que el reporte esté en la BD
     // Usar setTimeout para asegurar que la transacción se complete
     setTimeout(() => {
       io.emit("reportes_actualizados");
-      console.log("📡 Evento reportes_actualizados emitido después del cierre del día (delay)");
     }, 300);
     
     // También emitir inmediatamente
     io.emit("reportes_actualizados");
-    console.log("📡 Evento reportes_actualizados emitido inmediatamente");
-    
-    console.log("📡 Eventos de sincronización de picking emitidos (devoluciones NO afectadas)");
 
       // ⭐ AUDITORÍA
+      const detalleAuditoria = productosSinSurtir.count > 0 && req.body?.dejarSinSurtir
+        ? `Cerró el día ${f} de PICKING (dejó ${productosSinSurtir.count} sin surtir)`
+        : `Cerró el día ${f} de PICKING`;
+      
       registrarAccion({
         usuario: req.user,
         accion: "CERRAR_DIA_PICKING",
-        detalle: `Cerró el día ${f} de PICKING`,
+        detalle: detalleAuditoria,
         tabla: "productos",
         registroId: 0,
       });

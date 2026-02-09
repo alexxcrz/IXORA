@@ -156,10 +156,9 @@ app.use("/notificaciones", notificacionesRoutes);
 app.use("/activos", activosRoutes);
 app.use("/reuniones", reunionesRoutes);
 
-// Rutas integradas para IXORA IA (completamente integrado en Node.js)
-import ixoraIARoutes from "./src/rutas/pinaIA.js";
-app.use("/api/ixora-ia", ixoraIARoutes);
-// Rutas de IXORA IA montadas
+// Rutas de IXORA IA - DESHABILITADAS (IA eliminada)
+// import ixoraIARoutes from "./src/rutas/pinaIA.js";
+// app.use("/api/ixora-ia", ixoraIARoutes);
 
 // 🔒 Rutas de seguridad administrativas
 import seguridadRoutes from "./src/rutas/seguridad.js";
@@ -263,7 +262,6 @@ function findClientBuildPath() {
     const possibleAppBase = path.join(execDir, "resources", "app");
     if (fs.existsSync(possibleAppBase)) {
       appBasePath = possibleAppBase;
-      console.log(`✅ Encontrado resources/app en: ${possibleAppBase}`);
     }
     
     // También verificar si APP_PATH apunta a resources/app
@@ -271,7 +269,7 @@ function findClientBuildPath() {
       appBasePath = process.env.APP_PATH;
     }
   } catch (e) {
-    console.error("Error buscando resources/app:", e.message);
+    // Error buscando resources/app
   }
   
   const possiblePaths = [
@@ -291,14 +289,6 @@ function findClientBuildPath() {
     process.execPath ? path.resolve(path.dirname(process.execPath), "client", "build") : null,
   ].filter(p => p !== null); // Filtrar nulls
   
-  console.log(`🔍 Buscando carpeta build del cliente...`);
-  console.log(`   APP_PATH (desde Electron): ${process.env.APP_PATH || 'no definido'}`);
-  console.log(`   Directorio del servidor: ${serverDir}`);
-  console.log(`   Directorio de la app: ${appDir}`);
-  console.log(`   App base path: ${appBasePath}`);
-  console.log(`   process.cwd(): ${process.cwd()}`);
-  console.log(`   process.execPath: ${process.execPath}`);
-  
   for (const buildPath of possiblePaths) {
     try {
       const normalizedPath = path.resolve(buildPath); // Usar resolve en lugar de normalize
@@ -308,19 +298,9 @@ function findClientBuildPath() {
         const indexPathResolved = path.resolve(normalizedPath, "index.html");
         
         if (fs.existsSync(indexPath) || fs.existsSync(indexPathResolved)) {
-          console.log(`✅ Encontrado en: ${normalizedPath}`);
-          console.log(`   index.html verificado en: ${indexPathResolved}`);
           return normalizedPath;
         } else {
-          // Listar archivos en la carpeta para debugging
-          try {
-            const files = fs.readdirSync(normalizedPath);
-            console.log(`⚠️  Carpeta existe pero no tiene index.html: ${normalizedPath}`);
-            console.log(`   Archivos en la carpeta: ${files.slice(0, 5).join(', ')}${files.length > 5 ? '...' : ''}`);
-            console.log(`   Buscado en: ${indexPathResolved}`);
-          } catch (e) {
-            console.log(`⚠️  Carpeta existe pero no se puede leer: ${normalizedPath} - ${e.message}`);
-          }
+          // Carpeta existe pero no tiene index.html
         }
       }
     } catch (e) {
@@ -329,39 +309,42 @@ function findClientBuildPath() {
     }
   }
   
-  console.warn(`❌ No se encontró la carpeta build en ninguna ubicación posible.`);
-  console.warn(`   Rutas probadas:`);
-  possiblePaths.forEach(p => {
-    const normalizedPath = path.normalize(p);
-    const exists = fs.existsSync(normalizedPath);
-    console.warn(`   ${exists ? '✓' : '✗'} ${normalizedPath}`);
-  });
-  
   return null;
 }
 
 const clientBuildPath = findClientBuildPath();
 
 if (clientBuildPath) {
-  console.log(`✅ Serviendo archivos estáticos desde: ${clientBuildPath}`);
+  // Servir archivos estáticos explícitamente desde /static/ CON PRIORIDAD MÁXIMA
+  app.use('/static', express.static(path.join(clientBuildPath, 'static'), {
+    setHeaders: (res, filePath) => {
+      if (filePath.endsWith('.js')) {
+        res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+        res.setHeader('X-Content-Type-Options', 'nosniff');
+      } else if (filePath.endsWith('.css')) {
+        res.setHeader('Content-Type', 'text/css; charset=utf-8');
+        res.setHeader('X-Content-Type-Options', 'nosniff');
+      }
+    }
+  }));
   
-  // Verificar que el index.html existe
-  const indexPath = path.join(clientBuildPath, "index.html");
-  if (!fs.existsSync(indexPath)) {
-    console.error(`❌ ERROR: No se encontró index.html en: ${indexPath}`);
-  } else {
-    console.log(`✅ index.html encontrado en: ${indexPath}`);
-  }
-  
-  // Servir archivos estáticos (CSS, JS, imágenes, etc.)
+  // Servir archivos estáticos (CSS, JS, imágenes, etc.) con headers correctos
   app.use(express.static(clientBuildPath, {
     index: false, // No usar index.html automáticamente, lo manejaremos manualmente
+    setHeaders: (res, filePath) => {
+      // Asegurar Content-Type correcto para archivos JS
+      if (filePath.endsWith('.js')) {
+        res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+      } else if (filePath.endsWith('.css')) {
+        res.setHeader('Content-Type', 'text/css; charset=utf-8');
+      }
+    }
   }));
   
   // Catch-all handler: enviar React app para todas las rutas no API
   // Esto permite que React Router maneje el enrutamiento del lado del cliente
   app.get("*", (req, res, next) => {
-    // Si la ruta es una ruta de API o de backend, devolver 404
+    // Si la ruta es una ruta de API, backend o archivos estáticos, devolver 404
     if (
       req.path.startsWith("/api") ||
       req.path.startsWith("/auth") ||
@@ -382,7 +365,16 @@ if (clientBuildPath) {
       req.path.startsWith("/server-info") ||
       req.path.startsWith("/server-config") ||
       req.path.startsWith("/__debug_hist") ||
-      req.path.startsWith("/tienda")
+      req.path.startsWith("/tienda") ||
+      req.path.startsWith("/static") ||
+      req.path.startsWith("/favicon.ico") ||
+      req.path.endsWith(".js") ||
+      req.path.endsWith(".css") ||
+      req.path.endsWith(".map") ||
+      req.path.endsWith(".png") ||
+      req.path.endsWith(".jpg") ||
+      req.path.endsWith(".ico") ||
+      req.path.endsWith(".svg")
     ) {
       return next(); // Continuar al siguiente middleware (404 handler de Express)
     }

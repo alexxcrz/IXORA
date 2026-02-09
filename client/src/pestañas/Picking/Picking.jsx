@@ -122,26 +122,6 @@ export default function Picking({
       }, 200);
     }
     
-    // En Android nativo, asegurar que el input esté siempre listo para recibir escaneos
-    const isAndroidNative = typeof window !== 'undefined' && 
-      window.Capacitor && 
-      window.Capacitor.isNativePlatform && 
-      window.Capacitor.isNativePlatform() &&
-      window.Capacitor.getPlatform() === 'android';
-    
-    if (isAndroidNative && el) {
-      // Enfocar el input cada vez que se monte el componente (para DataWedge)
-      const focusInterval = setInterval(() => {
-        if (el && document.activeElement !== el && !usuarioInteractuandoRef.current) {
-          safeFocus(el, 0);
-        }
-      }, 1000); // Verificar cada segundo
-      
-      return () => {
-        clearInterval(focusInterval);
-      };
-    }
-    
     // Quitar scroll en PDA
     const isPDA = window.innerWidth <= 768;
     if (isPDA) {
@@ -1065,17 +1045,8 @@ export default function Picking({
       clearTimeout(scanTimeoutRef.current);
     }
 
-    // Detectar si estamos en la app móvil Android usando Capacitor
-    const isMobileApp = typeof window !== 'undefined' && 
-      window.Capacitor && 
-      window.Capacitor.isNativePlatform && 
-      window.Capacitor.isNativePlatform() &&
-      window.Capacitor.getPlatform() === 'android';
-
-    // En Android nativo (DataWedge), esperar a que llegue el Enter
-    // Si no llega Enter en 500ms, procesar automáticamente (fallback)
-    // En web, usar el delay normal
-    const delay = isMobileApp ? 500 : SCAN_DELAY;
+    // Usar delay para detectar escaneo rápido
+    const delay = SCAN_DELAY;
 
     // Crear nuevo timeout como fallback (solo si no llega Enter de DataWedge)
     scanTimeoutRef.current = setTimeout(() => {
@@ -1182,10 +1153,35 @@ export default function Picking({
     if (!confirmado) return;
 
     try {
-      await authFetch(`${SERVER_URL}/cerrar-dia`, {
+      // Primera petición: verificar si hay productos sin surtir
+      const checkResponse = await authFetch(`${SERVER_URL}/cerrar-dia`, {
         method: "POST",
         body: JSON.stringify({ fecha })
       });
+
+      // Si hay productos sin surtir, preguntar qué hacer
+      if (checkResponse.requireConfirmation) {
+        const decision = await showAlert(
+          checkResponse.message,
+          "warning",
+          {
+            showCancel: true,
+            confirmText: "Eliminar",
+            cancelText: "Dejar para mañana",
+            title: "Productos sin surtir"
+          }
+        );
+
+        // Segunda petición con la decisión
+        await authFetch(`${SERVER_URL}/cerrar-dia`, {
+          method: "POST",
+          body: JSON.stringify({ 
+            fecha,
+            confirmarEliminacion: true,
+            dejarSinSurtir: !decision // true = dejar, false = eliminar
+          })
+        });
+      }
 
       // Los eventos de socket se emitirán desde el servidor
       // y los listeners actualizarán automáticamente la UI
@@ -1348,7 +1344,7 @@ export default function Picking({
   return (
     <div className="card picking-container">
       <div className="picking-header" style={isPC ? { flexDirection: 'column', gap: '12px' } : {}}>
-        <h2 className="picking-titulo" style={isPC ? { width: '100%', textAlign: 'center' } : {}}>{titulo || "Picking"}</h2>
+        <h2 className="picking-titulo" style={isPC ? { width: '100%', textAlign: 'center' } : {}}>{titulo || "Escaneo"}</h2>
         <div style={{ 
           display: 'flex', 
           alignItems: 'center', 

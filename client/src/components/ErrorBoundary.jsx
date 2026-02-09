@@ -90,19 +90,8 @@ class ErrorBoundary extends React.Component {
     // Limpiar error y recargar
     this.setState({ hasError: false, error: null, errorInfo: null });
     
-    // PROTECCIÓN: En Android, NO recargar la página (causa cierre de app)
-    const isAndroid = typeof window !== 'undefined' && 
-      window.Capacitor && 
-      window.Capacitor.isNativePlatform() &&
-      window.Capacitor.getPlatform() === 'android';
-    
-    if (!isAndroid) {
-      // Solo en web, recargar
-      window.location.reload();
-    } else {
-      // En Android, solo resetear el estado sin recargar
-      console.log('[IXORA_ERROR_BOUNDARY] Error reseteado sin recargar (Android)');
-    }
+    // Recargar la página
+    window.location.reload();
   };
 
   handleReset = () => {

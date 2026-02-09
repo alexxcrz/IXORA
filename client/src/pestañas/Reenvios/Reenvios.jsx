@@ -109,6 +109,9 @@ export default function Reenvios({ serverUrl, pushToast, fecha, socket }) {
   const [compartirDestino, setCompartirDestino] = useState("");
   const [compartiendo, setCompartiendo] = useState(false);
 
+  // ====== REENVÍOS EN PROCESO (INDICADOR EN TIEMPO REAL) ======
+  const [reenviosEnProceso, setReenviosEnProceso] = useState([]);
+
   const cargarUsuariosChat = async () => {
     try {
       const data = await authFetch(`${serverUrl}/chat/usuarios`);
@@ -129,7 +132,7 @@ export default function Reenvios({ serverUrl, pushToast, fecha, socket }) {
   const construirMensajeCompartir = (item) => {
     if (!item) return "Reenvío compartido.";
     const base = new URL(window.location.origin);
-    base.searchParams.set("tab", "reenvios");
+    base.pathname = '/reenvios';
     base.searchParams.set("share", "reenvio");
     if (item.id) base.searchParams.set("id", String(item.id));
     if (item.pedido) base.searchParams.set("pedido", String(item.pedido));
@@ -208,25 +211,24 @@ export default function Reenvios({ serverUrl, pushToast, fecha, socket }) {
 
   useEffect(() => {
     cargar();
+    // Cargar procesos guardados en localStorage
+    try {
+      const procesosGuardados = localStorage.getItem('reenvios_en_proceso');
+      if (procesosGuardados) {
+        const procesos = JSON.parse(procesosGuardados);
+        setReenviosEnProceso(procesos);
+      }
+    } catch (error) {
+      console.error('Error cargando procesos guardados:', error);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ───────────────────────────
-  // SOCKET.IO - ACTUALIZACIONES EN TIEMPO REAL
-  // ───────────────────────────
+  // Refs para evitar loops infinitos en socket listeners
+  const detalleItemRef = useRef(detalleItem);
   useEffect(() => {
-    if (!socket) return;
-
-    const handleReenviosActualizados = () => {
-      cargar();
-    };
-
-    socket.on("reenvios_actualizados", handleReenviosActualizados);
-
-    return () => {
-      socket.off("reenvios_actualizados", handleReenviosActualizados);
-    };
-  }, [socket, serverUrl]);
+    detalleItemRef.current = detalleItem;
+  }, [detalleItem]);
 
   const shareHandledRef = useRef(false);
 
@@ -276,27 +278,129 @@ export default function Reenvios({ serverUrl, pushToast, fecha, socket }) {
     }
   }, [loading, reenvios, reenviosHistoricos]);
 
-  // ============================================================
-  // ESCUCHAR EVENTOS DE SOCKET PARA ACTUALIZACIÓN AUTOMÁTICA
-  // ============================================================
+  // Auto-guardar progreso cuando cambian las fotos (con delay para no saturar)
   useEffect(() => {
-    const socket = window.socket;
+    if (!modalOpen || !pedido.trim()) return;
+    
+    const timeoutId = setTimeout(() => {
+      guardarProgresoLocal(pedido.trim());
+    }, 1000); // Guardar 1 segundo después del último cambio
+    
+    return () => clearTimeout(timeoutId);
+  }, [fotos, modalOpen, pedido]);
 
-    const handleReenviosActualizados = () => {
-      // Pequeño delay para asegurar que el servidor haya completado la transacción
-      setTimeout(() => {
-        cargar();
-      }, 200);
+  // ============================================================
+  // SOCKET.IO - SINCRONIZACIÓN EN TIEMPO REAL (SIN RECARGAS)
+  // ============================================================
+  // Actualizar SOLO los reenvíos individuales que cambiaron sin recargar la lista completa
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleReenvioActualizado = (reenvioData) => {
+      if (!reenvioData || !reenvioData.id) return;
+      
+      setReenvios((prevReenvios) => {
+        // Verificar si el reenvío existe
+        const existe = prevReenvios.find((r) => r.id === reenvioData.id);
+        
+        if (existe) {
+          // Actualizar reenvío existente
+          return prevReenvios.map((r) =>
+            r.id === reenvioData.id ? { ...r, ...reenvioData } : r
+          );
+        } else {
+          // Si no existe, agregarlo al principio (es nuevo)
+          return [reenvioData, ...prevReenvios];
+        }
+      });
+      
+      // Si el detalle está abierto y es este reenvío, actualizarlo también
+      if (detalleItemRef.current && detalleItemRef.current.id === reenvioData.id) {
+        setDetalleItem((prev) => ({ ...prev, ...reenvioData }));
+      }
     };
 
-    socket.on("reenvios_actualizados", handleReenviosActualizados);
-    socket.on("reportes_actualizados", handleReenviosActualizados); // También cuando se actualicen reportes
+    const handleReenvioAgregado = (reenvioData) => {
+      if (!reenvioData || !reenvioData.id) return;
+      
+      setReenvios((prevReenvios) => {
+        const yaExiste = prevReenvios.find((r) => r.id === reenvioData.id);
+        if (yaExiste) return prevReenvios; // No duplicar
+        
+        // Agregar al principio
+        return [reenvioData, ...prevReenvios];
+      });
+    };
+
+    const handleReenvioEliminado = (reenvioId) => {
+      if (!reenvioId) return;
+      
+      setReenvios((prevReenvios) =>
+        prevReenvios.filter((r) => r.id !== reenvioId)
+      );
+      
+      // Si estaba abierto en detalle, cerrar
+      if (detalleItemRef.current && detalleItemRef.current.id === reenvioId) {
+        setDetalleOpen(false);
+        setDetalleItem(null);
+      }
+    };
+
+    socket.on("reenvio_actualizado", handleReenvioActualizado);
+    socket.on("reenvio_agregado", handleReenvioAgregado);
+    socket.on("reenvio_eliminado", handleReenvioEliminado);
+
+    // Eventos para reenvíos en proceso
+    const handleReenvioEnProceso = (data) => {
+      // data = { pedido, usuario, accion: "crear" | "editar" }
+      if (!data || !data.pedido) return;
+      
+      setReenviosEnProceso((prev) => {
+        // Evitar duplicados
+        const existe = prev.find((p) => p.pedido === data.pedido);
+        if (existe) return prev;
+        const nuevaLista = [...prev, data];
+        
+        // Guardar en localStorage
+        try {
+          localStorage.setItem('reenvios_en_proceso', JSON.stringify(nuevaLista));
+        } catch (error) {
+          console.error('Error guardando procesos:', error);
+        }
+        
+        return nuevaLista;
+      });
+    };
+
+    const handleReenvioProcesoTerminado = (data) => {
+      // data = { pedido }
+      if (!data || !data.pedido) return;
+      
+      setReenviosEnProceso((prev) => {
+        const nuevaLista = prev.filter((p) => p.pedido !== data.pedido);
+        
+        // Actualizar localStorage
+        try {
+          localStorage.setItem('reenvios_en_proceso', JSON.stringify(nuevaLista));
+        } catch (error) {
+          console.error('Error actualizando procesos:', error);
+        }
+        
+        return nuevaLista;
+      });
+    };
+
+    socket.on("reenvio_en_proceso", handleReenvioEnProceso);
+    socket.on("reenvio_proceso_terminado", handleReenvioProcesoTerminado);
 
     return () => {
-      socket.off("reenvios_actualizados", handleReenviosActualizados);
-      socket.off("reportes_actualizados", handleReenviosActualizados);
+      socket.off("reenvio_actualizado", handleReenvioActualizado);
+      socket.off("reenvio_agregado", handleReenvioAgregado);
+      socket.off("reenvio_eliminado", handleReenvioEliminado);
+      socket.off("reenvio_en_proceso", handleReenvioEnProceso);
+      socket.off("reenvio_proceso_terminado", handleReenvioProcesoTerminado);
     };
-  }, [serverUrl]);
+  }, [socket]);
 
   // ============================================================
   // DETECTAR PAQUETERÍA POR FORMATO DE GUÍA
@@ -341,6 +445,161 @@ export default function Reenvios({ serverUrl, pushToast, fecha, socket }) {
   };
 
   // ============================================================
+  // NOTIFICAR PROCESO
+  // ============================================================
+  const { user } = useAuth();
+  
+  const notificarInicioProceso = (pedidoNum, accion = "crear") => {
+    if (socket && pedidoNum) {
+      socket.emit("reenvio_iniciado", {
+        pedido: pedidoNum,
+        usuario: user?.name || "Usuario",
+        accion
+      });
+    }
+  };
+
+  const notificarFinProceso = (pedidoNum) => {
+    if (socket && pedidoNum) {
+      socket.emit("reenvio_finalizado", {
+        pedido: pedidoNum
+      });
+    }
+  };
+
+  // Guardar progreso en localStorage
+  const guardarProgresoLocal = async (pedidoKey) => {
+    if (!pedidoKey) return;
+    
+    try {
+      // Convertir fotos a base64 para guardar en localStorage
+      const fotosBase64 = await Promise.all(
+        fotos.map(async (foto) => {
+          try {
+            // Si ya es una URL base64, usarla directamente
+            if (foto.preview && foto.preview.startsWith('data:')) {
+              return { preview: foto.preview, idTemp: foto.idTemp };
+            }
+            // Si es un objeto File, convertirlo a base64
+            if (foto.file) {
+              return new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onloadend = () => {
+                  resolve({ preview: reader.result, idTemp: foto.idTemp });
+                };
+                reader.readAsDataURL(foto.file);
+              });
+            }
+            // Si solo tiene preview (blob URL), usarlo
+            return { preview: foto.preview, idTemp: foto.idTemp };
+          } catch (err) {
+            console.error('Error convirtiendo foto:', err);
+            return null;
+          }
+        })
+      );
+      
+      const progreso = {
+        pedido,
+        step,
+        guia,
+        paqueteria,
+        motivo,
+        fotos: fotosBase64.filter(f => f !== null),
+        timestamp: Date.now()
+      };
+      
+      localStorage.setItem(`reenvio_progreso_${pedidoKey}`, JSON.stringify(progreso));
+    } catch (error) {
+      console.error("Error guardando progreso:", error);
+    }
+  };
+
+  // Cargar progreso desde localStorage
+  const cargarProgresoLocal = (pedidoKey) => {
+    if (!pedidoKey) return null;
+    
+    try {
+      const stored = localStorage.getItem(`reenvio_progreso_${pedidoKey}`);
+      if (!stored) return null;
+      
+      const progreso = JSON.parse(stored);
+      
+      // Verificar que no sea muy antiguo (más de 24 horas)
+      const horasTranscurridas = (Date.now() - progreso.timestamp) / (1000 * 60 * 60);
+      if (horasTranscurridas > 24) {
+        localStorage.removeItem(`reenvio_progreso_${pedidoKey}`);
+        return null;
+      }
+      
+      return progreso;
+    } catch (error) {
+      console.error("Error cargando progreso:", error);
+      return null;
+    }
+  };
+
+  // Limpiar progreso guardado
+  const limpiarProgresoLocal = (pedidoKey) => {
+    if (!pedidoKey) return;
+    try {
+      localStorage.removeItem(`reenvio_progreso_${pedidoKey}`);
+    } catch (error) {
+      console.error("Error limpiando progreso:", error);
+    }
+  };
+
+  // Regresar a un reenvío en proceso (clickeando el indicador)
+  const regresarAProceso = async (pedidoNumero) => {
+    try {
+      // Buscar el reenvío en la lista actual
+      const reenvio = reenvios.find((r) => r.pedido === pedidoNumero);
+      
+      if (reenvio) {
+        // Si existe en la lista, abrir en modo edición
+        editarEnvio(reenvio);
+      } else {
+        // Intentar cargar progreso guardado
+        const progreso = cargarProgresoLocal(pedidoNumero);
+        
+        if (progreso) {
+          // Restaurar progreso
+          setPedido(progreso.pedido);
+          setStep(progreso.step);
+          setGuia(progreso.guia || "");
+          setPaqueteria(progreso.paqueteria || "");
+          setMotivo(progreso.motivo || "");
+          
+          // Restaurar fotos desde base64
+          if (progreso.fotos && Array.isArray(progreso.fotos) && progreso.fotos.length > 0) {
+            const fotosRestauradas = progreso.fotos.map((f) => ({
+              preview: f.preview,
+              idTemp: f.idTemp || Date.now() + Math.random(),
+              file: null // No podemos restaurar el File original, pero tenemos el preview
+            }));
+            setFotos(fotosRestauradas);
+            pushToast?.(`✅ Progreso restaurado con ${progreso.fotos.length} foto(s)`, "ok");
+          } else {
+            setFotos([]);
+            pushToast?.(`✅ Progreso restaurado`, "ok");
+          }
+          
+          setModalOpen(true);
+        } else {
+          // Si no hay progreso, crear uno nuevo
+          resetWizard();
+          setPedido(pedidoNumero);
+          setModalOpen(true);
+          setStep(1);
+        }
+      }
+    } catch (error) {
+      console.error("Error regresando al proceso:", error);
+      pushToast?.("❌ Error al regresar al proceso", "err");
+    }
+  };
+
+  // ============================================================
   // RESET DEL WIZARD
   // ============================================================
   const resetWizard = () => {
@@ -378,6 +637,14 @@ export default function Reenvios({ serverUrl, pushToast, fecha, socket }) {
     setDetalleOpen(false);
     setModalOpen(true);
   };
+
+  // Notificar cuando se ABRE el wizard (después de que el usuario ingrese el pedido)
+  useEffect(() => {
+    if (modalOpen && step === 1 && pedido && pedido.trim()) {
+      // Iniciar notificación de proceso
+      notificarInicioProceso(pedido, "crear");
+    }
+  }, [modalOpen, step, pedido]);
 
   // Ocultar banner de bienvenida cuando se abre el modal de edición
   useEffect(() => {
@@ -1070,6 +1337,11 @@ export default function Reenvios({ serverUrl, pushToast, fecha, socket }) {
     setEditGuia(item.guia || "");
     setEditPaq(item.paqueteria || "");
     
+    // Notificar inicio de proceso de edición
+    if (item.pedido) {
+      notificarInicioProceso(item.pedido, "editar");
+    }
+    
     // Cargar fotos existentes con datos completos
     try {
       const fotosData = await cargarFotosDetalleCompleto(item);
@@ -1126,6 +1398,13 @@ export default function Reenvios({ serverUrl, pushToast, fecha, socket }) {
       );
 
       pushToast?.("✅ Reenvío actualizado", "ok");
+      
+      // Notificar fin del proceso y limpiar progreso
+      if (editPedido) {
+        notificarFinProceso(editPedido);
+        limpiarProgresoLocal(editPedido.trim());
+      }
+      
       setEditOpen(false);
       // Limpiar fotos
       editFotos.forEach((f) => {
@@ -1138,6 +1417,11 @@ export default function Reenvios({ serverUrl, pushToast, fecha, socket }) {
       setEditPreviews([]);
     } catch (e) {
       pushToast?.("❌ Error actualizando envío", "err");
+      // Notificar fin del proceso aunque haya error y limpiar progreso
+      if (editPedido) {
+        notificarFinProceso(editPedido);
+        limpiarProgresoLocal(editPedido.trim());
+      }
     }
   };
 
@@ -1358,6 +1642,12 @@ export default function Reenvios({ serverUrl, pushToast, fecha, socket }) {
       // Feedback inmediato
       pushToast?.("✅ Reenvío guardado", "ok");
       
+      // Notificar fin del proceso y limpiar progreso guardado
+      if (pedido) {
+        notificarFinProceso(pedido);
+        limpiarProgresoLocal(pedido.trim());
+      }
+      
       // Limpiar formulario inmediatamente
       setPedido("");
       setGuia("");
@@ -1371,6 +1661,11 @@ export default function Reenvios({ serverUrl, pushToast, fecha, socket }) {
     } catch (e) {
       console.error("finalizar", e);
       pushToast?.("❌ " + e.message, "err");
+      // Notificar fin del proceso aunque haya error y limpiar progreso
+      if (pedido) {
+        notificarFinProceso(pedido);
+        limpiarProgresoLocal(pedido.trim());
+      }
     }
   };
 
@@ -1387,22 +1682,51 @@ export default function Reenvios({ serverUrl, pushToast, fecha, socket }) {
       setCerrarLoading(true);
       setCerrarResumen(null);
 
-      // 🚨 IMPORTANTE: endpoint con prefijo /reenvios
-      // Enviar la fecha del calendario principal si está disponible
-      const data = await authFetch(`${serverUrl}/reenvios/cerrar-reenvios`, {
+      // 🚨 Primera petición: verificar si hay reenvíos pendientes
+      const checkResponse = await authFetch(`${serverUrl}/reenvios/cerrar-reenvios`, {
         method: "POST",
         body: JSON.stringify({
-          fecha: fecha || undefined, // Enviar fecha del calendario si existe
+          fecha: fecha || undefined,
         }),
       });
 
-      setCerrarResumen({
-        cantidad: data.cantidad ?? 0,
-        fechaCierre: data.fechaCierre,
-      });
+      // Si hay reenvíos pendientes, preguntar qué hacer
+      if (checkResponse.requireConfirmation) {
+        const decision = await showAlert(
+          checkResponse.message,
+          "warning",
+          {
+            showCancel: true,
+            confirmText: "Eliminar",
+            cancelText: "Dejar para mañana",
+            title: "Reenvíos pendientes"
+          }
+        );
+
+        // Segunda petición con la decisión
+        const data = await authFetch(`${serverUrl}/reenvios/cerrar-reenvios`, {
+          method: "POST",
+          body: JSON.stringify({
+            fecha: fecha || undefined,
+            confirmarEliminacion: true,
+            dejarPendientes: !decision // true = dejar, false = eliminar
+          }),
+        });
+
+        setCerrarResumen({
+          cantidad: data.cantidad ?? 0,
+          fechaCierre: data.fechaCierre,
+        });
+      } else {
+        // No hay pendientes, solo mostrar el resumen
+        setCerrarResumen({
+          cantidad: checkResponse.cantidad ?? 0,
+          fechaCierre: checkResponse.fechaCierre,
+        });
+      }
 
       pushToast?.(
-        `✔ Cierre realizado (${data.cantidad || 0} movidos al histórico)`,
+        `✔ Cierre realizado (${checkResponse.cantidad || 0} movidos al histórico)`,
         "ok"
       );
 
@@ -1514,14 +1838,39 @@ export default function Reenvios({ serverUrl, pushToast, fecha, socket }) {
           />
         </div>
 
+        {/* Indicador de reenvíos en proceso */}
+        {reenviosEnProceso.length > 0 && (
+          <div className="reenvios-en-proceso-indicador">
+            {reenviosEnProceso.map((proceso, idx) => (
+              <div 
+                key={idx} 
+                className="proceso-item"
+                onClick={() => regresarAProceso(proceso.pedido)}
+                title="Click para regresar al reenvío en proceso"
+              >
+                <span className="proceso-icon">📦</span>
+                <span className="proceso-texto">
+                  {proceso.accion === "crear" ? "Creando" : "Editando"} reenvío: 
+                  <strong> {proceso.pedido}</strong>
+                  {proceso.usuario && ` (${proceso.usuario})`}
+                </span>
+                <span className="proceso-loading">
+                  <span className="dot">.</span>
+                  <span className="dot">.</span>
+                  <span className="dot">.</span>
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
         <div className="reenvios-header-actions">
-          <button className="btn-primary" onClick={abrirNuevo}>
+          <button className="btn-primary btn-agregar-reenvio" onClick={abrirNuevo}>
             + Agregar reenvío
           </button>
           {/* Botón para abrir modal de cierre de día */}
           <button
-            className="btn"
-            style={{ background: "#ef4444", color: "white", fontWeight: "bold" }}
+            className="btn btn-cerrar-dia"
             onClick={() => {
               setCerrarResumen(null);
               setCerrarModalOpen(true);
@@ -1914,7 +2263,7 @@ export default function Reenvios({ serverUrl, pushToast, fecha, socket }) {
           MODAL PEQUEÑO PARA EDITAR ENVÍO
       =========================================================== */}
       {editOpen && (
-        <div className="modal-overlay edit-modal-overlay" onClick={() => setEditOpen(false)}>
+        <div className="modal-overlay edit-modal-overlay" onClick={() => setEditOpen(false)}>)
           <div className="modal edit-modal modal-lg" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header edit-modal-header">
               <h3>✏️ Editar Reenvío</h3>
@@ -2135,6 +2484,10 @@ export default function Reenvios({ serverUrl, pushToast, fecha, socket }) {
               <button
                 className="btn"
                 onClick={() => {
+                  if (editPedido.trim()) {
+                    notificarFinProceso(editPedido);
+                    limpiarProgresoLocal(editPedido.trim());
+                  }
                   setEditOpen(false);
                   // Limpiar fotos
                   editFotos.forEach((f, i) => {
@@ -2312,14 +2665,23 @@ export default function Reenvios({ serverUrl, pushToast, fecha, socket }) {
                     <div className="modal-actions">
                       <button
                         className="btn"
-                        onClick={() => setModalOpen(false)}
+                        onClick={() => {
+                          if (pedido.trim()) {
+                            notificarFinProceso(pedido);
+                            limpiarProgresoLocal(pedido.trim());
+                          }
+                          setModalOpen(false);
+                        }}
                       >
                         Cancelar
                       </button>
                       <button
                         className="btn-primary"
                         disabled={!modoLiberacion && !pedido.trim()}
-                        onClick={() => setStep(2)}
+                        onClick={async () => {
+                          if (pedido.trim()) await guardarProgresoLocal(pedido.trim());
+                          setStep(2);
+                        }}
                       >
                         Siguiente →
                       </button>
@@ -2517,7 +2879,10 @@ export default function Reenvios({ serverUrl, pushToast, fecha, socket }) {
                       </button>
                       <button
                         className="btn-primary"
-                        onClick={() => setStep(3)}
+                        onClick={async () => {
+                          if (pedido.trim()) await guardarProgresoLocal(pedido.trim());
+                          setStep(3);
+                        }}
                       >
                         Siguiente →
                       </button>
@@ -2710,7 +3075,10 @@ export default function Reenvios({ serverUrl, pushToast, fecha, socket }) {
                       </button>
                       <button
                         className="btn-primary"
-                        onClick={() => setStep(4)}
+                        onClick={async () => {
+                          if (pedido.trim()) await guardarProgresoLocal(pedido.trim());
+                          setStep(4);
+                        }}
                       >
                         Siguiente →
                       </button>

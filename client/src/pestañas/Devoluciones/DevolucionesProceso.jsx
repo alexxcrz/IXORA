@@ -13,6 +13,9 @@ export default function DevolucionesProceso({ serverUrl, pushToast, user, onProd
   const [showModal, setShowModal] = useState(false);
   const [fase, setFase] = useState(1);
 
+  // Estado para procesos en curso
+  const [devolucionesEnProceso, setDevolucionesEnProceso] = useState([]);
+
   const [guia, setGuia] = useState("");
   const [paqueteria, setPaqueteria] = useState("");
   const [motivo, setMotivo] = useState("");
@@ -98,7 +101,14 @@ export default function DevolucionesProceso({ serverUrl, pushToast, user, onProd
     const load = async () => {
       try {
         const d = await authFetch(`${serverUrl}/inventario`);
-        setInventarioRef(Array.isArray(d) ? d : []);
+        console.log("📦 Inventario completo recibido:", d?.length || 0, "productos");
+        console.log("📦 Ejemplo de producto:", d?.[0]);
+        
+        // Filtrar solo productos de CEDIS (inventario_id = 1)
+        const inventarioCedis = Array.isArray(d) ? d.filter(item => item.inventario_id === 1) : [];
+        console.log("📦 Productos de CEDIS filtrados:", inventarioCedis.length);
+        
+        setInventarioRef(inventarioCedis);
       } catch (err) {
         console.error(err);
       }
@@ -328,6 +338,13 @@ export default function DevolucionesProceso({ serverUrl, pushToast, user, onProd
   useEffect(() => {
     cargarPedidos();
     cargarProductosGeneral();
+    // Limpiar procesos guardados antiguos en localStorage al iniciar
+    // para evitar que se muestren con "Usuario" en lugar del nombre real
+    try {
+      localStorage.removeItem('devoluciones_en_proceso');
+    } catch (error) {
+      console.error('Error limpiando procesos guardados:', error);
+    }
   }, [serverUrl]);
 
   // Contadores de productos general: NO APTOS, ACTIVOS y NO ACTIVOS
@@ -373,6 +390,17 @@ export default function DevolucionesProceso({ serverUrl, pushToast, user, onProd
     };
   }, [socket, cargarProductosGeneral]);
 
+  // Auto-guardar progreso cuando cambian productos o evidencias (con delay)
+  useEffect(() => {
+    if (!showModal || !numeroPedido.trim()) return;
+    
+    const timeoutId = setTimeout(() => {
+      guardarProgresoLocal(numeroPedido.trim());
+    }, 1000); // Guardar 1 segundo después del último cambio
+    
+    return () => clearTimeout(timeoutId);
+  }, [productos, evidencias, showModal, numeroPedido]);
+
   // Escuchar eventos de socket para actualización en tiempo real
   useEffect(() => {
     if (!socket) return;
@@ -402,12 +430,222 @@ export default function DevolucionesProceso({ serverUrl, pushToast, user, onProd
     socket.on('devoluciones_actualizadas', handleDevolucionesActualizadas);
     socket.on('pedido_agregado', handlePedidoAgregado);
     
+    // Eventos para devoluciones en proceso
+    const handleDevolucionEnProceso = (data) => {
+      if (!data || !data.pedido) return;
+      
+      setDevolucionesEnProceso((prev) => {
+        const existe = prev.find((p) => p.pedido === data.pedido);
+        if (existe) return prev;
+        const nuevaLista = [...prev, data];
+        
+        // Guardar en localStorage
+        try {
+          localStorage.setItem('devoluciones_en_proceso', JSON.stringify(nuevaLista));
+        } catch (error) {
+          console.error('Error guardando procesos:', error);
+        }
+        
+        return nuevaLista;
+      });
+    };
+
+    const handleDevolucionProcesoTerminado = (data) => {
+      if (!data || !data.pedido) return;
+      
+      setDevolucionesEnProceso((prev) => {
+        const nuevaLista = prev.filter((p) => p.pedido !== data.pedido);
+        
+        // Actualizar localStorage
+        try {
+          localStorage.setItem('devoluciones_en_proceso', JSON.stringify(nuevaLista));
+        } catch (error) {
+          console.error('Error actualizando procesos:', error);
+        }
+        
+        return nuevaLista;
+      });
+    };
+
+    socket.on("devolucion_en_proceso", handleDevolucionEnProceso);
+    socket.on("devolucion_proceso_terminado", handleDevolucionProcesoTerminado);
+    
     return () => {
       socket.off('pedido_eliminado', handlePedidoEliminado);
       socket.off('devoluciones_actualizadas', handleDevolucionesActualizadas);
       socket.off('pedido_agregado', handlePedidoAgregado);
+      socket.off("devolucion_en_proceso", handleDevolucionEnProceso);
+      socket.off("devolucion_proceso_terminado", handleDevolucionProcesoTerminado);
     };
   }, [socket, cargarPedidos, cargarProductosGeneral]);
+
+  // ==========================
+  // FUNCIONES DE NOTIFICACIÓN DE PROCESO
+  // ==========================
+  const notificarInicioProceso = (pedido) => {
+    if (socket && pedido) {
+      const nombreUsuario = user?.name || user?.nickname || user?.nombre || "Usuario";
+      console.log("🔍 Debug usuario en devoluciones:", {
+        user,
+        nombreFinal: nombreUsuario,
+        name: user?.name,
+        nickname: user?.nickname,
+        nombre: user?.nombre
+      });
+      
+      socket.emit("devolucion_iniciada", {
+        pedido: pedido,
+        usuario: nombreUsuario,
+        tipo: "clientes"
+      });
+    }
+  };
+
+  const notificarFinProceso = (pedido) => {
+    if (socket && pedido) {
+      socket.emit("devolucion_finalizada", {
+        pedido: pedido,
+        tipo: "clientes"
+      });
+    }
+  };
+
+  // Regresar a una devolución en proceso
+  const regresarAProceso = async (pedidoNumero) => {
+    try {
+      const pedido = listaPedidos.find((p) => p.pedido === pedidoNumero);
+      
+      if (pedido) {
+        await abrirDetallePedido(pedido);
+      } else {
+        // Intentar cargar progreso guardado
+        const progreso = cargarProgresoLocal(pedidoNumero);
+        
+        if (progreso) {
+          // Restaurar progreso
+          setNumeroPedido(progreso.numeroPedido);
+          setFase(progreso.fase || 1);
+          setGuia(progreso.guia || "");
+          setPaqueteria(progreso.paqueteria || "");
+          setMotivo(progreso.motivo || "");
+          
+          // Restaurar productos
+          if (progreso.productos && Array.isArray(progreso.productos) && progreso.productos.length > 0) {
+            setProductos(progreso.productos);
+          } else {
+            setProductos([]);
+          }
+          
+          // Restaurar evidencias desde base64
+          if (progreso.evidencias && Array.isArray(progreso.evidencias) && progreso.evidencias.length > 0) {
+            const evidenciasRestauradas = progreso.evidencias.map((ev) => ({
+              preview: ev.preview,
+              idTemp: ev.idTemp || Date.now() + Math.random(),
+              file: null
+            }));
+            setEvidencias(evidenciasRestauradas);
+            pushToast?.(`✅ Progreso restaurado con ${progreso.productos?.length || 0} producto(s) y ${progreso.evidencias.length} evidencia(s)`, "ok");
+          } else if (progreso.productos && progreso.productos.length > 0) {
+            setEvidencias([]);
+            pushToast?.(`✅ Progreso restaurado con ${progreso.productos.length} producto(s)`, "ok");
+          } else {
+            setEvidencias([]);
+            pushToast?.(`✅ Progreso restaurado`, "ok");
+          }
+          
+          setShowModal(true);
+        } else {
+          // Si no hay progreso, abrir modal vacío
+          setNumeroPedido(pedidoNumero);
+          setShowModal(true);
+          setFase(1);
+        }
+      }
+    } catch (error) {
+      console.error("Error regresando al proceso:", error);
+      pushToast?.("❌ Error al regresar al proceso", "err");
+    }
+  };
+
+  // Guardar progreso en localStorage
+  const guardarProgresoLocal = async (pedidoKey) => {
+    if (!pedidoKey) return;
+    
+    try {
+      // Convertir evidencias a base64
+      const evidenciasBase64 = await Promise.all(
+        evidencias.map(async (ev) => {
+          try {
+            if (ev.preview && ev.preview.startsWith('data:')) {
+              return { preview: ev.preview, idTemp: ev.idTemp };
+            }
+            if (ev.file) {
+              return new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onloadend = () => {
+                  resolve({ preview: reader.result, idTemp: ev.idTemp });
+                };
+                reader.readAsDataURL(ev.file);
+              });
+            }
+            return { preview: ev.preview, idTemp: ev.idTemp };
+          } catch (err) {
+            console.error('Error convirtiendo evidencia:', err);
+            return null;
+          }
+        })
+      );
+      
+      const progreso = {
+        numeroPedido,
+        fase,
+        guia,
+        paqueteria,
+        motivo,
+        productos: productos, // Guardar productos completos
+        evidencias: evidenciasBase64.filter(e => e !== null),
+        timestamp: Date.now()
+      };
+      
+      localStorage.setItem(`devolucion_progreso_${pedidoKey}`, JSON.stringify(progreso));
+    } catch (error) {
+      console.error("Error guardando progreso:", error);
+    }
+  };
+
+  // Cargar progreso desde localStorage
+  const cargarProgresoLocal = (pedidoKey) => {
+    if (!pedidoKey) return null;
+    
+    try {
+      const stored = localStorage.getItem(`devolucion_progreso_${pedidoKey}`);
+      if (!stored) return null;
+      
+      const progreso = JSON.parse(stored);
+      
+      // Verificar que no sea muy antiguo (más de 24 horas)
+      const horasTranscurridas = (Date.now() - progreso.timestamp) / (1000 * 60 * 60);
+      if (horasTranscurridas > 24) {
+        localStorage.removeItem(`devolucion_progreso_${pedidoKey}`);
+        return null;
+      }
+      
+      return progreso;
+    } catch (error) {
+      console.error("Error cargando progreso:", error);
+      return null;
+    }
+  };
+
+  // Limpiar progreso guardado
+  const limpiarProgresoLocal = (pedidoKey) => {
+    if (!pedidoKey) return;
+    try {
+      localStorage.removeItem(`devolucion_progreso_${pedidoKey}`);
+    } catch (error) {
+      console.error("Error limpiando progreso:", error);
+    }
+  };
 
   // ==========================
   // DETECTAR PAQUETERÍA REAL
@@ -469,6 +707,10 @@ export default function DevolucionesProceso({ serverUrl, pushToast, user, onProd
 
     setFase(1);
     setShowModal(true);
+    // Notificar inicio de proceso cuando se abre el modal
+    if (numeroPedido.trim()) {
+      notificarInicioProceso(numeroPedido);
+    }
   };
 
   const handleKeyPedido = (e) => {
@@ -916,6 +1158,8 @@ export default function DevolucionesProceso({ serverUrl, pushToast, user, onProd
 
     if (ok) {
       pushToast?.("Devolución guardada", "success");
+      notificarFinProceso(numeroPedido);
+      limpiarProgresoLocal(numeroPedido.trim());
       setShowModal(false);
       setNumeroPedido("");
       cargarPedidos();
@@ -979,6 +1223,32 @@ export default function DevolucionesProceso({ serverUrl, pushToast, user, onProd
           style={{ maxWidth: '312px', width: '50%' }}
         />
       </div>
+
+      {/* Indicador de devoluciones en proceso */}
+      {devolucionesEnProceso.length > 0 && (
+        <div className="devoluciones-en-proceso-indicador">
+          {devolucionesEnProceso.map((proceso, idx) => (
+            <div 
+              key={idx} 
+              className="proceso-item"
+              onClick={() => regresarAProceso(proceso.pedido)}
+              title="Click para regresar a la devolución en proceso"
+            >
+              <span className="proceso-icon">📦</span>
+              <span className="proceso-texto">
+                Procesando devolución: 
+                <strong> {proceso.pedido}</strong>
+                {proceso.usuario && ` (${proceso.usuario})`}
+              </span>
+              <span className="proceso-loading">
+                <span className="dot">.</span>
+                <span className="dot">.</span>
+                <span className="dot">.</span>
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* ======================= */}
       {/*      SUBTABS            */}
@@ -1055,12 +1325,13 @@ export default function DevolucionesProceso({ serverUrl, pushToast, user, onProd
               alignItems: 'center',
               gap: '6px',
               padding: '4px 10px',
-              background: 'var(--azul-primario)',
+              background: 'transparent',
+              border: '1px solid var(--borde-medio)',
               borderRadius: 'var(--radio-sm)',
-              color: '#ffffff'
+              color: 'var(--texto-principal)'
             }}>
-              <span className="dev-contador-badge" style={{ fontSize: '0.7rem', opacity: 0.9, color: '#ffffff' }}>Total:</span>
-              <span className="dev-contador-badge" style={{ fontSize: '0.95rem', fontWeight: '700', color: '#ffffff' }}>{listaProductosGeneral.length}</span>
+              <span className="dev-contador-badge" style={{ fontSize: '0.7rem', opacity: 0.9 }}>Total:</span>
+              <span className="dev-contador-badge" style={{ fontSize: '0.95rem', fontWeight: '700' }}>{listaProductosGeneral.length}</span>
             </div>
           </div>
         )}
@@ -1108,7 +1379,7 @@ export default function DevolucionesProceso({ serverUrl, pushToast, user, onProd
                 }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span 
+                  <span
                     className="devolucion-badge-pedido"
                     style={{ 
                       padding: '2px 8px', 
@@ -1116,8 +1387,9 @@ export default function DevolucionesProceso({ serverUrl, pushToast, user, onProd
                       fontSize: '0.75rem', 
                       fontWeight: '600', 
                       textTransform: 'uppercase', 
-                      color: '#ffffff', 
-                      background: '#2563eb' 
+                      color: 'var(--texto-principal)', 
+                      background: 'transparent',
+                      border: '1px solid var(--borde-visible)'
                     }}
                   >
                     Pedido
@@ -1420,9 +1692,16 @@ export default function DevolucionesProceso({ serverUrl, pushToast, user, onProd
                       }).catch(() => {});
                       setDevolucionTemporalId(null);
                     }
+                    if (numeroPedido.trim()) {
+                      notificarFinProceso(numeroPedido);
+                      limpiarProgresoLocal(numeroPedido.trim());
+                    }
                     setShowModal(false);
                   }}>Cancelar</button>
-                  <button onClick={irAFaseEvidenciasPaquete}>Continuar → Evidencia del Paquete</button>
+                  <button onClick={async () => {
+                    if (numeroPedido.trim()) await guardarProgresoLocal(numeroPedido.trim());
+                    irAFaseEvidenciasPaquete();
+                  }}>Continuar → Evidencia del Paquete</button>
                 </div>
               </div>
             )}
@@ -1612,7 +1891,10 @@ export default function DevolucionesProceso({ serverUrl, pushToast, user, onProd
 
                 <div className="devModalFooter">
                   <button onClick={() => setFase(1)}>← Regresar</button>
-                  <button onClick={irAFaseProductos}>Continuar → Productos</button>
+                  <button onClick={async () => {
+                    if (numeroPedido.trim()) await guardarProgresoLocal(numeroPedido.trim());
+                    irAFaseProductos();
+                  }}>Continuar → Productos</button>
                 </div>
               </div>
             )}
@@ -1791,9 +2073,9 @@ export default function DevolucionesProceso({ serverUrl, pushToast, user, onProd
                               onClick={() => editarProducto(p.idTemp)}
                               style={{
                                 padding: '4px 8px',
-                                background: '#2563eb',
-                                color: '#ffffff',
-                                border: 'none',
+                                background: 'transparent',
+                                border: '2px solid var(--borde-visible)',
+                                color: 'var(--texto-principal)',
                                 borderRadius: '4px',
                                 cursor: 'pointer',
                                 fontSize: '0.85rem',
@@ -1827,7 +2109,10 @@ export default function DevolucionesProceso({ serverUrl, pushToast, user, onProd
 
                 <div className="devModalFooter">
                   <button onClick={() => setFase(2)}>← Regresar</button>
-                  <button onClick={irAFaseEvidenciasFinales}>Continuar → Evidencias Finales</button>
+                  <button onClick={async () => {
+                    if (numeroPedido.trim()) await guardarProgresoLocal(numeroPedido.trim());
+                    irAFaseEvidenciasFinales();
+                  }}>Continuar → Evidencias Finales</button>
                 </div>
               </div>
             )}
@@ -2066,15 +2351,18 @@ export default function DevolucionesProceso({ serverUrl, pushToast, user, onProd
               />
 
               <div className="devResultadosInv">
-                {resultadosInv.map((p) => (
+                {resultadosInv.map((p, idx) => (
                   <div
-                    key={p.codigo}
+                    key={`${p.codigo}-${idx}`}
                     className={`devResultadoItem ${
                       productoSeleccionado?.codigo === p.codigo ? "activo" : ""
                     }`}
                     onClick={() => setProductoSeleccionado(p)}
                   >
-                    <b>{p.codigo}</b> – {p.nombre}
+                    <div className="devResultadoItemCodigo"><b>{p.codigo}</b></div>
+                    <div className="devResultadoItemNombre">
+                      {p.nombre}{p.presentacion && ` - ${p.presentacion}`}
+                    </div>
                   </div>
                 ))}
               </div>

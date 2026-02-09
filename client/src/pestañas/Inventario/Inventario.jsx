@@ -4,31 +4,13 @@ import { authFetch, useAuth } from "../../AuthContext";
 import { useAlert } from "../../components/AlertModal";
 import { Document, Packer, Paragraph, AlignmentType, TextRun, ImageRun, PageOrientation } from "docx";
 import ExcelJS from "exceljs";
-import { Capacitor } from "@capacitor/core";
 
-// Usar el plugin existente si ya está registrado, de lo contrario crear un fallback
-// Esto evita el error de registro duplicado
-let AndroidPrinterPlugin;
-try {
-  // Intentar obtener el plugin del registro global de Capacitor
-  if (typeof window !== 'undefined' && window.Capacitor?.Plugins?.AndroidPrinter) {
-    AndroidPrinterPlugin = window.Capacitor.Plugins.AndroidPrinter;
-  } else {
-    // Si no está registrado, crear un objeto mock (no registrar para evitar duplicados)
-    AndroidPrinterPlugin = {
-      printToBluetooth: async () => ({ result: 'ERROR: Plugin no disponible' }),
-      printZPL: async () => ({ result: 'ERROR: Plugin no disponible' }),
-      findBluetoothPrinters: async () => ({ devices: [] })
-    };
-  }
-} catch (e) {
-  // Fallback en caso de error
-  AndroidPrinterPlugin = {
-    printToBluetooth: async () => ({ result: 'ERROR: Plugin no disponible' }),
-    printZPL: async () => ({ result: 'ERROR: Plugin no disponible' }),
-    findBluetoothPrinters: async () => ({ devices: [] })
-  };
-}
+// Plugin de impresión Android deshabilitado (web-only)
+let AndroidPrinterPlugin = {
+  printToBluetooth: async () => ({ result: 'ERROR: Plugin no disponible' }),
+  printZPL: async () => ({ result: 'ERROR: Plugin no disponible' }),
+  findBluetoothPrinters: async () => ({ devices: [] })
+};
 
 export default function Inventario({
   SERVER_URL,
@@ -580,7 +562,7 @@ export default function Inventario({
   const construirMensajeCompartir = (producto) => {
     if (!producto) return "Producto compartido.";
     const base = new URL(window.location.origin);
-    base.searchParams.set("tab", "inventario");
+    base.pathname = '/inventario';
     base.searchParams.set("share", "producto");
     if (producto.codigo) base.searchParams.set("codigo", String(producto.codigo));
     if (producto.id) base.searchParams.set("id", String(producto.id));
@@ -2071,7 +2053,7 @@ T 4 0 10 350 ${codigo}
 
     // Detectar si es Android PDA
     const isAndroid = /Android/i.test(navigator.userAgent);
-    const isAndroidNative = Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android';
+    const isAndroidNative = false;
     const isSecureContext = window.isSecureContext || window.location.protocol === 'https:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
     const hasWebBluetooth = typeof navigator !== 'undefined' && navigator.bluetooth && typeof navigator.bluetooth.requestDevice === 'function';
 
@@ -2430,32 +2412,6 @@ T 4 0 10 350 ${codigo}
           
           {/* Menú de botones en esquina superior derecha */}
           <div style={{ position: "relative", display: "flex", gap: "8px", alignItems: "center" }}>
-            {/* Botón directo para crear inventario */}
-            {can("inventario.crear_inventario") && (
-              <button
-                onClick={() => {
-                  setShowModalNuevoInventario(true);
-                  setShowMenuBotones(false);
-                }}
-                style={{
-                  padding: "8px 16px",
-                  background: "var(--azul-secundario, #2563eb)",
-                  color: "white",
-                  border: "none",
-                  borderRadius: "8px",
-                  cursor: "pointer",
-                  fontSize: "0.9rem",
-                  fontWeight: "600",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "6px",
-                  boxShadow: "0 2px 4px rgba(0,0,0,0.1)"
-                }}
-                title="Crear nuevo inventario"
-              >
-                ➕ Nuevo Inventario
-              </button>
-            )}
             <button
               onClick={() => setShowMenuBotones(!showMenuBotones)}
               style={{
@@ -2629,9 +2585,9 @@ T 4 0 10 350 ${codigo}
                   onClick={() => setInventarioActivo(inv.id)}
                   style={{
                     padding: "8px 16px",
-                    background: inventarioActivo === inv.id ? "var(--azul-primario, #3b82f6)" : "var(--fondo-input)",
-                    color: inventarioActivo === inv.id ? "white" : "var(--texto-principal)",
-                    border: `1px solid ${inventarioActivo === inv.id ? "var(--azul-primario, #3b82f6)" : "var(--borde-sutil)"}`,
+                    background: inventarioActivo === inv.id ? "transparent" : "var(--fondo-input)",
+                    color: "var(--texto-principal)",
+                    border: `2px solid ${inventarioActivo === inv.id ? "var(--borde-visible)" : "var(--borde-sutil)"}`,
                     borderRadius: "6px",
                     cursor: "pointer",
                     fontSize: "0.9rem",

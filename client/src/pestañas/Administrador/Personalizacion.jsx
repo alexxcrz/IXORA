@@ -3,22 +3,9 @@ import { useAuth } from "../../AuthContext";
 import { temas, aplicarTema, obtenerTemaActual } from "../../utils/temas";
 import "./Personalizacion.css";
 
-// Función helper para recargar de forma segura (no recarga en Android)
+// Función helper para recargar (siempre recarga en web)
 const recargarSeguro = () => {
-  const isAndroid = typeof window !== 'undefined' && 
-    window.Capacitor && 
-    window.Capacitor.isNativePlatform() &&
-    window.Capacitor.getPlatform() === 'android';
-  
-  if (!isAndroid) {
-    // Solo en web, recargar
-    window.location.reload();
-  } else {
-    // En Android, disparar evento para que otros componentes se actualicen
-    // sin recargar la página completa
-    window.dispatchEvent(new CustomEvent('personalizacion-actualizada'));
-    console.log('[IXORA] Configuración actualizada sin recargar (Android)');
-  }
+  window.location.reload();
 };
 
 export default function Personalizacion({ serverUrl, pushToast }) {

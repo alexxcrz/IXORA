@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import "./Devoluciones.css";
 import DevolucionesProceso from "./DevolucionesProceso";
 import ControlCalidad from "./ControlCalidad";
@@ -668,6 +668,7 @@ export default function Devoluciones({
   setDevoluciones,
   pushToast,
   socket,
+  user,
 }) {
   const { authFetch } = useAuth();
   const { showConfirm } = useAlert();
@@ -684,19 +685,6 @@ export default function Devoluciones({
     }
   }, []);
 
-  // ==========================================================
-  //  IA: productos detectados por IA (SE CONSERVA TODO)
-  // ==========================================================
-  const [productosEscaneados, setProductosEscaneados] = useState([]);
-  const [inventarioRef, setInventarioRef] = useState([]);
-  const fileInputRef = useRef(null);
-
-  // Cámara IA
-  const [camStream, setCamStream] = useState(null);
-  const [showCamModal, setShowCamModal] = useState(false);
-  const [forceCameraOff, setForceCameraOff] = useState(false);
-  const videoRef = useRef(null);
-
   const syncTipo = useCallback((tipoLlave, rows) => {
     if (typeof setDevoluciones !== "function") return;
     setDevoluciones((prev) => {
@@ -711,85 +699,13 @@ export default function Devoluciones({
   }, [setDevoluciones]);
 
   // ==========================================================
-  // 🔤 Normalizador de texto
+  // FUNCIONES DE IA ELIMINADAS
   // ==========================================================
-  const normalizarTexto = (texto = "") =>
-    texto
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .replace(/caps?\b/g, "capsulas")
-      .replace(/cap\b/g, "capsulas")
-      .replace(/mg\b/g, "mg")
-      .replace(/[^a-z0-9\s]/g, " ")
-      .replace(/\s+/g, " ")
-      .trim();
 
   // ==========================================================
-  // 🔍 BÚSQUEDA FLEXIBLE INVENTARIO (IA)
+  // BÚSQUEDA DIRECTA AL SERVIDOR (SIN CARGAR TODO)
   // ==========================================================
-  const buscarCoincidenciaLocal = (nombreBuscado = "") => {
-    if (!nombreBuscado || inventarioRef.length === 0) return null;
-
-    const target = normalizarTexto(nombreBuscado);
-    if (!target) return null;
-
-    const palabras = target.split(" ").filter((p) => p.length > 2);
-
-    const candidatos = inventarioRef.map((prod) => {
-      const norm = normalizarTexto(prod.nombre || "");
-      let coincidencias = 0;
-
-      for (const w of palabras) {
-        if (norm.includes(w)) coincidencias++;
-      }
-
-      const incluyeCompleto =
-        norm.includes(target) || target.includes(norm);
-
-      return {
-        prod,
-        norm,
-        coincidencias,
-        incluyeCompleto,
-        len: norm.length,
-      };
-    });
-
-    let mejores = candidatos.filter((c) => c.incluyeCompleto);
-    if (mejores.length > 0) {
-      mejores.sort((a, b) => a.len - b.len);
-      return mejores[0].prod;
-    }
-
-    mejores = candidatos.filter((c) => c.coincidencias > 0);
-    if (mejores.length === 0) return null;
-
-    mejores.sort((a, b) => {
-      if (b.coincidencias !== a.coincidencias) {
-        return b.coincidencias - a.coincidencias;
-      }
-      return a.len - b.len;
-    });
-
-    return mejores[0].prod;
-  };
-
-  // ==========================================================
-  // 📦 CARGAR INVENTARIO PARA IA
-  // ==========================================================
-  const cargarInventarioRef = async () => {
-    try {
-      const data = await authFetch(`${serverUrl}/inventario`);
-      setInventarioRef(Array.isArray(data) ? data : []);
-    } catch (err) {
-      console.error("Error cargando inventario IA:", err);
-    }
-  };
-
-  useEffect(() => {
-    cargarInventarioRef();
-  }, []);
+  // Ya no se carga todo el inventario, solo se busca lo que necesitas
 
   // ==========================================================
   // 🔌 LISTENERS DE SOCKET PARA SINCRONIZACIÓN
@@ -818,235 +734,6 @@ export default function Devoluciones({
     };
   }, [socket]); // Removido syncTipo de dependencias para evitar loops
 
-  // ==========================================================
-  // 📸 CÁMARA IA — ABRIR
-  // ==========================================================
-  const abrirCamara = async () => {
-    if (forceCameraOff) return;
-
-    // Verificar que el navegador soporte getUserMedia
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      pushToast("❌ Tu navegador no soporta acceso a la cámara", "err");
-      return;
-    }
-
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment" },
-      });
-
-      setCamStream(stream);
-      setShowCamModal(true);
-
-      setTimeout(() => {
-        if (!forceCameraOff && videoRef.current) {
-          videoRef.current.srcObject = stream;
-          videoRef.current.onloadedmetadata = () =>
-            videoRef.current.play();
-        }
-      }, 200);
-    } catch (err) {
-      pushToast("❌ No se pudo abrir la cámara", "err");
-      console.error(err);
-    }
-  };
-
-  const stopCamera = () => {
-    try {
-      if (camStream) {
-        camStream.getTracks().forEach((t) => t.stop());
-      }
-      if (videoRef.current) videoRef.current.srcObject = null;
-      setCamStream(null);
-    } catch (e) {
-      console.error(e);
-    }
-  };
-
-  const tomarFoto = () => {
-    const video = videoRef.current;
-    const canvas = document.createElement("canvas");
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-
-    const ctx = canvas.getContext("2d");
-    ctx.drawImage(video, 0, 0);
-
-    return canvas.toDataURL("image/jpeg");
-  };
-
-  // ==========================================================
-  // 📸 IA — PROCESAR FOTO
-  // ==========================================================
-  const escanearDocumento = async () => {
-    const photo = tomarFoto();
-    stopCamera();
-    setShowCamModal(false);
-
-    try {
-      const data = await authFetch(`${serverUrl}/devoluciones/scan`, {
-        method: "POST",
-        body: JSON.stringify({ imageBase64: photo }),
-      });
-
-      if (!data || data.error) throw new Error(data?.error || "Error IA");
-
-      const productosConMatch = (data.productos || []).map((p) => {
-        const match = buscarCoincidenciaLocal(p.nombre);
-        if (match) {
-          return {
-            ...p,
-            codigo: match.codigo,
-            sinCoincidencia: false,
-          };
-        }
-        return { ...p, sinCoincidencia: true };
-      });
-
-      setProductosEscaneados(productosConMatch);
-    } catch (err) {
-      console.error(err);
-      
-      // Manejar errores específicos de la API
-      let mensajeError = "❌ Error IA";
-      
-      if (err.message) {
-        // Si el error viene del servidor con detalles
-        if (err.message.includes("cuota") || err.message.includes("Cuota") || err.tipoError === "cuota_excedida") {
-          // Si es cuota diaria, mostrar mensaje específico
-          if (err.esCuotaDiaria) {
-            mensajeError = "⚠️ Cuota diaria agotada - Usa escaneo manual";
-          } else if (err.esCuotaPorMinuto && err.tiempoEspera) {
-            // Si es cuota por minuto, mostrar tiempo de espera
-            mensajeError = `⚠️ Límite por minuto - Reintentar en ${err.tiempoEspera}s`;
-          } else {
-            mensajeError = "⚠️ Cuota de API excedida";
-            // Usar tiempo de espera si está disponible
-            if (err.tiempoEspera) {
-              mensajeError += ` - Reintentar en ${err.tiempoEspera}s`;
-            } else if (err.reintentarEn) {
-              mensajeError += ` - ${err.reintentarEn}`;
-            } else {
-              mensajeError += " - Usa escaneo manual o espera";
-            }
-          }
-        } else if (err.message.includes("API key") || err.message.includes("inválida")) {
-          mensajeError = "❌ API key inválida - Contacta al administrador";
-        } else {
-          // Usar el mensaje del servidor si está disponible, o el mensaje del error
-          mensajeError = err.details || err.message || "❌ Error IA";
-        }
-      }
-      
-      pushToast(mensajeError, "err");
-    }
-  };
-
-  // ==========================================================
-  // 📤 SUBIR IMÁGENES PARA IA
-  // ==========================================================
-  const fileToBase64 = (file) =>
-    new Promise((resolve, reject) => {
-      const r = new FileReader();
-      r.onload = () => resolve(r.result);
-      r.onerror = reject;
-      r.readAsDataURL(file);
-    });
-
-  const subirFotosIA = async (e) => {
-    const files = Array.from(e.target.files || []);
-    if (files.length === 0) return;
-
-    pushToast("⏳ Procesando imágenes…", "warn");
-
-    let resultados = [];
-
-    for (const f of files) {
-      try {
-        const base64 = await fileToBase64(f);
-
-        const data = await authFetch(`${serverUrl}/devoluciones/scan`, {
-          method: "POST",
-          body: JSON.stringify({ imageBase64: base64 }),
-        });
-
-        if (Array.isArray(data.productos)) {
-          resultados = [...resultados, ...data.productos];
-        }
-      } catch (err) {
-        console.error(err);
-      }
-    }
-
-    const unificados = resultados.map((p) => {
-      const match = buscarCoincidenciaLocal(p.nombre);
-      if (match) {
-        return { ...p, codigo: match.codigo, sinCoincidencia: false };
-      }
-      return { ...p, sinCoincidencia: true };
-    });
-
-    setProductosEscaneados(unificados);
-    pushToast("📄 Listo", "ok");
-
-    e.target.value = "";
-  };
-
-  const actualizarNombreIA = (i, nuevoNombre) => {
-    setProductosEscaneados((prev) => {
-      const copia = [...prev];
-      copia[i] = { ...copia[i], nombre: nuevoNombre, sinCoincidencia: true };
-      return copia;
-    });
-  };
-
-  const revalidarProductoIA = (i) => {
-    setProductosEscaneados((prev) => {
-      const copia = [...prev];
-      const match = buscarCoincidenciaLocal(copia[i].nombre);
-
-      copia[i] = {
-        ...copia[i],
-        codigo: match ? match.codigo : null,
-        sinCoincidencia: !match,
-      };
-
-      return copia;
-    });
-  };
-
-  // ==========================================================
-  // 💾 GUARDAR DEVOLUCIONES IA
-  // ==========================================================
-  const guardarProductosIA = async () => {
-    if (productosEscaneados.length === 0) return;
-
-    try {
-      await authFetch(
-        `${serverUrl}/devoluciones/guardarIA/${tabActiva}`,
-        {
-          method: "POST",
-          body: JSON.stringify({
-            productos: productosEscaneados.map((p) => ({
-              ...p,
-              activo: false,
-            })),
-          }),
-        }
-      );
-
-      pushToast("💾 IA guardada", "ok");
-      setProductosEscaneados([]);
-
-    } catch (err) {
-      console.error(err);
-      pushToast("❌ Error al guardar IA", "err");
-    }
-  };
-
-  // ==========================================================
-  // RETURN LIMPIO + IA Mantenida
-  // ==========================================================
   // ==========================================================
   // CERRAR DÍA DE DEVOLUCIONES
   // ==========================================================
@@ -1103,9 +790,6 @@ export default function Devoluciones({
       syncTipo("cubbo", []);
       syncTipo("regulatorio", []);
       
-      // Limpiar productos escaneados por IA
-      setProductosEscaneados([]);
-      
       // Emitir eventos personalizados para componentes que los escuchan
       window.dispatchEvent(new CustomEvent('diaCerradoDevoluciones'));
       window.dispatchEvent(new CustomEvent('productosActualizados'));
@@ -1147,29 +831,8 @@ export default function Devoluciones({
         ))}
       </div>
 
-      {/* 🔥 BOTONES SUPERIORES IA (SE CONSERVA) */}
-      <div className="actions-bar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-          <button className="btnCamIA" onClick={abrirCamara}>📇</button>
-
-          <input
-            type="file"
-            accept="image/*"
-            ref={fileInputRef}
-            style={{ display: "none" }}
-            multiple
-            onChange={subirFotosIA}
-          />
-
-          <button
-            className="btnCamIA btn-subir-foto"
-            onClick={() => fileInputRef.current.click()}
-          >
-            ⬆️
-          </button>
-        </div>
-
-        {/* Botones de Activación e Importar al extremo derecho */}
+      {/* Botones de Activación e Importar */}
+      <div className="actions-bar" style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', marginBottom: '20px' }}>
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
           {tabActiva === "clientes" ? (
             <BotonActivacionClientes
@@ -1183,7 +846,6 @@ export default function Devoluciones({
               tipo={tabActiva}
               serverUrl={serverUrl}
               pushToast={pushToast}
-              inventarioRef={inventarioRef}
               realtimeDevoluciones={devoluciones}
               syncTipo={syncTipo}
               soloBotonActivacion={true}
@@ -1193,118 +855,13 @@ export default function Devoluciones({
         </div>
       </div>
 
-      {/* 🔥 MÓDULO DE IA COMPLETO */}
-      {productosEscaneados.length > 0 && (
-        <div className="resultadoIA">
-          <h3>Productos detectados (IA)</h3>
-
-          <table className="tabla-devoluciones">
-            <thead>
-              <tr>
-                <th>Código</th>
-                <th>Nombre (editable)</th>
-                <th>Lote</th>
-                <th>Cantidad</th>
-                <th>Estado</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {productosEscaneados.map((p, i) => (
-                <tr key={i}>
-                  <td>{p.codigo || "---"}</td>
-
-                  <td>
-                    <input
-                      className={`ia-input-nombre ${
-                        p.sinCoincidencia ? "err" : "ok"
-                      }`}
-                      value={p.nombre}
-                      onChange={(e) => actualizarNombreIA(i, e.target.value)}
-                      onBlur={() => revalidarProductoIA(i)}
-                    />
-                  </td>
-
-                  <td>
-                    <input
-                      className="ia-input-lote"
-                      value={p.lote}
-                      onChange={(e) => {
-                        const nuevo = e.target.value;
-                        setProductosEscaneados((prev) => {
-                          const copia = [...prev];
-                          copia[i] = { ...copia[i], lote: nuevo };
-                          return copia;
-                        });
-                      }}
-                    />
-                  </td>
-
-                  <td>
-                    <input
-                      type="number"
-                      value={p.cantidad}
-                      className="ia-input-cantidad"
-                      onChange={(e) => {
-                        const nuevaCantidad = e.target.value;
-                        setProductosEscaneados((prev) =>
-                          prev.map((item, idx) =>
-                            idx === i
-                              ? { ...item, cantidad: nuevaCantidad }
-                              : item
-                          )
-                        );
-                      }}
-                    />
-                  </td>
-
-                  <td
-                    style={{
-                      color: p.sinCoincidencia ? "red" : "green",
-                      fontWeight: "bold",
-                    }}
-                  >
-                    {p.sinCoincidencia ? "No encontrado" : "Listo"}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          <button className="btnGuardarIA" onClick={guardarProductosIA}>
-            💾 Guardar devoluciones IA (Pendientes)
-          </button>
-        </div>
-      )}
-
-      {/* 🔥 MODAL CÁMARA IA */}
-      {showCamModal && (
-        <div className="modalCam">
-          <video ref={videoRef} autoPlay playsInline style={{ width: "100%" }} />
-
-          <button className="btnTomarFoto" onClick={escanearDocumento}>
-            📸 Tomar foto
-          </button>
-
-          <button
-            className="btnCancelar"
-            onClick={() => {
-              setForceCameraOff(true);
-              stopCamera();
-              setShowCamModal(false);
-            }}
-          >
-            ❌ Cancelar
-          </button>
-        </div>
-      )}
-
-      {/* 🔥 CONTENIDO SEGÚN PESTAÑA */}
+      {/* CONTENIDO SEGÚN PESTAÑA */}
       {tabActiva === "clientes" ? (
         <DevolucionesProceso 
           serverUrl={serverUrl} 
           pushToast={pushToast}
           socket={socket}
+          user={user}
           onProductoEditado={async () => {
             // Recargar modal de activación del botón amarillo si está abierto
             // Esto se hace recargando la página o emitiendo un evento
@@ -1325,7 +882,6 @@ export default function Devoluciones({
           tipo={tabActiva}
           serverUrl={serverUrl}
           pushToast={pushToast}
-          inventarioRef={inventarioRef}
           realtimeDevoluciones={devoluciones}
           syncTipo={syncTipo}
           socket={socket}
@@ -1339,7 +895,6 @@ function GestionDevolucionesTab({
   tipo,
   serverUrl,
   pushToast,
-  inventarioRef,
   realtimeDevoluciones,
   syncTipo,
   soloBotonActivacion = false,
@@ -1416,7 +971,7 @@ function GestionDevolucionesTab({
   const construirMensajeCompartir = (registro) => {
     if (!registro) return "Registro de devolución compartido.";
     const base = new URL(window.location.origin);
-    base.searchParams.set("tab", "devoluciones");
+    base.pathname = '/devoluciones';
     base.searchParams.set("share", "devolucion");
     base.searchParams.set("tipo", tipo);
     if (registro.id) base.searchParams.set("id", String(registro.id));
@@ -1732,16 +1287,8 @@ function GestionDevolucionesTab({
     scanBufferRef.current = value;
     if (scanTimeoutRef.current) clearTimeout(scanTimeoutRef.current);
     
-    // Detectar si estamos en la app móvil Android usando Capacitor
-    const isMobileApp = typeof window !== 'undefined' && 
-      window.Capacitor && 
-      window.Capacitor.isNativePlatform && 
-      window.Capacitor.isNativePlatform() &&
-      window.Capacitor.getPlatform() === 'android';
-
-    // En la app móvil, usar un delay más corto para detectar escaneo rápido
-    // En web, usar el delay normal
-    const delay = isMobileApp ? 100 : SCAN_DELAY;
+    // Usar delay para detectar escaneo rápido
+    const delay = SCAN_DELAY;
     
     scanTimeoutRef.current = setTimeout(() => {
       const finalCode = scanBufferRef.current.trim();
@@ -1756,18 +1303,91 @@ function GestionDevolucionesTab({
     }, delay);
   };
 
-  const aliasResultados = useMemo(() => {
-    if (!aliasModal.open) return [];
-    const termino = aliasModal.busqueda.trim().toLowerCase();
-    if (!termino) return inventarioRef.slice(0, 40);
-    return inventarioRef
-      .filter(
-        (p) =>
-          p.nombre?.toLowerCase().includes(termino) ||
-          p.codigo?.toLowerCase().includes(termino)
-      )
-      .slice(0, 40);
-  }, [aliasModal, inventarioRef]);
+  // Estado para resultados de búsqueda
+  const [aliasResultados, setAliasResultados] = useState([]);
+  const [buscandoAlias, setBuscandoAlias] = useState(false);
+  const busquedaAliasTimeoutRef = useRef(null);
+
+  // Buscar productos con debounce EXACTAMENTE como en Picking
+  useEffect(() => {
+    if (!aliasModal.open) {
+      setAliasResultados([]);
+      return;
+    }
+
+    const termino = aliasModal.busqueda.trim();
+    
+    // Limpiar timeout anterior
+    if (busquedaAliasTimeoutRef.current) {
+      clearTimeout(busquedaAliasTimeoutRef.current);
+    }
+
+    // Si no hay término o es muy corto, no buscar
+    if (!termino || termino.length < 2) {
+      setAliasResultados([]);
+      setBuscandoAlias(false);
+      return;
+    }
+
+    setBuscandoAlias(true);
+
+    // Debounce: esperar 300ms después de que el usuario deje de escribir
+    busquedaAliasTimeoutRef.current = setTimeout(async () => {
+      try {
+        // Buscar productos (el servidor ya filtra solo CEDIS - inventario_id = 1)
+        let data = await authFetch(
+          `${serverUrl}/inventario/buscar-por-nombre/${encodeURIComponent(termino)}?multiples=true`
+        );
+
+        // El servidor ya devuelve solo productos de CEDIS, pero verificamos por seguridad
+        let resultadosCEDIS = [];
+        
+        if (Array.isArray(data)) {
+          // Filtrar estrictamente solo CEDIS (por seguridad, aunque el servidor ya lo hace)
+          resultadosCEDIS = data.filter(p => {
+            const inventarioId = p.inventario_id || p.inventarioId || 1;
+            return inventarioId === 1;
+          });
+        } else if (data && data.codigo) {
+          // Si es un solo producto, verificar que sea de CEDIS
+          const inventarioId = data.inventario_id || data.inventarioId || 1;
+          if (inventarioId === 1) {
+            resultadosCEDIS = [data];
+          }
+        }
+
+        // DEDUPLICAR por código para evitar warnings de React
+        const productosUnicos = [];
+        const codigosVistos = new Set();
+        
+        for (const p of resultadosCEDIS) {
+          if (p.codigo && !codigosVistos.has(p.codigo)) {
+            codigosVistos.add(p.codigo);
+            productosUnicos.push(p);
+          }
+        }
+
+        // Mostrar SOLO resultados de CEDIS (máximo 10 como en Picking)
+        if (productosUnicos.length > 0) {
+          setAliasResultados(productosUnicos.slice(0, 10));
+        } else {
+          // No hay resultados en CEDIS, no mostrar nada
+          setAliasResultados([]);
+        }
+      } catch (err) {
+        console.error("Error buscando productos:", err);
+        setAliasResultados([]);
+      } finally {
+        setBuscandoAlias(false);
+      }
+    }, 300);
+
+    return () => {
+      if (busquedaAliasTimeoutRef.current) {
+        clearTimeout(busquedaAliasTimeoutRef.current);
+      }
+    };
+  }, [aliasModal.open, aliasModal.busqueda, serverUrl, authFetch]);
 
   const guardarAlias = async () => {
     if (!aliasModal.seleccionado) {
@@ -1977,54 +1597,21 @@ function GestionDevolucionesTab({
     setResumenModal({ open: false, loading: false, data: [] });
   };
 
-  const toggleResumen = async (grupo, value) => {
-    // Verificar permiso para activar/desactivar productos
-    if (!can("action:activar-productos")) {
-      pushToast("⚠️ No tienes autorización para activar o desactivar productos", "warn");
-      return;
-    }
-
-    try {
-      const payload = {
-        nombre: grupo.nombre,
-        activo: value,
-      };
-      const resp = await authFetch(
-        `${serverUrl}/dia/devoluciones/${tipo}/activar`,
-        {
-          method: "PUT",
-          body: JSON.stringify(payload),
-        }
-      );
-      const updatedRows = Array.isArray(resp?.registros)
-        ? resp.registros
-        : [];
-      // Actualizar todos los items con el mismo nombre
-      const merged = items.map((row) => {
-        if (row.nombre === grupo.nombre) {
-          const match = updatedRows.find((r) => r.id === row.id);
-          return match ? { ...match, activo: value ? 1 : 0 } : { ...row, activo: value ? 1 : 0 };
-        }
-        return row;
-      });
-      setItems(merged);
-      syncTipo?.(tipo, merged);
-      setResumenModal((prev) => ({
-        ...prev,
-        data: prev.data.map((g) =>
-          g.nombre === grupo.nombre
-            ? {
-                ...g,
-                todosActivos: value,
-                algunoActivo: value,
-              }
-            : g
-        ),
-      }));
-    } catch (err) {
-      console.error("toggleResumen:", err);
-      pushToast("❌ Error al actualizar grupo", "err");
-    }
+  const toggleResumen = (grupo, value) => {
+    // Solo actualizar el estado local, NO guardar todavía
+    // El guardado se hará cuando se presione el botón "Guardar cambios"
+    setResumenModal((prev) => ({
+      ...prev,
+      data: prev.data.map((g) =>
+        g.nombre === grupo.nombre
+          ? {
+              ...g,
+              todosActivos: value,
+              algunoActivo: value,
+            }
+          : g
+      ),
+    }));
   };
 
   const guardarActivaciones = async () => {
@@ -2035,19 +1622,20 @@ function GestionDevolucionesTab({
     }
 
     try {
-      const gruposActivos = resumenModal.data.filter((g) => g.todosActivos);
-      if (gruposActivos.length === 0) {
-        pushToast("ℹ️ No hay grupos activos para guardar", "info");
+      // Obtener todos los grupos modificados (tanto activos como inactivos)
+      const gruposModificados = resumenModal.data;
+      if (gruposModificados.length === 0) {
+        pushToast("ℹ️ No hay cambios para guardar", "info");
         return;
       }
 
-      // Procesar todos los grupos activos por nombre
-      const promesas = gruposActivos.map((grupo) =>
+      // Procesar todos los grupos por nombre con su estado correspondiente
+      const promesas = gruposModificados.map((grupo) =>
         authFetch(`${serverUrl}/dia/devoluciones/${tipo}/activar`, {
           method: "PUT",
           body: JSON.stringify({
             nombre: grupo.nombre,
-            activo: true,
+            activo: grupo.todosActivos,
           }),
         })
       );
@@ -2059,20 +1647,26 @@ function GestionDevolucionesTab({
         .map((r) => Array.isArray(r?.registros) ? r.registros : [])
         .flat();
       
-      // Actualizar todos los items con los nombres activados
-      const nombresActivos = gruposActivos.map((g) => g.nombre);
+      // Actualizar todos los items con los cambios
       const merged = items.map((row) => {
-        if (nombresActivos.includes(row.nombre)) {
-          const match = todosLosRegistros.find((r) => r.id === row.id);
-          return match ? { ...match, activo: 1 } : { ...row, activo: 1 };
-        }
-        return row;
+        const match = todosLosRegistros.find((r) => r.id === row.id);
+        return match ? match : row;
       });
       
       setItems(merged);
       syncTipo?.(tipo, merged);
       
-      pushToast(`✅ ${gruposActivos.length} grupo(s) activado(s)`);
+      const gruposActivos = gruposModificados.filter((g) => g.todosActivos);
+      const gruposInactivos = gruposModificados.filter((g) => !g.todosActivos);
+      
+      if (gruposActivos.length > 0 && gruposInactivos.length > 0) {
+        pushToast(`✅ ${gruposActivos.length} activado(s), ${gruposInactivos.length} desactivado(s)`);
+      } else if (gruposActivos.length > 0) {
+        pushToast(`✅ ${gruposActivos.length} grupo(s) activado(s)`);
+      } else {
+        pushToast(`✅ ${gruposInactivos.length} grupo(s) desactivado(s)`);
+      }
+      
       cerrarResumen();
     } catch (err) {
       console.error("guardarActivaciones:", err);
@@ -2894,36 +2488,55 @@ function GestionDevolucionesTab({
             }}
           />
           <div className="alias-results" style={{ flex: 1, minHeight: 0 }}>
-            {aliasResultados.length === 0 ? (
+            {buscandoAlias ? (
+              <div style={{ padding: '20px', textAlign: 'center', color: 'var(--azul-primario)', fontSize: '0.9rem', fontWeight: '500' }}>
+                🔍 Buscando...
+              </div>
+            ) : aliasResultados.length === 0 ? (
               <div style={{ padding: '15px', textAlign: 'center', color: 'var(--texto-secundario)', fontSize: '0.8rem' }}>
-                {aliasModal.busqueda.trim() ? 'No se encontraron productos' : 'Escribe para buscar productos'}
+                {aliasModal.busqueda.trim().length < 2 ? 'Escribe al menos 2 letras' : 'No se encontraron productos en CEDIS'}
               </div>
             ) : (
-              aliasResultados.map((prod) => (
-                <button
-                  key={prod.codigo}
-                  className={`alias-item ${
-                    aliasModal.seleccionado?.codigo === prod.codigo ? "selected" : ""
-                  }`}
-                  onClick={() =>
-                    setAliasModal((prev) => ({ ...prev, seleccionado: prod }))
-                  }
-                  title={`${prod.codigo} - ${prod.nombre}${prod.presentacion ? ` (${prod.presentacion})` : ''}`}
-                >
-                  <strong>{prod.codigo}</strong>
-                  <span>{prod.nombre}</span>
-                  {prod.presentacion && (
-                    <span style={{ 
-                      fontSize: '0.7rem', 
-                      opacity: 0.7,
-                      fontStyle: 'italic',
-                      flexShrink: 0
-                    }}>
-                      ({prod.presentacion})
-                    </span>
-                  )}
-                </button>
-              ))
+              aliasResultados.map((prod) => {
+                const isSelected = aliasModal.seleccionado?.codigo === prod.codigo;
+                return (
+                  <button
+                    key={prod.codigo}
+                    className={`alias-item ${isSelected ? "selected" : ""}`}
+                    onClick={() =>
+                      setAliasModal((prev) => ({ ...prev, seleccionado: prod }))
+                    }
+                    title={`${prod.codigo} - ${prod.nombre}${prod.presentacion ? ` - ${prod.presentacion}` : ''}`}
+                    style={{
+                      background: isSelected ? 'var(--azul-primario)' : 'var(--fondo-card)',
+                      border: isSelected ? '2px solid var(--azul-oscuro)' : '1px solid var(--borde-sutil)',
+                      transform: isSelected ? 'scale(1.02)' : 'none',
+                      boxShadow: isSelected ? '0 4px 12px rgba(0, 0, 0, 0.2)' : 'var(--sombra-sm)'
+                    }}
+                  >
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', width: '100%', alignItems: 'flex-start' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%' }}>
+                        <strong style={{ 
+                          color: isSelected ? 'white' : 'var(--azul-primario)',
+                          fontSize: '0.9rem'
+                        }}>
+                          {prod.codigo}
+                        </strong>
+                        {isSelected && <span style={{ marginLeft: 'auto', fontSize: '1.1rem' }}>\u2713</span>}
+                      </div>
+                      <span style={{ 
+                        fontSize: '0.85rem',
+                        color: isSelected ? 'white' : 'var(--texto-principal)',
+                        fontWeight: isSelected ? '500' : 'normal',
+                        textAlign: 'left',
+                        lineHeight: '1.3'
+                      }}>
+                        {prod.nombre}{prod.presentacion ? ` - ${prod.presentacion}` : ''}
+                      </span>
+                    </div>
+                  </button>
+                );
+              })
             )}
           </div>
         </div>

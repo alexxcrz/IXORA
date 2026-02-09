@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Capacitor } from "@capacitor/core";
-import { PushNotifications } from "@capacitor/push-notifications";
-import { LocalNotifications } from "@capacitor/local-notifications";
 import "./Notifications.css";
 import { useAuth, authFetch } from "../AuthContext";
 import { getServerUrl, getServerUrlSync } from "../config/server";
 import { reproducirSonidoIxora } from "../utils/sonidoIxora";
 import { useAlert } from "./AlertModal";
+
+// Versión web-only del componente Notifications
+// Las notificaciones push móviles han sido removidas
 
 export const NotificationContext = React.createContext();
 
@@ -19,7 +19,7 @@ export function NotificationProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [toastVisible, setToastVisible] = useState(null);
   const [activeTab, setActiveTab] = useState('nuevas'); // 'nuevas' o 'historial'
-  const isNative = Capacitor.isNativePlatform();
+  // isNative removida (no usada en web-only)
   
   // Solo administradores pueden ver notificaciones
   const isAdmin = React.useMemo(() => perms?.includes("tab:admin"), [perms]);
@@ -106,26 +106,8 @@ export function NotificationProvider({ children }) {
   }, [user, serverUrl]);
 
   const mostrarNotificacionDispositivo = async ({ id, titulo, mensaje, data }) => {
-    if (!isNative) return;
-    try {
-      const notifId = Number(id) || Date.now();
-      await LocalNotifications.schedule({
-        notifications: [
-          {
-            id: notifId,
-            title: titulo || "IXORA",
-            body: mensaje || "",
-            actionTypeId: "ixora_reply",
-            extra: {
-              notificationId: String(id || notifId),
-              ...data,
-            },
-          },
-        ],
-      });
-    } catch (err) {
-      console.warn("Error mostrando notificación local:", err);
-    }
+    // Las notificaciones de dispositivo móvil han sido deshabilitadas (web-only)
+    return;
   };
 
   // Cargar notificaciones al iniciar y cuando cambia el usuario
@@ -144,105 +126,8 @@ export function NotificationProvider({ children }) {
     }
   }, [isOpen, user, serverUrl, cargarNotificaciones]);
 
-  // Configurar Push + Local Notifications para app nativa
-  useEffect(() => {
-    if (!user || !isNative || !serverUrl) return;
-
-    const setupNativeNotifications = async () => {
-      try {
-        await LocalNotifications.requestPermissions();
-        await LocalNotifications.registerActionTypes({
-          types: [
-            {
-              id: "ixora_reply",
-              actions: [
-                {
-                  id: "reply",
-                  title: "Responder",
-                  input: {
-                    type: "text",
-                    placeholder: "Escribe tu respuesta",
-                  },
-                },
-              ],
-            },
-          ],
-        });
-        await LocalNotifications.createChannel({
-          id: "ixora_default",
-          name: "IXORA",
-          description: "Notificaciones de IXORA",
-          importance: 5,
-          visibility: 1,
-          sound: "default",
-          vibration: true,
-          lights: true,
-        });
-      } catch (err) {
-        console.warn("Error configurando LocalNotifications:", err);
-      }
-
-      try {
-        const permiso = await PushNotifications.requestPermissions();
-        if (permiso.receive !== "granted") {
-          return;
-        }
-
-        await PushNotifications.register();
-      } catch (err) {
-        console.warn("Error solicitando permisos push:", err);
-      }
-    };
-
-    setupNativeNotifications();
-
-    const registrationHandler = PushNotifications.addListener("registration", async (token) => {
-      try {
-        await authFetch(`${serverUrl}/notificaciones/push/registrar`, {
-          method: "POST",
-          body: JSON.stringify({
-            token: token.value,
-            plataforma: Capacitor.getPlatform(),
-          }),
-        });
-      } catch (err) {
-        console.warn("Error registrando token push:", err);
-      }
-    });
-
-    const pushReceivedHandler = PushNotifications.addListener("pushNotificationReceived", () => {
-      cargarNotificaciones();
-    });
-
-    const pushActionHandler = PushNotifications.addListener("pushNotificationActionPerformed", () => {
-      setIsOpen(true);
-    });
-
-    const localActionHandler = LocalNotifications.addListener("localNotificationActionPerformed", async (event) => {
-      const actionId = event.actionId;
-      const respuesta = event?.inputValue;
-      const notifId = event?.notification?.extra?.notificationId || event?.notification?.id;
-
-      if (actionId === "reply" && respuesta && notifId) {
-        try {
-          await authFetch(`${serverUrl}/notificaciones/${notifId}/respuesta`, {
-            method: "POST",
-            body: JSON.stringify({ respuesta }),
-          });
-          await cargarNotificaciones();
-        } catch (err) {
-          console.warn("Error enviando respuesta:", err);
-        }
-      }
-    });
-
-    return () => {
-      registrationHandler?.remove();
-      pushReceivedHandler?.remove();
-      pushActionHandler?.remove();
-      localActionHandler?.remove();
-    };
-  }, [user, isNative, serverUrl]);
+  // Las notificaciones push nativas han sido deshabilitadas (web-only)
+  // useEffect removido
 
   // Escuchar eventos de socket para nuevas notificaciones
   useEffect(() => {

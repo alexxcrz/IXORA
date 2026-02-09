@@ -11,10 +11,7 @@ const LOG_LEVELS = {
 };
 
 const isDev = process.env.NODE_ENV === 'development';
-const isAndroid = typeof window !== 'undefined' && 
-  window.Capacitor && 
-  window.Capacitor.isNativePlatform() &&
-  window.Capacitor.getPlatform() === 'android';
+const isAndroid = false;
 
 /**
  * Logger principal con contexto y timestamp

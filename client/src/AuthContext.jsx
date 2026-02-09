@@ -162,17 +162,8 @@ export const authFetch = async (url, options = {}) => {
         } catch (e) {
         }
         
-        // PROTECCIÓN: En Android, NO usar window.location.href (causa cierre de app)
-        // En su lugar, solo limpiar el estado y dejar que React maneje la navegación
-        const isAndroid = typeof window !== 'undefined' && 
-          window.Capacitor && 
-          window.Capacitor.isNativePlatform() &&
-          window.Capacitor.getPlatform() === 'android';
-        
-        if (!isAndroid) {
-          // Solo en web, usar window.location
-          window.location.href = "/";
-        }
+        // Usar window.location para redireccionar en web
+        window.location.href = "/";
         // En Android, el componente AppProtegida detectará que no hay user y mostrará Login
         return;
       }
@@ -702,10 +693,6 @@ export function AuthProvider({ children }) {
     try {
       logger.auth.info('Iniciando proceso de login');
       
-      // Detectar si estamos en móvil
-      const isMobile = window.Capacitor && window.Capacitor.isNativePlatform();
-      logger.auth.debug(`Es móvil: ${isMobile}`);
-      
       // 🔥 CRÍTICO: Actualizar variable global PRIMERO (antes que todo)
       // Esto asegura que authFetch use el token nuevo inmediatamente
       currentToken = jwtToken;
@@ -761,10 +748,9 @@ export function AuthProvider({ children }) {
         } catch (localError) {
           // Capturar el valor actual de retryCount para evitar referencias inseguras
           const currentRetry = retryCount;
-          logger.session.error(`Error guardando en localStorage (${isMobile ? 'MÓVIL' : 'DESKTOP'})`, {
+          logger.session.error(`Error guardando en localStorage (DESKTOP)`, {
             error: localError,
             retryCount: currentRetry,
-            isMobile,
           });
           retryCount++;
           if (retryCount < maxRetries) {
@@ -778,7 +764,6 @@ export function AuthProvider({ children }) {
       if (!savedSuccessfully) {
         logger.session.error('No se pudo guardar sesión después de múltiples intentos', {
           retryCount,
-          isMobile,
         });
         // NO lanzar error - la sesión ya está en memoria, continuar
         logger.session.warn('⚠️ Continuando con sesión en memoria aunque localStorage falló');
@@ -917,7 +902,7 @@ export function AuthProvider({ children }) {
   /* ======================================================
      🔵 LOGOUT LIMPIO (CIFRADO)
   ====================================================== */
-  const logout = () => {
+  const logout = async () => {
     // Limpiar variable global
     currentToken = null;
     
@@ -925,15 +910,22 @@ export function AuthProvider({ children }) {
     setUser(null);
     setPerms([]);
 
-    // Limpiar localStorage
+    // Limpiar localStorage (síncrono)
     localStorage.removeItem("token");
     localStorage.removeItem("user");
     localStorage.removeItem("perms");
     
-    // Limpiar storage cifrado
-    removeEncryptedItem("token");
-    removeEncryptedItem("user");
-    removeEncryptedItem("perms");
+    // Limpiar storage cifrado (asíncrono) - ESPERAR A QUE TERMINE
+    try {
+      await Promise.all([
+        removeEncryptedItem("token"),
+        removeEncryptedItem("user"),
+        removeEncryptedItem("perms")
+      ]);
+    } catch (err) {
+      console.warn('Error limpiando storage cifrado en logout:', err);
+      // No es crítico si falla, ya limpió localStorage
+    }
   };
 
   /* ======================================================
@@ -945,16 +937,29 @@ export function AuthProvider({ children }) {
       return;
     }
     
-    // Cargar datos del usuario actual desde el estado o localStorage
-    // NO refrescar desde el servidor para evitar que se reseteen los valores mientras el usuario escribe
-    const usuarioActual = user || (() => {
-      try {
-        const userLocal = localStorage.getItem("user");
-        return userLocal ? JSON.parse(userLocal) : null;
-      } catch (e) {
-        return null;
+    // 🔥 Obtener datos actualizados del servidor
+    let usuarioActual = user;
+    try {
+      const userNickname = user?.nickname || user?.name;
+      if (userNickname) {
+        const perfil = await authFetch(`/chat/usuario/${encodeURIComponent(userNickname)}/perfil`);
+        if (perfil) {
+          usuarioActual = { ...user, ...perfil };
+          console.log("📋 Datos del perfil cargados:", usuarioActual);
+        }
       }
-    })();
+    } catch (err) {
+      console.error("Error cargando perfil actualizado:", err);
+      // Si falla, usar los datos del estado/localStorage
+      usuarioActual = user || (() => {
+        try {
+          const userLocal = localStorage.getItem("user");
+          return userLocal ? JSON.parse(userLocal) : null;
+        } catch (e) {
+          return null;
+        }
+      })();
+    }
     
     // Establecer valores siempre cuando se abre el modal (solo se ejecuta si el modal está cerrado)
     setNicknameInput(usuarioActual?.nickname || "");

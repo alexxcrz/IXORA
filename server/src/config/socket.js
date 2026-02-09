@@ -159,6 +159,61 @@ export const initSocket = (httpServer) => {
     }
 
     // =======================================================
+    // 📦 REENVÍOS EN PROCESO (INDICADOR EN TIEMPO REAL)
+    // =======================================================
+    socket.on("reenvio_iniciado", ({ pedido, usuario, accion }) => {
+      // Broadcast a TODOS los clientes (incluyendo el que lo envió)
+      io.emit("reenvio_en_proceso", {
+        pedido,
+        usuario: usuario || "Usuario",
+        accion: accion || "crear"
+      });
+    });
+
+    socket.on("reenvio_finalizado", ({ pedido }) => {
+      // Notificar a todos que el proceso terminó
+      io.emit("reenvio_proceso_terminado", {
+        pedido
+      });
+    });
+
+    // =======================================================
+    // 📦 DEVOLUCIONES CLIENTES EN PROCESO
+    // =======================================================
+    socket.on("devolucion_iniciada", ({ pedido, usuario, tipo }) => {
+      io.emit("devolucion_en_proceso", {
+        pedido,
+        usuario,
+        tipo: tipo || "clientes"
+      });
+    });
+
+    socket.on("devolucion_finalizada", ({ pedido, tipo }) => {
+      io.emit("devolucion_proceso_terminado", {
+        pedido,
+        tipo: tipo || "clientes"
+      });
+    });
+
+    // =======================================================
+    // 🔬 CONTROL DE CALIDAD EN PROCESO
+    // =======================================================
+    socket.on("calidad_iniciada", ({ pedido, usuario, area }) => {
+      io.emit("calidad_en_proceso", {
+        pedido,
+        usuario,
+        area: area || "Devoluciones"
+      });
+    });
+
+    socket.on("calidad_finalizada", ({ pedido, area }) => {
+      io.emit("calidad_proceso_terminado", {
+        pedido,
+        area: area || "Devoluciones"
+      });
+    });
+
+    // =======================================================
     // ❌ DESCONECTAR SOCKET DEL USUARIO
     // =======================================================
     socket.on("disconnect", () => {

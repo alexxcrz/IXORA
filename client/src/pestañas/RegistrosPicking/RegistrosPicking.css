@@ -2,6 +2,112 @@
    🎨 REGISTROS - DISEÑO PROFESIONAL EMPRESARIAL
    ====================================================== */
 
+/* Header con título y botones */
+.registros-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.registros-titulo {
+  margin: 0;
+}
+
+.registros-acciones {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.btn-picking {
+  fontSize: 18px;
+  background: var(--color-primario, #3b82f6);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  padding: 8px 16px;
+  borderRadius: 8px;
+  fontWeight: 500;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  boxShadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.btn-picking:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+.btn-microfono {
+  font-size: 24px;
+  background: transparent;
+  border: 2px solid transparent;
+  cursor: pointer;
+  color: #888;
+  transition: all 0.3s ease;
+  position: relative;
+  padding: 10px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+}
+
+.btn-microfono.activo {
+  background: rgba(76, 175, 80, 0.1);
+  border-color: rgba(76, 175, 80, 0.5);
+  color: #4CAF50;
+  box-shadow: 0 0 20px rgba(76, 175, 80, 0.9), 0 0 40px rgba(76, 175, 80, 0.6), 0 0 60px rgba(76, 175, 80, 0.3);
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+/* Responsive para móviles */
+@media (max-width: 768px) {
+  .registros-header {
+    flex-direction: column;
+    gap: 15px;
+    align-items: stretch;
+  }
+
+  .registros-titulo {
+    text-align: center;
+    font-size: 1.3rem;
+  }
+
+  .registros-acciones {
+    justify-content: center;
+    gap: 15px;
+  }
+
+  .btn-picking,
+  .btn-microfono {
+    width: 50px;
+    height: 50px;
+    min-width: 50px;
+    min-height: 50px;
+    border-radius: 50%;
+    padding: 0;
+    font-size: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .btn-picking {
+    background: var(--color-primario, #3b82f6);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  }
+
+  .btn-picking-texto {
+    display: none;
+  }
+}
+
 
 input[type="text"],
 input[type="number"],
@@ -766,9 +872,20 @@ input[type="number"].reg-modal::-moz-appearance {
   .registros-tabs {
     gap: 4px !important;
     margin-bottom: 12px !important;
+    flex-wrap: wrap !important;
   }
 
-  .registros-tabs button {
+  /* Primer botón (Por surtir) - ocupa toda la línea */
+  .registros-tabs button:nth-child(1) {
+    padding: 8px 12px !important;
+    font-size: 0.85rem !important;
+    gap: 5px !important;
+    min-width: 100% !important;
+    flex: 0 0 100% !important;
+  }
+
+  /* Los otros 4 botones - 2 por línea */
+  .registros-tabs button:nth-child(n+2) {
     padding: 5px 8px !important;
     font-size: 0.7rem !important;
     gap: 3px !important;
@@ -996,4 +1113,129 @@ input[type="number"].reg-modal::-moz-appearance {
   .contador-valor {
     font-size: 0.9rem !important;
   }
+}
+
+/* =======================================================
+   🚫 PRODUCTOS NO DISPONIBLES - ESTILOS ESPECÍFICOS
+   ====================================================== */
+
+.producto-no-disponible {
+  background: #fff3cd !important;
+  border-left: 4px solid #ff9800 !important;
+}
+
+.producto-no-disponible:hover {
+  background: #ffe8a1 !important;
+  transform: translateX(2px);
+  transition: all 0.2s ease;
+}
+
+.registros-picking-grupos {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  margin-top: 20px;
+}
+
+.registros-picking-grupo {
+  background: #ffffff;
+  border-radius: 8px;
+  padding: 15px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.grupo-titulo {
+  margin: 0 0 15px 0;
+  padding-bottom: 10px;
+  border-bottom: 2px solid #e0e0e0;
+  color: #333;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.motivo-cell {
+  max-width: 300px;
+}
+
+.motivo-badge {
+  background: #fff3cd;
+  color: #856404;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  display: inline-block;
+  border: 1px solid #ffc107;
+}
+
+.cantidad-badge {
+  background: #e3f2fd;
+  color: #1976d2;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  margin-right: 4px;
+  display: inline-block;
+}
+
+.cantidad-badge-extra {
+  background: #f3e5f5;
+  color: #7b1fa2;
+}
+
+.stat-badge {
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin: 0 4px;
+  display: inline-block;
+}
+
+.stat-badge-warning {
+  background: #fff3cd;
+  color: #856404;
+  border: 1px solid #ffc107;
+}
+
+.stat-badge-info {
+  background: #cfe2ff;
+  color: #084298;
+  border: 1px solid #0d6efd;
+}
+
+.stat-badge-danger {
+  background: #f8d7da;
+  color: #842029;
+  border: 1px solid #dc3545;
+}
+
+.registros-picking-loading,
+.registros-picking-empty {
+  text-align: center;
+  padding: 40px;
+  color: #666;
+  font-size: 1.1rem;
+}
+
+.btn-refresh {
+  padding: 8px 16px;
+  background: #0d6efd;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.btn-refresh:hover {
+  background: #0b5ed7;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+.btn-refresh:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
 }

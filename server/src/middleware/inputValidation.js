@@ -110,8 +110,6 @@ export function inputValidationMiddleware(req, res, next) {
     "/notificaciones",
     "/devoluciones/importar",
     "/devoluciones/clientes/importar-no-aptos",
-    "/devoluciones/scan",
-    "/devoluciones/scan/ia",
     "/chat/grupos",
   ];
   
@@ -121,23 +119,10 @@ export function inputValidationMiddleware(req, res, next) {
   });
   
   if (esRutaExcluida) {
-    // Para rutas de escaneo, no sanitizar nada (base64 no debe ser HTML-encoded)
-    // Para otras rutas excluidas, sanitizar pero no validar estrictamente
-    const rutasSinSanitizar = [
-      "/devoluciones/scan",
-      "/devoluciones/scan/ia",
-    ];
-    
-    const esRutaSinSanitizar = rutasSinSanitizar.some(ruta => {
-      return req.path === ruta || req.path.startsWith(ruta + "/");
-    });
-    
-    if (!esRutaSinSanitizar) {
-      // Solo sanitizar, no validar estrictamente
-      if (req.body && typeof req.body === "object") {
-        if (!req.headers["content-type"]?.includes("multipart/form-data")) {
-          req.body = sanitizeObject(req.body);
-        }
+    // Solo sanitizar, no validar estrictamente
+    if (req.body && typeof req.body === "object") {
+      if (!req.headers["content-type"]?.includes("multipart/form-data")) {
+        req.body = sanitizeObject(req.body);
       }
     }
     return next();

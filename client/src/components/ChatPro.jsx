@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Capacitor } from "@capacitor/core";
 import { authFetch, useAuth } from "../AuthContext";
 import "./ChatPro.css";
 import { useAlert } from "./AlertModal";
@@ -42,7 +41,7 @@ export default function ChatPro({ socket, user, onClose, solicitudPending, onSol
       }
       
       console.log("🔄 Chat cerrado, reseteando estado para próxima apertura");
-      setTabPrincipal("usuarios");
+      setTabPrincipal("chats");
       setTipoChat(null);
       setChatActual(null);
       setMensajeInput("");
@@ -58,7 +57,7 @@ export default function ChatPro({ socket, user, onClose, solicitudPending, onSol
       mensajePrioritarioProcessedRef.current = null;
     }
   }, [open]);
-  const [tabPrincipal, setTabPrincipal] = useState("usuarios");
+  const [tabPrincipal, setTabPrincipal] = useState("chats");
   const [tipoChat, setTipoChat] = useState(null);
   const [chatActual, setChatActual] = useState(null);
   const [mensajeResaltadoId, setMensajeResaltadoId] = useState(null);
@@ -112,10 +111,21 @@ export default function ChatPro({ socket, user, onClose, solicitudPending, onSol
   const [mostrarCrearGrupo, setMostrarCrearGrupo] = useState(false);
   const [mostrarAgregarMiembros, setMostrarAgregarMiembros] = useState(false);
   const [grupoAgregarMiembros, setGrupoAgregarMiembros] = useState(null);
+  // eslint-disable-next-line no-unused-vars
   const [grupoMenuAbierto, setGrupoMenuAbierto] = useState(null);
   const [modalSolicitud, setModalSolicitud] = useState(null); // { solicitudId, grupoId, usuario_nickname, fecha, groupName }
   // eslint-disable-next-line no-unused-vars
   const [solicitudesPendientes, setSolicitudesPendientes] = useState([]);
+  
+  // Estados para grupos desplegables de chats y grupos
+  const [gruposChatsCollapsed, setGruposChatsCollapsed] = useState({}); // { nombreGrupo: true/false }
+  const [gruposGruposCollapsed, setGruposGruposCollapsed] = useState({}); // { nombreGrupo: true/false }
+  const [chatGroups, setChatGroups] = useState({}); // { chatId: "nombreGrupo" }
+  const [grupoGroups, setGrupoGroups] = useState({}); // { grupoId: "nombreGrupo" }
+  const [menuGrupoChat, setMenuGrupoChat] = useState(null); // ID del chat con menú abierto
+  const [menuGrupoGrupo, setMenuGrupoGrupo] = useState(null); // ID del grupo con menú abierto
+  const [modalGrupoNombre, setModalGrupoNombre] = useState(""); // Nombre del grupo a crear/renombrar
+  const [modalGrupoAccion, setModalGrupoAccion] = useState(null); // { tipo: 'crear'|'renombrar', itemId, itemTipo: 'chat'|'grupo' }
   // eslint-disable-next-line no-unused-vars
   const [editandoGrupo, setEditandoGrupo] = useState(null);
   // eslint-disable-next-line no-unused-vars
@@ -1700,7 +1710,7 @@ export default function ChatPro({ socket, user, onClose, solicitudPending, onSol
   };
 
   const esMovil = () => {
-    return window.innerWidth <= 767 || Capacitor.isNativePlatform();
+    return window.innerWidth <= 767;
   };
 
   const abrirAdjuntosMobile = () => {
@@ -2200,27 +2210,8 @@ export default function ChatPro({ socket, user, onClose, solicitudPending, onSol
   };
 
   const abrirCamara = async () => {
-    try {
-      const cameraModule = await import("@capacitor/camera");
-      const foto = await cameraModule.Camera.getPhoto({
-        quality: 80,
-        allowEditing: false,
-        resultType: cameraModule.CameraResultType.Uri,
-        source: cameraModule.CameraSource.Camera,
-      });
-      if (!foto?.webPath) return;
-      const response = await fetch(foto.webPath);
-      const blob = await response.blob();
-      const file = new File([blob], `foto-${Date.now()}.jpg`, { type: blob.type });
-      const thumb = { file, url: foto.webPath };
-      setGaleriaThumbs([thumb]);
-      setArchivoAdjunto(file);
-      if (!mensajeInput.trim()) {
-        setMensajeInput(`📎 ${file.name}\n`);
-      }
-    } catch (err) {
-      showAlert("No se pudo abrir la cámara.", "error");
-    }
+    // Usar input file para capturar fotos (web)
+    imageInputRef.current?.click();
   };
 
   const iniciarGrabacionVoz = async () => {
@@ -2643,9 +2634,7 @@ export default function ChatPro({ socket, user, onClose, solicitudPending, onSol
     }
     if (!payload?.mensaje) return;
     setMenuEmojiAbierto(false);
-    const isMobile =
-      window.innerWidth <= 767 ||
-      (Capacitor?.isNativePlatform && Capacitor.isNativePlatform());
+    const isMobile = window.innerWidth <= 767;
     const baseX = event?.clientX ?? window.innerWidth / 2;
     const baseY = event?.clientY ?? window.innerHeight / 2;
     const maxX = window.innerWidth - 260;
@@ -3823,15 +3812,6 @@ export default function ChatPro({ socket, user, onClose, solicitudPending, onSol
 
   const abrirEnApp = async (url) => {
     if (!url) return;
-    if (Capacitor.isNativePlatform()) {
-      try {
-        const { Browser } = await import("@capacitor/browser");
-        await Browser.open({ url });
-      } catch (e) {
-        window.open(url, "_blank", "noopener,noreferrer");
-      }
-      return;
-    }
     window.open(url, "_blank", "noopener,noreferrer");
   };
 
@@ -4037,28 +4017,8 @@ export default function ChatPro({ socket, user, onClose, solicitudPending, onSol
     await iniciarLlamada();
   };
 
-  const blobToBase64 = (blob) =>
-    new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result.split(",")[1]);
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
-
-  const solicitarPermisoAlmacenamiento = async () => {
-    if (!Capacitor.isNativePlatform()) return true;
-    try {
-      const { Filesystem } = await import("@capacitor/filesystem");
-      const perm = await Filesystem.requestPermissions();
-      return (
-        perm?.publicStorage === "granted" ||
-        perm?.publicStorage === "limited" ||
-        perm?.storage === "granted"
-      );
-    } catch (e) {
-      return false;
-    }
-  };
+  // blobToBase64 removida (no usada en web-only)
+  // solicitarPermisoAlmacenamiento removida (no usada en web-only)
 
   const descargarArchivoPrivado = async (archivo) => {
     if (!archivo?.archivo_url) return;
@@ -4073,24 +4033,6 @@ export default function ChatPro({ socket, user, onClose, solicitudPending, onSol
           throw new Error("No se pudo descargar el archivo");
         }
         blob = await response.blob();
-      }
-
-      if (Capacitor.isNativePlatform()) {
-        const permitido = await solicitarPermisoAlmacenamiento();
-        if (!permitido) {
-          showAlert("Necesitas dar permiso de almacenamiento.", "warning");
-          return;
-        }
-        const { Filesystem, Directory } = await import("@capacitor/filesystem");
-        const base64 = await blobToBase64(blob);
-        const nombre = archivo.archivo_nombre || `archivo-${Date.now()}`;
-        await Filesystem.writeFile({
-          path: nombre,
-          data: base64,
-          directory: Directory.Documents,
-        });
-        showAlert("✅ Archivo guardado en Documentos", "success");
-        return;
       }
 
       const url = window.URL.createObjectURL(blob);
@@ -4194,6 +4136,165 @@ export default function ChatPro({ socket, user, onClose, solicitudPending, onSol
       console.error("Error marcando mensajes como leídos:", e);
     }
   };
+  
+  // ============================
+  // 📁 Funciones para grupos desplegables
+  // ============================
+  const toggleChatGroupCollapse = (groupName) => {
+    setGruposChatsCollapsed(prev => ({
+      ...prev,
+      [groupName]: !prev[groupName]
+    }));
+  };
+  
+  const toggleGrupoGroupCollapse = (groupName) => {
+    setGruposGruposCollapsed(prev => ({
+      ...prev,
+      [groupName]: !prev[groupName]
+    }));
+  };
+  
+  const agruparChats = () => {
+    const grouped = {};
+    chatsActivos.forEach(chat => {
+      const groupName = chatGroups[chat.otro_usuario];
+      if (groupName) {
+        if (!grouped[groupName]) {
+          grouped[groupName] = [];
+        }
+        grouped[groupName].push(chat);
+      }
+    });
+    // Agregar chats sin grupo al final, sin etiqueta
+    const sinGrupo = chatsActivos.filter(chat => !chatGroups[chat.otro_usuario]);
+    if (sinGrupo.length > 0) {
+      grouped['__sin_grupo__'] = sinGrupo;
+    }
+    return grouped;
+  };
+  
+  const agruparGrupos = () => {
+    const grouped = {};
+    grupos.forEach(grupo => {
+      const groupName = grupoGroups[grupo.id];
+      if (groupName) {
+        if (!grouped[groupName]) {
+          grouped[groupName] = [];
+        }
+        grouped[groupName].push(grupo);
+      }
+    });
+    // Agregar grupos sin carpeta al final, sin etiqueta
+    const sinGrupo = grupos.filter(grupo => !grupoGroups[grupo.id]);
+    if (sinGrupo.length > 0) {
+      grouped['__sin_grupo__'] = sinGrupo;
+    }
+    return grouped;
+  };
+  
+  const tieneNoLeidosEnGrupo = (items, esChat = true) => {
+    return items.some(item => {
+      if (esChat) {
+        return item.mensajes_no_leidos > 0;
+      } else {
+        // Para grupos, necesitamos verificar si hay mensajes no leídos
+        // Esto se podría extender con más lógica si es necesario
+        return false;
+      }
+    });
+  };
+  
+  // Funciones para gestionar carpetas/grupos desplegables
+  const asignarACarpeta = (itemId, itemTipo, carpetaNombre) => {
+    if (itemTipo === 'chat') {
+      setChatGroups(prev => ({
+        ...prev,
+        [itemId]: carpetaNombre
+      }));
+      // Guardar en localStorage
+      const saved = JSON.parse(localStorage.getItem('chatGroups') || '{}');
+      saved[itemId] = carpetaNombre;
+      localStorage.setItem('chatGroups', JSON.stringify(saved));
+    } else if (itemTipo === 'grupo') {
+      setGrupoGroups(prev => ({
+        ...prev,
+        [itemId]: carpetaNombre
+      }));
+      // Guardar en localStorage
+      const saved = JSON.parse(localStorage.getItem('grupoGroups') || '{}');
+      saved[itemId] = carpetaNombre;
+      localStorage.setItem('grupoGroups', JSON.stringify(saved));
+    }
+    setMenuGrupoChat(null);
+    setMenuGrupoGrupo(null);
+  };
+  
+  const crearYAsignarCarpeta = (itemId, itemTipo) => {
+    setModalGrupoAccion({ tipo: 'crear', itemId, itemTipo });
+    setModalGrupoNombre('');
+  };
+  
+  const renombrarCarpeta = (carpetaNombreAntiguo) => {
+    setModalGrupoAccion({ tipo: 'renombrar', carpetaNombreAntiguo });
+    setModalGrupoNombre(carpetaNombreAntiguo);
+  };
+  
+  const confirmarAccionCarpeta = () => {
+    if (!modalGrupoNombre.trim()) {
+      showAlert('Por favor ingresa un nombre para la carpeta', 'warning');
+      return;
+    }
+    
+    if (modalGrupoAccion.tipo === 'crear') {
+      asignarACarpeta(modalGrupoAccion.itemId, modalGrupoAccion.itemTipo, modalGrupoNombre.trim());
+    } else if (modalGrupoAccion.tipo === 'renombrar') {
+      const nombreAntiguo = modalGrupoAccion.carpetaNombreAntiguo;
+      const nombreNuevo = modalGrupoNombre.trim();
+      
+      // Renombrar en chatGroups
+      const newChatGroups = { ...chatGroups };
+      Object.keys(newChatGroups).forEach(key => {
+        if (newChatGroups[key] === nombreAntiguo) {
+          newChatGroups[key] = nombreNuevo;
+        }
+      });
+      setChatGroups(newChatGroups);
+      localStorage.setItem('chatGroups', JSON.stringify(newChatGroups));
+      
+      // Renombrar en grupoGroups
+      const newGrupoGroups = { ...grupoGroups };
+      Object.keys(newGrupoGroups).forEach(key => {
+        if (newGrupoGroups[key] === nombreAntiguo) {
+          newGrupoGroups[key] = nombreNuevo;
+        }
+      });
+      setGrupoGroups(newGrupoGroups);
+      localStorage.setItem('grupoGroups', JSON.stringify(newGrupoGroups));
+    }
+    
+    setModalGrupoAccion(null);
+    setModalGrupoNombre('');
+  };
+  
+  // Cargar grupos desde localStorage al inicio
+  React.useEffect(() => {
+    const savedChatGroups = localStorage.getItem('chatGroups');
+    const savedGrupoGroups = localStorage.getItem('grupoGroups');
+    if (savedChatGroups) {
+      try {
+        setChatGroups(JSON.parse(savedChatGroups));
+      } catch (e) {
+        console.error('Error cargando chatGroups:', e);
+      }
+    }
+    if (savedGrupoGroups) {
+      try {
+        setGrupoGroups(JSON.parse(savedGrupoGroups));
+      } catch (e) {
+        console.error('Error cargando grupoGroups:', e);
+      }
+    }
+  }, []);
 
   // Obtener mensajes actuales
   const mensajesActuales =
@@ -4344,23 +4445,14 @@ export default function ChatPro({ socket, user, onClose, solicitudPending, onSol
                   </div>
                 </div>
                 
-                {/* TABS PRINCIPALES */}
+                {/* TABS PRINCIPALES - Reorganizadas con emojis */}
                 <div className="chat-tabs">
             <div
-              className={`tab ${tabPrincipal === "usuarios" ? "active" : ""}`}
-              onClick={() => {
-                setTabPrincipal("usuarios");
-                setTipoChat(null);
-                setChatActual(null);
-              }}
-            >
-              Usuarios
-            </div>
-            <div
-              className={`tab ${tabPrincipal === "chats" ? "active" : ""}`}
+              className={`tab tab-circular ${tabPrincipal === "chats" ? "active" : ""}`}
               onClick={() => setTabPrincipal("chats")}
+              title="Chats"
             >
-              Chats
+              💬
               {(() => {
                 const totalNoLeidos = chatsActivos.reduce((total, chat) => {
                   return total + (chat.mensajes_no_leidos || 0);
@@ -4371,10 +4463,22 @@ export default function ChatPro({ socket, user, onClose, solicitudPending, onSol
               })()}
             </div>
             <div
-              className={`tab ${tabPrincipal === "grupos" ? "active" : ""}`}
+              className={`tab tab-circular ${tabPrincipal === "grupos" ? "active" : ""}`}
               onClick={() => setTabPrincipal("grupos")}
+              title="Grupos"
             >
-              Grupos
+              👥
+            </div>
+            <div
+              className={`tab tab-circular ${tabPrincipal === "usuarios" ? "active" : ""}`}
+              onClick={() => {
+                setTabPrincipal("usuarios");
+                setTipoChat(null);
+                setChatActual(null);
+              }}
+              title="Usuarios"
+            >
+              👤
             </div>
                 </div>
                 
@@ -4514,78 +4618,282 @@ export default function ChatPro({ socket, user, onClose, solicitudPending, onSol
                         <span className="grupo-icon">🌐</span>
                         <span>Chat General</span>
                       </div>
-                      {[...chatsActivos].sort((a, b) => {
-                        // Ordenar: primero el chat del usuario actual (si existe)
-                        const userDisplayName = user?.nickname || user?.name;
-                        const aEsMio = a.otro_usuario === userDisplayName;
-                        const bEsMio = b.otro_usuario === userDisplayName;
+                      
+                      {(() => {
+                        const chatsPorGrupo = agruparChats();
+                        const gruposOrdenados = Object.keys(chatsPorGrupo).sort((a, b) => {
+                          // "__sin_grupo__" siempre al final
+                          if (a === "__sin_grupo__") return 1;
+                          if (b === "__sin_grupo__") return -1;
+                          return a.localeCompare(b);
+                        });
                         
-                        if (aEsMio && !bEsMio) return -1;
-                        if (!aEsMio && bEsMio) return 1;
-                        
-                        // Si ambos son del usuario o ninguno, ordenar por fecha del último mensaje
-                        const fechaA = a.ultima_fecha ? new Date(a.ultima_fecha) : new Date(0);
-                        const fechaB = b.ultima_fecha ? new Date(b.ultima_fecha) : new Date(0);
-                        return fechaB - fechaA; // Más reciente primero
-                      }).map((chat) => {
-                const userDisplayName = user?.nickname || user?.name;
-                const esMioUltimoMensaje = chat.ultimo_remitente === userDisplayName;
-                // Obtener estado del usuario
-                const estado = estadosUsuarios[chat.otro_usuario] || 'offline';
-                
-                // Determinar título del estado
-                let statusTitle = 'Usuario offline';
-                if (estado === 'activo') {
-                  statusTitle = 'Usuario activo (en la app)';
-                } else if (estado === 'ausente') {
-                  statusTitle = 'Usuario ausente (salió de la app o más de 10 min sin actividad)';
-                } else {
-                  statusTitle = 'Usuario offline (sesión cerrada - más de 8 horas)';
-                }
-                
-                return (
-                  <div
-                    key={chat.otro_usuario}
-                    className={`usuario-item-pro chat-activo-item ${chat.mensajes_no_leidos > 0 ? "chat-con-mensajes-no-leidos" : ""}`}
-                    onClick={() => abrirChat("privado", chat.otro_usuario)}
-                  >
-                    <div className={`avatar-container status-${estado} chat-activo-avatar-wrap`} title={statusTitle}>
-                      <img
-                        src={getAvatarUrl(
-                          usuariosIxora.find((u) => u.nickname === chat.otro_usuario)
-                        )}
-                        alt={chat.otro_usuario}
-                        className="chat-avatar"
-                        onError={(e) => {
-                          e.target.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='16' fill='%23e0e0e0'/%3E%3Ctext x='16' y='22' font-size='20' text-anchor='middle' fill='%23999'%3E👤%3C/text%3E%3C/svg%3E";
-                        }}
-                      />
-                      {chat.mensajes_no_leidos > 0 && (
-                        <span className="chat-badge-bolita">
-                          {chat.mensajes_no_leidos > 99 ? "99+" : chat.mensajes_no_leidos}
-                        </span>
-                      )}
-                    </div>
-                    <div className="chat-activo-content">
-                      <div className="chat-activo-header">
-                        <span className="chat-activo-nombre" style={{ color: getColorForName(chat.otro_usuario || "Usuario") }}>
-                          {chat.otro_usuario}
-                        </span>
-                      </div>
-                      {chat.ultimo_mensaje && (
-                        <div className="chat-activo-mensaje">
-                          {esMioUltimoMensaje ? (
-                            <span className="chat-mensaje-prefijo">Tú:</span>
-                          ) : (
-                            <span className="chat-mensaje-prefijo">{chat.otro_usuario}:</span>
-                          )}
-                          <span className="chat-mensaje-texto">{chat.ultimo_mensaje}</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-                      })}
+                        return gruposOrdenados.map((groupName) => {
+                          const chatsEnGrupo = chatsPorGrupo[groupName];
+                          const isCollapsed = gruposChatsCollapsed[groupName] || false;
+                          const tieneNoLeidos = tieneNoLeidosEnGrupo(chatsEnGrupo, true);
+                          
+                          // Si es "__sin_grupo__", mostrar los chats directamente sin header
+                          if (groupName === "__sin_grupo__") {
+                            return chatsEnGrupo.sort((a, b) => {
+                              const userDisplayName = user?.nickname || user?.name;
+                              const aEsMio = a.otro_usuario === userDisplayName;
+                              const bEsMio = b.otro_usuario === userDisplayName;
+                              
+                              if (aEsMio && !bEsMio) return -1;
+                              if (!aEsMio && bEsMio) return 1;
+                              
+                              const fechaA = a.ultima_fecha ? new Date(a.ultima_fecha) : new Date(0);
+                              const fechaB = b.ultima_fecha ? new Date(b.ultima_fecha) : new Date(0);
+                              return fechaB - fechaA;
+                            }).map((chat) => {
+                              const userDisplayName = user?.nickname || user?.name;
+                              const esMioUltimoMensaje = chat.ultimo_remitente === userDisplayName;
+                              const estado = estadosUsuarios[chat.otro_usuario] || 'offline';
+                              
+                              let statusTitle = 'Usuario offline';
+                              if (estado === 'activo') {
+                                statusTitle = 'Usuario activo (en la app)';
+                              } else if (estado === 'ausente') {
+                                statusTitle = 'Usuario ausente (salió de la app o más de 10 min sin actividad)';
+                              } else {
+                                statusTitle = 'Usuario offline (sesión cerrada - más de 8 horas)';
+                              }
+                              
+                              return (
+                                <div
+                                  key={chat.otro_usuario}
+                                  className={`usuario-item-pro chat-activo-item ${chat.mensajes_no_leidos > 0 ? "chat-con-mensajes-no-leidos" : ""}`}
+                                >
+                                  <div 
+                                    className={`avatar-container status-${estado} chat-activo-avatar-wrap`} 
+                                    title={statusTitle}
+                                    onClick={() => abrirChat("privado", chat.otro_usuario)}
+                                  >
+                                    <img
+                                      src={getAvatarUrl(
+                                        usuariosIxora.find((u) => u.nickname === chat.otro_usuario)
+                                      )}
+                                      alt={chat.otro_usuario}
+                                      className="chat-avatar"
+                                      onError={(e) => {
+                                        e.target.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='16' fill='%23e0e0e0'/%3E%3Ctext x='16' y='22' font-size='20' text-anchor='middle' fill='%23999'%3E👤%3C/text%3E%3C/svg%3E";
+                                      }}
+                                    />
+                                    {chat.mensajes_no_leidos > 0 && (
+                                      <span className="chat-badge-bolita">
+                                        {chat.mensajes_no_leidos > 99 ? "99+" : chat.mensajes_no_leidos}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div 
+                                    className="chat-activo-content"
+                                    onClick={() => abrirChat("privado", chat.otro_usuario)}
+                                  >
+                                    <div className="chat-activo-header">
+                                      <span className="chat-activo-nombre" style={{ color: getColorForName(chat.otro_usuario || "Usuario") }}>
+                                        {chat.otro_usuario}
+                                      </span>
+                                    </div>
+                                    {chat.ultimo_mensaje && (
+                                      <div className="chat-activo-mensaje">
+                                        {esMioUltimoMensaje ? (
+                                          <span className="chat-mensaje-prefijo">Tú:</span>
+                                        ) : (
+                                          <span className="chat-mensaje-prefijo">{chat.otro_usuario}:</span>
+                                        )}
+                                        <span className="chat-mensaje-texto">{chat.ultimo_mensaje}</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div className="chat-item-menu-container">
+                                    <span
+                                      className="chat-item-menu-btn"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setMenuGrupoChat(menuGrupoChat === chat.otro_usuario ? null : chat.otro_usuario);
+                                      }}
+                                      title="Opciones"
+                                    >
+                                      ⋮
+                                    </span>
+                                    {menuGrupoChat === chat.otro_usuario && (
+                                      <div className="chat-item-menu-dropdown" onClick={(e) => e.stopPropagation()}>
+                                        <button onClick={() => crearYAsignarCarpeta(chat.otro_usuario, 'chat')}>
+                                          ➕ Nueva carpeta
+                                        </button>
+                                        <hr />
+                                        <div className="chat-item-menu-carpetas">
+                                          {Object.keys(agruparChats()).filter(k => k !== '__sin_grupo__').map(carpeta => (
+                                            <button
+                                              key={carpeta}
+                                              onClick={() => asignarACarpeta(chat.otro_usuario, 'chat', carpeta)}
+                                            >
+                                              📁 {carpeta}
+                                            </button>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            });
+                          }
+                          
+                          // Para grupos con nombre, mostrar header desplegable
+                          return (
+                            <div key={groupName} className="chat-group-section">
+                              <div 
+                                className={`chat-group-header ${tieneNoLeidos && isCollapsed ? 'has-unread' : ''}`}
+                              >
+                                <span 
+                                  className="chat-group-toggle"
+                                  onClick={() => toggleChatGroupCollapse(groupName)}
+                                >
+                                  {isCollapsed ? '▶' : '▼'}
+                                </span>
+                                <span 
+                                  className={`chat-group-name ${tieneNoLeidos && isCollapsed ? 'unread-group' : ''}`}
+                                  onClick={() => toggleChatGroupCollapse(groupName)}
+                                >
+                                  📁 {groupName}
+                                </span>
+                                <span 
+                                  className="chat-group-count"
+                                  onClick={() => toggleChatGroupCollapse(groupName)}
+                                >
+                                  ({chatsEnGrupo.length})
+                                </span>
+                                <button
+                                  className="chat-group-rename-btn"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    renombrarCarpeta(groupName);
+                                  }}
+                                  title="Renombrar carpeta"
+                                >
+                                  ✏️
+                                </button>
+                              </div>
+                              
+                              {!isCollapsed && chatsEnGrupo.sort((a, b) => {
+                                const userDisplayName = user?.nickname || user?.name;
+                                const aEsMio = a.otro_usuario === userDisplayName;
+                                const bEsMio = b.otro_usuario === userDisplayName;
+                                
+                                if (aEsMio && !bEsMio) return -1;
+                                if (!aEsMio && bEsMio) return 1;
+                                
+                                const fechaA = a.ultima_fecha ? new Date(a.ultima_fecha) : new Date(0);
+                                const fechaB = b.ultima_fecha ? new Date(b.ultima_fecha) : new Date(0);
+                                return fechaB - fechaA;
+                              }).map((chat) => {
+                                const userDisplayName = user?.nickname || user?.name;
+                                const esMioUltimoMensaje = chat.ultimo_remitente === userDisplayName;
+                                const estado = estadosUsuarios[chat.otro_usuario] || 'offline';
+                                
+                                let statusTitle = 'Usuario offline';
+                                if (estado === 'activo') {
+                                  statusTitle = 'Usuario activo (en la app)';
+                                } else if (estado === 'ausente') {
+                                  statusTitle = 'Usuario ausente (salió de la app o más de 10 min sin actividad)';
+                                } else {
+                                  statusTitle = 'Usuario offline (sesión cerrada - más de 8 horas)';
+                                }
+                                
+                                return (
+                                  <div
+                                    key={chat.otro_usuario}
+                                    className={`usuario-item-pro chat-activo-item chat-grouped ${chat.mensajes_no_leidos > 0 ? "chat-con-mensajes-no-leidos" : ""}`}
+                                  >
+                                    <div 
+                                      className={`avatar-container status-${estado} chat-activo-avatar-wrap`} 
+                                      title={statusTitle}
+                                      onClick={() => abrirChat("privado", chat.otro_usuario)}
+                                    >
+                                      <img
+                                        src={getAvatarUrl(
+                                          usuariosIxora.find((u) => u.nickname === chat.otro_usuario)
+                                        )}
+                                        alt={chat.otro_usuario}
+                                        className="chat-avatar"
+                                        onError={(e) => {
+                                          e.target.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='16' fill='%23e0e0e0'/%3E%3Ctext x='16' y='22' font-size='20' text-anchor='middle' fill='%23999'%3E👤%3C/text%3E%3C/svg%3E";
+                                        }}
+                                      />
+                                      {chat.mensajes_no_leidos > 0 && (
+                                        <span className="chat-badge-bolita">
+                                          {chat.mensajes_no_leidos > 99 ? "99+" : chat.mensajes_no_leidos}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div 
+                                      className="chat-activo-content"
+                                      onClick={() => abrirChat("privado", chat.otro_usuario)}
+                                    >
+                                      <div className="chat-activo-header">
+                                        <span className="chat-activo-nombre" style={{ color: getColorForName(chat.otro_usuario || "Usuario") }}>
+                                          {chat.otro_usuario}
+                                        </span>
+                                      </div>
+                                      {chat.ultimo_mensaje && (
+                                        <div className="chat-activo-mensaje">
+                                          {esMioUltimoMensaje ? (
+                                            <span className="chat-mensaje-prefijo">Tú:</span>
+                                          ) : (
+                                            <span className="chat-mensaje-prefijo">{chat.otro_usuario}:</span>
+                                          )}
+                                          <span className="chat-mensaje-texto">{chat.ultimo_mensaje}</span>
+                                        </div>
+                                      )}
+                                    </div>
+                                    <div className="chat-item-menu-container">
+                                      <span
+                                        className="chat-item-menu-btn"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setMenuGrupoChat(menuGrupoChat === chat.otro_usuario ? null : chat.otro_usuario);
+                                        }}
+                                        title="Opciones"
+                                      >
+                                        ⋮
+                                      </span>
+                                      {menuGrupoChat === chat.otro_usuario && (
+                                        <div className="chat-item-menu-dropdown" onClick={(e) => e.stopPropagation()}>
+                                          <button onClick={() => crearYAsignarCarpeta(chat.otro_usuario, 'chat')}>
+                                            ➕ Nueva carpeta
+                                          </button>
+                                          <hr />
+                                          <div className="chat-item-menu-carpetas">
+                                            {Object.keys(agruparChats()).filter(k => k !== '__sin_grupo__').map(carpeta => (
+                                              <button
+                                                key={carpeta}
+                                                onClick={() => asignarACarpeta(chat.otro_usuario, 'chat', carpeta)}
+                                              >
+                                                📁 {carpeta}
+                                              </button>
+                                            ))}
+                                          </div>
+                                          {chatGroups[chat.otro_usuario] && (
+                                            <>
+                                              <hr />
+                                              <button onClick={() => asignarACarpeta(chat.otro_usuario, 'chat', null)}>
+                                                ❌ Quitar de carpeta
+                                              </button>
+                                            </>
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          );
+                        });
+                      })()}
+                      
                       {chatsActivos.length === 0 && (
                         <div className="chat-empty-pro">No hay chats activos</div>
                       )}
@@ -4647,81 +4955,226 @@ export default function ChatPro({ socket, user, onClose, solicitudPending, onSol
                           <span>Crear Grupo</span>
                         </div>
                       )}
-                      {Array.isArray(grupos) && grupos.map((g) => {
-                        const esPublico = g.es_publico !== 0;
-                        const esMiembro = g.es_miembro === true;
-                        return (
-                          <div
-                            key={g.id}
-                            className={`usuario-item-pro grupo-item ${!esMiembro ? "grupo-no-miembro" : ""}`}
-                            onClick={() => {
-                              if (!esMiembro) return;
-                              abrirChat("grupal", g.id);
-                            }}
-                          >
-                            <span className="grupo-icon">👥</span>
-                            <div className="grupo-info">
-                              <div className="grupo-header-row">
-                                <span className="grupo-nombre">{g.nombre}</span>
-                                <span className={`grupo-badge ${esPublico ? "publico" : "privado"}`}>
-                                  {esPublico ? "Público" : "Privado"}
-                                </span>
-                              </div>
-                              {g.descripcion && (
-                                <div className="grupo-desc">{g.descripcion}</div>
-                              )}
-                              <div className="grupo-miembros">
-                                {g.miembros?.length || 0} miembros
-                              </div>
-                            </div>
-                            <div className="grupo-actions">
-                              <button
-                                className="grupo-menu-btn"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setGrupoMenuAbierto(grupoMenuAbierto === g.id ? null : g.id);
-                                }}
-                                title="Opciones del grupo"
+                      
+                      {/* Grupos agrupados */}
+                      {(() => {
+                        const agrupados = agruparGrupos(grupos);
+                        const gruposOrdenados = Object.keys(agrupados).sort((a, b) => {
+                          // "__sin_grupo__" siempre al final
+                          if (a === "__sin_grupo__") return 1;
+                          if (b === "__sin_grupo__") return -1;
+                          return a.localeCompare(b);
+                        });
+                        
+                        return gruposOrdenados.map((nombreGrupo) => {
+                          const gruposEnGrupo = agrupados[nombreGrupo];
+                          const tieneNoLeidos = tieneNoLeidosEnGrupo(gruposEnGrupo, false);
+                          const estaColapsado = gruposGruposCollapsed[nombreGrupo] || false;
+                          
+                          // Si es "__sin_grupo__", mostrar los grupos directamente sin header
+                          if (nombreGrupo === "__sin_grupo__") {
+                            return gruposEnGrupo.map((g) => {
+                              const esPublico = g.es_publico !== 0;
+                              const esMiembro = g.es_miembro === true;
+                              return (
+                                <div
+                                  key={g.id}
+                                  className={`usuario-item-pro grupo-item ${!esMiembro ? "grupo-no-miembro" : ""}`}
+                                >
+                                  <span 
+                                    className="grupo-icon"
+                                    onClick={() => {
+                                      if (!esMiembro) return;
+                                      abrirChat("grupal", g.id);
+                                    }}
+                                  >
+                                    👥
+                                  </span>
+                                  <div 
+                                    className="grupo-info"
+                                    onClick={() => {
+                                      if (!esMiembro) return;
+                                      abrirChat("grupal", g.id);
+                                    }}
+                                  >
+                                    <div className="grupo-header-row">
+                                      <span className="grupo-nombre">{g.nombre}</span>
+                                      <span className={`grupo-badge ${esPublico ? "publico" : "privado"}`}>
+                                        {esPublico ? "Público" : "Privado"}
+                                      </span>
+                                    </div>
+                                    {g.descripcion && (
+                                      <div className="grupo-desc">{g.descripcion}</div>
+                                    )}
+                                    <div className="grupo-miembros">
+                                      {g.miembros?.length || 0} miembros
+                                    </div>
+                                  </div>
+                                  <div className="grupo-actions">
+                                    <span
+                                      className="chat-item-menu-btn"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setMenuGrupoGrupo(menuGrupoGrupo === g.id ? null : g.id);
+                                      }}
+                                      title="Opciones"
+                                    >
+                                      ⋮
+                                    </span>
+                                    {menuGrupoGrupo === g.id && (
+                                      <div className="chat-item-menu-dropdown" onClick={(e) => e.stopPropagation()}>
+                                        <button onClick={() => crearYAsignarCarpeta(g.id, 'grupo')}>
+                                          ➕ Nueva carpeta
+                                        </button>
+                                        <hr />
+                                        <div className="chat-item-menu-carpetas">
+                                          {Object.keys(agruparGrupos()).filter(k => k !== '__sin_grupo__').map(carpeta => (
+                                            <button
+                                              key={carpeta}
+                                              onClick={() => asignarACarpeta(g.id, 'grupo', carpeta)}
+                                            >
+                                              📁 {carpeta}
+                                            </button>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            });
+                          }
+                          
+                          return (
+                            <div key={nombreGrupo} className="chat-group-section">
+                              <div
+                                className={`chat-group-header ${estaColapsado ? "collapsed" : ""} ${tieneNoLeidos ? "has-unread" : ""}`}
                               >
-                                ⋯
-                              </button>
-                              {grupoMenuAbierto === g.id && (
-                                <div className="grupo-menu" onClick={(e) => e.stopPropagation()}>
-                                  {esMiembro ? (
-                                    <button
-                                      onClick={() => {
-                                        abrirPerfilGrupo(g.id);
-                                        setGrupoMenuAbierto(null);
-                                      }}
-                                    >
-                                      Ver info
-                                    </button>
-                                  ) : !esPublico ? (
-                                    <button
-                                      onClick={async () => {
-                                        setGrupoMenuAbierto(null);
-                                        try {
-                                          await authFetch(`${SERVER_URL}/chat/grupos/${g.id}/solicitar-acceso`, {
-                                            method: "POST",
-                                          });
-                                          showAlert("Solicitud de acceso enviada.", "success");
-                                          const data = await authFetch("/chat/grupos");
-                                          setGrupos(data || []);
-                                        } catch (err) {
-                                          const msg = err?.message || "Error al solicitar acceso.";
-                                          showAlert(msg, "error");
-                                        }
-                                      }}
-                                    >
-                                      Solicitar acceso
-                                    </button>
-                                  ) : null}
+                                <span 
+                                  className="chat-group-toggle"
+                                  onClick={() => toggleGrupoGroupCollapse(nombreGrupo)}
+                                >
+                                  {estaColapsado ? '▶' : '▼'}
+                                </span>
+                                <span 
+                                  className={`chat-group-name ${tieneNoLeidos && estaColapsado ? "unread-group" : ""}`}
+                                  onClick={() => toggleGrupoGroupCollapse(nombreGrupo)}
+                                >
+                                  📁 {nombreGrupo}
+                                </span>
+                                <span 
+                                  className="chat-group-count"
+                                  onClick={() => toggleGrupoGroupCollapse(nombreGrupo)}
+                                >
+                                  ({gruposEnGrupo.length})
+                                </span>
+                                <button
+                                  className="chat-group-rename-btn"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    renombrarCarpeta(nombreGrupo);
+                                  }}
+                                  title="Renombrar carpeta"
+                                >
+                                  ✏️
+                                </button>
+                              </div>
+                              {!estaColapsado && (
+                                <div className="chat-group-items">
+                                  {gruposEnGrupo.map((g) => {
+                                    const esPublico = g.es_publico !== 0;
+                                    const esMiembro = g.es_miembro === true;
+                                    return (
+                                      <div
+                                        key={g.id}
+                                        className={`usuario-item-pro grupo-item chat-grouped ${!esMiembro ? "grupo-no-miembro" : ""}`}
+                                      >
+                                        <span 
+                                          className="grupo-icon"
+                                          onClick={() => {
+                                            if (!esMiembro) return;
+                                            abrirChat("grupal", g.id);
+                                          }}
+                                        >
+                                          👥
+                                        </span>
+                                        <div 
+                                          className="grupo-info"
+                                          onClick={() => {
+                                            if (!esMiembro) return;
+                                            abrirChat("grupal", g.id);
+                                          }}
+                                        >
+                                          <div className="grupo-header-row">
+                                            <span className="grupo-nombre">{g.nombre}</span>
+                                            <span className={`grupo-badge ${esPublico ? "publico" : "privado"}`}>
+                                              {esPublico ? "Público" : "Privado"}
+                                            </span>
+                                          </div>
+                                          {g.descripcion && (
+                                            <div className="grupo-desc">{g.descripcion}</div>
+                                          )}
+                                          <div className="grupo-miembros">
+                                            {g.miembros?.length || 0} miembros
+                                          </div>
+                                        </div>
+                                        <div className="grupo-actions">
+                                          <span
+                                            className="chat-item-menu-btn"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setMenuGrupoGrupo(menuGrupoGrupo === g.id ? null : g.id);
+                                            }}
+                                            title="Opciones"
+                                          >
+                                            ⋮
+                                          </span>
+                                          {menuGrupoGrupo === g.id && (
+                                            <div className="chat-item-menu-dropdown" onClick={(e) => e.stopPropagation()}>
+                                              <button
+                                                onClick={() => {
+                                                  abrirPerfilGrupo(g.id);
+                                                  setMenuGrupoGrupo(null);
+                                                }}
+                                              >
+                                                ℹ️ Ver info
+                                              </button>
+                                              <hr />
+                                              <button onClick={() => crearYAsignarCarpeta(g.id, 'grupo')}>
+                                                ➕ Nueva carpeta
+                                              </button>
+                                              <hr />
+                                              <div className="chat-item-menu-carpetas">
+                                                {Object.keys(agruparGrupos()).filter(k => k !== '__sin_grupo__').map(carpeta => (
+                                                  <button
+                                                    key={carpeta}
+                                                    onClick={() => asignarACarpeta(g.id, 'grupo', carpeta)}
+                                                  >
+                                                    📁 {carpeta}
+                                                  </button>
+                                                ))}
+                                              </div>
+                                              {grupoGroups[g.id] && (
+                                                <>
+                                                  <hr />
+                                                  <button onClick={() => asignarACarpeta(g.id, 'grupo', null)}>
+                                                    ❌ Quitar de carpeta
+                                                  </button>
+                                                </>
+                                              )}
+                                            </div>
+                                          )}
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
                                 </div>
                               )}
                             </div>
-                          </div>
-                        );
-                      })}
+                          );
+                        });
+                      })()}
+                      
                       {Array.isArray(grupos) && grupos.length === 0 && !mostrarCrearGrupo && (
                         <div className="chat-empty-pro">No hay grupos</div>
                       )}
@@ -4826,11 +5279,11 @@ export default function ChatPro({ socket, user, onClose, solicitudPending, onSol
                               // Construir URL con información del perfil
                               const baseUrl = new URL(window.location.origin);
                               if (perfilTipo === "usuario" && perfilData?.nickname) {
-                                baseUrl.searchParams.set("tab", "chat");
+                                baseUrl.pathname = '/chat';
                                 baseUrl.searchParams.set("perfil", "usuario");
                                 baseUrl.searchParams.set("nickname", perfilData.nickname);
                               } else if (perfilTipo === "grupo" && perfilData?.id) {
-                                baseUrl.searchParams.set("tab", "chat");
+                                baseUrl.pathname = '/chat';
                                 baseUrl.searchParams.set("perfil", "grupo");
                                 baseUrl.searchParams.set("grupoId", String(perfilData.id));
                               } else {
@@ -5498,9 +5951,9 @@ export default function ChatPro({ socket, user, onClose, solicitudPending, onSol
                                           style={{ 
                                             fontSize: "1.1rem", 
                                             padding: "4px 8px",
-                                            background: menuAbierto ? "var(--chat-accent)" : "transparent",
-                                            color: menuAbierto ? "#ffffff" : "var(--chat-text)",
-                                            border: "1px solid var(--chat-border)",
+                                            background: menuAbierto ? "var(--fondo-card-hover)" : "transparent",
+                                            color: "var(--texto-principal)",
+                                            border: "1px solid var(--borde-visible)",
                                             borderRadius: "6px",
                                             cursor: "pointer"
                                           }}
@@ -5920,10 +6373,10 @@ export default function ChatPro({ socket, user, onClose, solicitudPending, onSol
                                 <button
                                   style={{
                                     padding: "4px 8px",
-                                    background: "var(--chat-accent)",
-                                    border: "none",
+                                    background: "transparent",
+                                    border: "2px solid var(--borde-visible)",
                                     borderRadius: "4px",
-                                    color: "#ffffff",
+                                    color: "var(--texto-principal)",
                                     cursor: "pointer",
                                     fontSize: "0.85rem",
                                     display: "inline-flex",
@@ -6031,10 +6484,10 @@ export default function ChatPro({ socket, user, onClose, solicitudPending, onSol
                                 }}
                                 style={{
                                   padding: "4px 8px",
-                                  background: "var(--chat-accent)",
-                                  border: "none",
+                                  background: "transparent",
+                                  border: "2px solid var(--borde-visible)",
                                   borderRadius: "4px",
-                                  color: "#ffffff",
+                                  color: "var(--texto-principal)",
                                   cursor: "pointer",
                                   fontSize: "0.85rem",
                                   fontWeight: 500,
@@ -6070,10 +6523,10 @@ export default function ChatPro({ socket, user, onClose, solicitudPending, onSol
                                 }}
                                 style={{
                                   padding: "4px 8px",
-                                  background: "var(--chat-accent)",
-                                  border: "none",
+                                  background: "transparent",
+                                  border: "2px solid var(--borde-visible)",
                                   borderRadius: "4px",
-                                  color: "#ffffff",
+                                  color: "var(--texto-principal)",
                                   cursor: "pointer",
                                   fontSize: "0.85rem",
                                   fontWeight: 500,
@@ -8172,6 +8625,33 @@ export default function ChatPro({ socket, user, onClose, solicitudPending, onSol
                 onClick={guardarReunion}
               >
                 {reunionEditando ? 'Actualizar' : 'Crear'} reunión
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal para crear/renombrar carpetas */}
+      {modalGrupoAccion && (
+        <div className="modal-carpeta-overlay" onClick={() => setModalGrupoAccion(null)}>
+          <div className="modal-carpeta-content" onClick={(e) => e.stopPropagation()}>
+            <h3>{modalGrupoAccion.tipo === 'crear' ? '📁 Nueva carpeta' : '✏️ Renombrar carpeta'}</h3>
+            <input
+              type="text"
+              placeholder="Nombre de la carpeta"
+              value={modalGrupoNombre}
+              onChange={(e) => setModalGrupoNombre(e.target.value)}
+              onKeyPress={(e) => {
+                if (e.key === 'Enter') {
+                  confirmarAccionCarpeta();
+                }
+              }}
+              autoFocus
+            />
+            <div className="modal-carpeta-buttons">
+              <button onClick={() => setModalGrupoAccion(null)}>Cancelar</button>
+              <button onClick={confirmarAccionCarpeta}>
+                {modalGrupoAccion.tipo === 'crear' ? 'Crear' : 'Renombrar'}
               </button>
             </div>
           </div>
