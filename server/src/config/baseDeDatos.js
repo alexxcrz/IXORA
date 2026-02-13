@@ -11,8 +11,6 @@ const dbReenvios = createEncryptedDatabase("reenvios.db");
 const dbDevol = createEncryptedDatabase("devoluciones.db");
 const dbChat = createEncryptedDatabase("chat.db");
 const dbActivos = createEncryptedDatabase("activos_informaticos.db");
-// Bases de datos usadas en otros módulos (no pestañas eliminadas)
-const dbVentas = createEncryptedDatabase("ventas.db"); // Usada en tienda.js
 const dbRRHH = createEncryptedDatabase("rrhh.db"); // Usada en administrador.js para sincronizar usuarios con empleados
 
 dbDevol.exec(`
@@ -234,7 +232,7 @@ dbReenvios.exec(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     pedido TEXT NOT NULL, fecha TEXT NOT NULL, hora TEXT NOT NULL,
     estatus TEXT NOT NULL DEFAULT 'Listo para enviar',
-    paqueteria TEXT, guia TEXT, observaciones TEXT,
+    paqueteria TEXT, guia TEXT, piezas INTEGER, observaciones TEXT,
     evidencia_count INTEGER DEFAULT 0,
     fecha_enviado TEXT,
     fecha_en_transito TEXT,
@@ -247,7 +245,7 @@ dbReenvios.exec(`
   
   CREATE TABLE IF NOT EXISTS reenvios_historico (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    pedido TEXT, paqueteria TEXT, guia TEXT, observaciones TEXT, estatus TEXT,
+    pedido TEXT, paqueteria TEXT, guia TEXT, piezas INTEGER, observaciones TEXT, estatus TEXT,
     fecha TEXT, hora TEXT, evidencia_count INTEGER, fechaCorte TEXT,
     fecha_enviado TEXT, fecha_en_transito TEXT, fecha_entregado TEXT,
     ultima_actualizacion TEXT
@@ -348,6 +346,9 @@ try {
   if (!nombresColumnas.includes("ultima_actualizacion")) {
     dbReenvios.exec("ALTER TABLE reenvios ADD COLUMN ultima_actualizacion TEXT");
   }
+  if (!nombresColumnas.includes("piezas")) {
+    dbReenvios.exec("ALTER TABLE reenvios ADD COLUMN piezas INTEGER");
+  }
   
   // Migración para histórico
   const columnasHistorico = dbReenvios.prepare("PRAGMA table_info(reenvios_historico)").all();
@@ -364,6 +365,9 @@ try {
   }
   if (!nombresColumnasHist.includes("ultima_actualizacion")) {
     dbReenvios.exec("ALTER TABLE reenvios_historico ADD COLUMN ultima_actualizacion TEXT");
+  }
+  if (!nombresColumnasHist.includes("piezas")) {
+    dbReenvios.exec("ALTER TABLE reenvios_historico ADD COLUMN piezas INTEGER");
   }
 } catch (e) {
   console.warn("⚠️ Error en migración de reenvíos:", e.message);
@@ -1742,10 +1746,8 @@ const BASE_PERMS = [
   "tab:inventario",
   "tab:activaciones",
   "tab:rep_activaciones",
-  "tab:tienda",
   "tab:activos",
   "tab:admin",
-  "tab:ixora_ia",
   "tab:auditoria",
   // Permisos de picking/escaneo
   "picking.escaneo",
@@ -1821,17 +1823,6 @@ const BASE_PERMS = [
   "inventario.exportar",
   "inventario.importar",
   "inventario.crear_inventario",
-  // Permisos de tienda
-  "tienda.ver",
-  "tienda.productos.ver",
-  "tienda.productos.crear",
-  "tienda.productos.editar",
-  "tienda.productos.eliminar",
-  "tienda.pedidos.ver",
-  "tienda.pedidos.procesar",
-  "tienda.pedidos.cancelar",
-  "tienda.configurar",
-  "tienda.exportar",
   // Permisos de activos
   "activos.ver",
   "activos.crear",
@@ -1882,12 +1873,6 @@ const BASE_PERMS = [
   "admin.personalizacion.editar",
   // Permisos de fotos
   "admin.fotos.subir",
-  // Permisos de IXORA IA
-  "ixora_ia.chat",
-  "ixora_ia.comandos_voz",
-  "ixora_ia.reconocimiento",
-  "ixora_ia.generar_imagen",
-  "ixora_ia.reportes",
 ];
 
 const insPerm = dbUsers.prepare(
@@ -2740,5 +2725,5 @@ if (!tablaPDAsExiste) {
 
 export { 
   dbInv, dbDia, dbHist, dbUsers, dbReenvios, dbAud, dbDevol, dbChat, IXORA_PHONE,
-  dbActivos, dbVentas, dbRRHH
+  dbActivos, dbRRHH
 };

@@ -1395,9 +1395,56 @@ router.get("/dia/devoluciones/:tipo/resumen", (req, res) => {
    FECHA ACTUAL
    ============================================================ */
 
-router.get("/fecha-actual", (_req, res) =>
-  res.json({ fecha: getFechaActual() || "" })
-);
+router.get("/fecha-actual", (_req, res) => {
+  const fechaManual = getFechaActual();
+  
+  // Si no hay fecha manual establecida (null o vacío), devolver fecha actual del sistema
+  if (!fechaManual || fechaManual === "") {
+    const hoy = new Date();
+    const año = hoy.getFullYear();
+    const mes = String(hoy.getMonth() + 1).padStart(2, '0');
+    const dia = String(hoy.getDate()).padStart(2, '0');
+    const fechaActual = `${año}-${mes}-${dia}`;
+    
+    return res.json({ fecha: fechaActual, esAutomatica: true });
+  }
+  
+  // Si hay fecha manual, devolverla
+  return res.json({ fecha: fechaManual, esAutomatica: false });
+});
+
+// Endpoint para eliminar fecha manual automáticamente (cuando expira)
+router.post("/fecha-actual/eliminar-automatica", authRequired, (req, res) => {
+  const userId = req.user?.id;
+
+  if (!userId) {
+    return res.status(401).json({ error: "Usuario no autenticado" });
+  }
+
+  const fechaAnterior = getFechaActual();
+  
+  // Eliminar la fecha (volver a automática)
+  setFechaActual("", userId);
+  getIO().emit("fecha_actualizada", "");
+  
+  console.log(`⏰ [SISTEMA] Fecha manual expirada automáticamente (3 minutos). Usuario: ${userId}`);
+  
+  // Registrar en auditoría
+  try {
+    registrarAccion({
+      usuario: userId,
+      accion: "FECHA_EXPIRADA_AUTO",
+      detalle: `Fecha manual ${fechaAnterior} expiró automáticamente (3 minutos)`,
+      tabla: "sistema",
+      registroId: null,
+      cambios: { fecha_anterior: fechaAnterior, razon: "Expiración automática 3 minutos" }
+    });
+  } catch (err) {
+    console.error("Error registrando expiración automática:", err);
+  }
+  
+  res.json({ success: true, fecha: "" });
+});
 
 // Endpoint para validar contraseña de admin
 router.post("/fecha-actual/validar-password", authRequired, async (req, res) => {
@@ -1575,9 +1622,33 @@ router.post(
       const f = req.body?.fecha || getFechaActual();
       if (!f) return res.status(400).json({ error: "Falta fecha" });
 
-    // ⚠️ VERIFICAR SI HAY PRODUCTOS SIN SURTIR
-    const productosSinSurtir = dbDia.prepare("SELECT COUNT(*) as count FROM productos WHERE surtido = 0").get();
+    // ⚠️ PRIMERO: Verificar si hay productos en total
+    const totalProductos = dbDia.prepare("SELECT COUNT(*) as count FROM productos").get();
     
+    // Si no hay productos, cerrar directamente sin preguntar
+    if (totalProductos.count === 0) {
+      // Emitir eventos
+      const io = getIO();
+      io.emit("productos_actualizados", []);
+      io.emit("picking_actualizado");
+      io.emit("cerrar_dia");
+      io.emit("reportes_actualizados");
+      
+      registrarAccion({
+        usuario: req.user,
+        accion: "CERRAR_DIA_PICKING",
+        detalle: `Cerró el día ${f} de PICKING (sin productos)`,
+        tabla: "productos",
+        registroId: 0,
+      });
+      
+      return res.json({ success: true, cantidad: 0 });
+    }
+
+    // ⚠️ VERIFICAR SI HAY PRODUCTOS SIN SURTIR (excluyendo no disponibles)
+    const productosSinSurtir = dbDia.prepare("SELECT COUNT(*) as count FROM productos WHERE surtido = 0 AND disponible = 1").get();
+    
+    // Solo preguntar si realmente hay productos sin surtir (que sí están disponibles)
     if (productosSinSurtir.count > 0 && !req.body?.confirmarEliminacion) {
       return res.status(200).json({ 
         requireConfirmation: true,
@@ -1589,9 +1660,9 @@ router.post(
     /* ----- PASAR PRODUCTOS AL HISTÓRICO ----- */
     let registros;
     
-    // Si eligió dejar los sin surtir, solo tomar los surtidos
+    // Si eligió dejar los sin surtir, tomar los surtidos + los no disponibles
     if (productosSinSurtir.count > 0 && req.body?.dejarSinSurtir) {
-      registros = dbDia.prepare("SELECT * FROM productos WHERE surtido = 1").all();
+      registros = dbDia.prepare("SELECT * FROM productos WHERE surtido = 1 OR disponible = 0").all();
     } else {
       // Si no hay sin surtir o eligió eliminarlos, tomar todos
       registros = dbDia.prepare("SELECT * FROM productos").all();
@@ -1642,8 +1713,8 @@ router.post(
     const deleteProductos = dbDia.transaction(() => {
       let info;
       if (productosSinSurtir.count > 0 && req.body?.dejarSinSurtir) {
-        // Solo eliminar productos surtidos
-        info = dbDia.prepare("DELETE FROM productos WHERE surtido = 1").run();
+        // Eliminar productos surtidos Y los no disponibles
+        info = dbDia.prepare("DELETE FROM productos WHERE surtido = 1 OR disponible = 0").run();
       } else {
         // Eliminar TODOS los productos del día
         info = dbDia.prepare("DELETE FROM productos").run();

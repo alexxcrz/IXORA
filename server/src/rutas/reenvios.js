@@ -166,14 +166,14 @@ router.post(
   "/",
   requierePermiso("tab:reenvios"),
   (req, res) => {
-    const { pedido, paqueteria, guia, observaciones } = req.body;
+    const { pedido, paqueteria, guia, piezas, observaciones } = req.body;
 
     if (!pedido) return res.status(400).json({ error: "Pedido requerido" });
 
     const info = dbReenvios
       .prepare(
-        `INSERT INTO reenvios (pedido, fecha, hora, estatus, paqueteria, guia, observaciones)
-         VALUES (?, ?, ?, 'Listo para enviar', ?, ?, ?)`
+        `INSERT INTO reenvios (pedido, fecha, hora, estatus, paqueteria, guia, piezas, observaciones)
+         VALUES (?, ?, ?, 'Listo para enviar', ?, ?, ?, ?)`
       )
       .run(
         pedido,
@@ -181,6 +181,7 @@ router.post(
         dayjs().format("HH:mm:ss"),
         paqueteria || null,
         guia || null,
+        piezas || null,
         observaciones || ""
       );
 
@@ -203,17 +204,18 @@ router.put(
   "/:id/envio",
   requierePermiso("tab:reenvios"),
   (req, res) => {
-    const { pedido, guia, paqueteria } = req.body;
+    const { pedido, guia, paqueteria, piezas } = req.body;
 
     dbReenvios
       .prepare(
         `UPDATE reenvios 
          SET pedido = COALESCE(?, pedido),
              guia = COALESCE(?, guia),
-             paqueteria = COALESCE(?, paqueteria)
+             paqueteria = COALESCE(?, paqueteria),
+             piezas = COALESCE(?, piezas)
          WHERE id = ?`
       )
-      .run(pedido, guia, paqueteria, req.params.id);
+      .run(pedido, guia, paqueteria, piezas, req.params.id);
 
     registrarAccion({
       usuario: req.user?.name,
@@ -236,7 +238,7 @@ router.put(
   "/:id/editar-reporte",
   requierePermiso("tab:reenvios"),   // Acceso a reenvíos
   (req, res) => {
-    const { pedido, guia, paqueteria, observaciones, estatus } = req.body;
+    const { pedido, guia, paqueteria, piezas, observaciones, estatus } = req.body;
 
     dbReenvios
       .prepare(
@@ -244,11 +246,12 @@ router.put(
          SET pedido = COALESCE(?, pedido),
              guia = COALESCE(?, guia),
              paqueteria = COALESCE(?, paqueteria),
+             piezas = COALESCE(?, piezas),
              observaciones = COALESCE(?, observaciones),
              estatus = COALESCE(?, estatus)
          WHERE id = ?`
       )
-      .run(pedido, guia, paqueteria, observaciones, estatus, req.params.id);
+      .run(pedido, guia, paqueteria, piezas, observaciones, estatus, req.params.id);
 
     registrarAccion({
       usuario: req.user?.name,
@@ -442,7 +445,7 @@ router.post(
   "/:id/liberar",
   requierePermiso("tab:reenvios"),   // Acceso a reenvíos
   (req, res) => {
-    const { nuevoPedido, paqueteria, guia, comentario } = req.body;
+    const { nuevoPedido, paqueteria, guia, piezas, comentario } = req.body;
     const id = req.params.id;
 
     const item = dbReenvios.prepare("SELECT * FROM reenvios WHERE id=?").get(id);
@@ -458,10 +461,11 @@ router.post(
            SET estatus='Listo para enviar',
                observaciones=?,
                paqueteria=COALESCE(?, paqueteria),
-               guia=COALESCE(?, guia)
+               guia=COALESCE(?, guia),
+               piezas=COALESCE(?, piezas)
            WHERE id=?`
         )
-        .run(obs, paqueteria || null, guia || null, id);
+        .run(obs, paqueteria || null, guia || null, piezas || null, id);
 
       registrarAccion({
         usuario: req.user?.name,
@@ -490,7 +494,7 @@ router.post(
 
     const info = dbReenvios
       .prepare(
-        "INSERT INTO reenvios (pedido, fecha, hora, estatus, observaciones, paqueteria, guia) VALUES (?,?,?,?,?,?,?)"
+        "INSERT INTO reenvios (pedido, fecha, hora, estatus, observaciones, paqueteria, guia, piezas) VALUES (?,?,?,?,?,?,?,?)"
       )
       .run(
         nuevoPedido,
@@ -499,7 +503,8 @@ router.post(
         "Listo para enviar",
         `Reemplazo de ${item.pedido}` + (comentario ? `\n${comentario}` : ""),
         paqueteria || item.paqueteria || null,
-        guia || item.guia || null
+        guia || item.guia || null,
+        piezas || item.piezas || null
       );
 
     registrarAccion({
@@ -998,32 +1003,10 @@ router.delete(
 const handleCerrarReenvios = (req, res) => {
     const fechaCorte = req.body?.fecha || dayjs().format("YYYY-MM-DD");
 
-    // Verificar si hay reenvíos pendientes (Listo para enviar)
-    const reenviosPendientes = dbReenvios
-      .prepare(`SELECT COUNT(*) as count FROM reenvios WHERE estatus = 'Listo para enviar'`)
-      .get();
-
-    if (reenviosPendientes.count > 0 && !req.body?.confirmarEliminacion) {
-      return res.status(200).json({ 
-        requireConfirmation: true,
-        pendientes: reenviosPendientes.count,
-        message: `Hay ${reenviosPendientes.count} reenvío(s) sin enviar. ¿Desea eliminarlos o dejarlos para el siguiente día?`
-      });
-    }
-
-    // Obtener solo los reenvíos que se van a cerrar
-    let rows;
-    if (reenviosPendientes.count > 0 && req.body?.dejarPendientes) {
-      // Solo cerrar los que ya fueron enviados, cancelados o reemplazados
-      rows = dbReenvios
-        .prepare(`SELECT * FROM reenvios WHERE estatus IN ('Enviado','Cancelado','Reemplazado')`)
-        .all();
-    } else {
-      // Cerrar todos (incluyendo pendientes)
-      rows = dbReenvios
-        .prepare(`SELECT * FROM reenvios WHERE estatus IN ('Enviado','Cancelado','Reemplazado','Listo para enviar')`)
-        .all();
-    }
+    // Obtener todos los reenvíos para cerrar
+    const rows = dbReenvios
+      .prepare(`SELECT * FROM reenvios WHERE estatus IN ('Enviado','Cancelado','Reemplazado','Listo para enviar')`)
+      .all();
 
     if (!rows.length) return res.json({ ok: true, cantidad: 0, fechaCorte });
 
@@ -1080,9 +1063,9 @@ const handleCerrarReenvios = (req, res) => {
 
     const ins = dbReenvios.prepare(`
       INSERT INTO reenvios_historico 
-      (pedido, fecha, hora, estatus, paqueteria, guia, observaciones, evidencia_count, fechaCorte,
+      (pedido, fecha, hora, estatus, paqueteria, guia, piezas, observaciones, evidencia_count, fechaCorte,
        fecha_enviado, fecha_en_transito, fecha_entregado, ultima_actualizacion)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     const tx = dbReenvios.transaction(() => {
@@ -1094,6 +1077,7 @@ const handleCerrarReenvios = (req, res) => {
           r.estatus,
           r.paqueteria,
           r.guia,
+          r.piezas || null,
           r.observaciones,
           r.evidencia_count,
           fechaCorte,

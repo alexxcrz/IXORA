@@ -76,7 +76,10 @@ router.post(
   (req, res) => {
     const { nuevo_codigo, codigo_principal } = req.body || {};
 
+    console.log("📝 [ALIAS/CREAR] Recibido:", { nuevo_codigo, codigo_principal });
+
     if (!nuevo_codigo || !codigo_principal) {
+      console.error("❌ [ALIAS/CREAR] Faltan datos:", { nuevo_codigo, codigo_principal });
       return res.status(400).json({ error: "Faltan datos" });
     }
 
@@ -85,6 +88,7 @@ router.post(
       .get(codigo_principal);
 
     if (!principal) {
+      console.error("❌ [ALIAS/CREAR] El código principal no existe:", codigo_principal);
       return res
         .status(404)
         .json({ error: "El código principal no existe en inventario" });
@@ -106,13 +110,18 @@ router.post(
         registroId: 0,
       });
 
+      console.log("✅ [ALIAS/CREAR] Alias creado exitosamente:", `${nuevo_codigo} → ${codigo_principal}`);
       res.json({ ok: true });
     } catch (e) {
-      if (String(e.message).includes("UNIQUE"))
+      console.error("❌ [ALIAS/CREAR] Error en base de datos:", e.message);
+      if (String(e.message).includes("UNIQUE")) {
+        console.error("❌ [ALIAS/CREAR] Código duplicado:", nuevo_codigo);
         return res
           .status(400)
           .json({ error: "Ese código ya está registrado como alterno" });
+      }
 
+      console.error("❌ [ALIAS/CREAR] Error no identificado:", e);
       res.status(500).json({ error: "Error guardando alias" });
     }
   }
@@ -616,6 +625,7 @@ router.put(
       });
 
       getIO().emit("inventario_actualizado");
+      getIO().emit("productos_general_actualizados");
 
       res.json({ ok: true });
     } catch (err) {

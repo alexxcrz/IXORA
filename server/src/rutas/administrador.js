@@ -494,6 +494,15 @@ router.put(
 
     const { name, phone, active, nickname, username } = req.body || {};
 
+    console.log(`🔄 [Admin] Editando usuario:`, {
+      id: u.id,
+      nombreAnterior: u.name,
+      nombreNuevo: name || u.name,
+      creado: u.created_at,
+      esSistema: u.es_sistema || false,
+      actualizadoPor: req.user?.name || req.user?.username || 'Unknown'
+    });
+
     try {
       // Si nickname está presente en el body (incluso si es null o cadena vacía), usarlo
       // Si no está presente, mantener el valor anterior
@@ -570,6 +579,8 @@ router.put(
           "SELECT id,name,phone,active,nickname,photo,username,created_at FROM users WHERE id=?"
         )
         .get(id);
+
+      console.log(`✅ [Admin] Usuario ${updated.name} actualizado exitosamente`);
 
       // Emitir evento de actualización
       getIO().emit("usuarios_actualizados");
@@ -807,34 +818,66 @@ router.put(
   permit("admin.permisos.asignar"),
   (req, res) => {
     const { perms = [] } = req.body || {};
-    const u = dbUsers.prepare("SELECT id FROM users WHERE id=?").get(req.params.id);
+    const u = dbUsers.prepare("SELECT id, name, phone, created_at FROM users WHERE id=?").get(req.params.id);
 
     if (!u) return res.status(404).json({ error: "Usuario no encontrado" });
 
+    console.log(`🔄 [Admin] Actualizando permisos para usuario:`, {
+      id: u.id,
+      nombre: u.name,
+      telefono: u.phone,
+      creado: u.created_at,
+      permisosDirectos: perms.length,
+      actualizadoPor: req.user?.name || req.user?.username || 'Unknown'
+    });
+
     // Usar transacción para asegurar atomicidad
     const updatePerms = dbUsers.transaction((userId, permsArray) => {
-      dbUsers.prepare("DELETE FROM user_permissions WHERE user_id=?").run(userId);
+      // Eliminar permisos directos actuales
+      const deleteResult = dbUsers.prepare("DELETE FROM user_permissions WHERE user_id=?").run(userId);
+      console.log(`  🗑️ ${deleteResult.changes} permiso(s) directo(s) eliminado(s)`);
 
       const getPid = dbUsers.prepare("SELECT id FROM permissions WHERE perm=?");
       const ins = dbUsers.prepare(
         "INSERT OR IGNORE INTO user_permissions (user_id,perm_id) VALUES (?,?)"
       );
 
+      let permisosAsignados = 0;
+      let permisosNoEncontrados = [];
+
       for (const p of permsArray) {
         const pid = getPid.get(p);
-        if (pid) ins.run(userId, pid.id);
+        if (pid) {
+          ins.run(userId, pid.id);
+          permisosAsignados++;
+        } else {
+          permisosNoEncontrados.push(p);
+        }
+      }
+
+      console.log(`  ✅ ${permisosAsignados} permiso(s) directo(s) asignado(s)`);
+      if (permisosNoEncontrados.length > 0) {
+        console.warn(`  ⚠️ Permisos no encontrados:`, permisosNoEncontrados);
       }
     });
 
     updatePerms(u.id, perms);
 
-    // ⚠️ NO invalidar sesiones - los permisos se consultan en tiempo real desde la BD
-    // Solo invalidar si el usuario editado es diferente al que está haciendo la acción
-    // Esto evita que el admin pierda su sesión al editar sus propios permisos
+    // Invalidar sesiones del usuario para forzar recarga de permisos
+    // EXCEPTO si el usuario editado es el admin actual
     const currentUserId = req.user?.id;
     if (currentUserId && u.id !== currentUserId) {
-      dbUsers.prepare("DELETE FROM user_sessions WHERE user_id=?").run(u.id);
+      const sessionCount = dbUsers.prepare("SELECT COUNT(*) as count FROM user_sessions WHERE user_id=?").get(u.id);
+      if (sessionCount && sessionCount.count > 0) {
+        dbUsers.prepare("DELETE FROM user_sessions WHERE user_id=?").run(u.id);
+        console.log(`  🔐 ${sessionCount.count} sesión(es) invalidada(s) para forzar recarga`);
+      }
+    } else if (u.id === currentUserId) {
+      console.log(`  ℹ️ No se invalidan sesiones (usuario es el admin actual)`);
+      console.log(`  💡 Los cambios se reflejarán en la próxima petición`);
     }
+
+    console.log(`✅ [Admin] Permisos actualizados exitosamente para ${u.name}`);
 
     // Emitir evento de actualización
     getIO().emit("usuarios_actualizados");
