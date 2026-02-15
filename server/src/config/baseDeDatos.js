@@ -7,8 +7,44 @@ const dbInv = createEncryptedDatabase("inventario.db");
 const dbDia = createEncryptedDatabase("productos_dia.db");  
 const dbHist = createEncryptedDatabase("productos.db");
 const dbUsers = createEncryptedDatabase("usuarios.db");     
-const dbReenvios = createEncryptedDatabase("reenvios.db"); 
+
+const dbReenvios = createEncryptedDatabase("reenvios.db");
+// Crear tabla reenvios si no existe
+dbReenvios.exec(`
+  CREATE TABLE IF NOT EXISTS reenvios (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    pedido TEXT,
+    fecha TEXT,
+    hora TEXT,
+    estatus TEXT,
+    paqueteria TEXT,
+    guia TEXT,
+    piezas INTEGER,
+    observaciones TEXT,
+    fecha_enviado TEXT,
+    fecha_en_transito TEXT,
+    fecha_entregado TEXT,
+    ultima_actualizacion TEXT
+  );
+`);
 const dbDevol = createEncryptedDatabase("devoluciones.db");
+
+// Crear tabla devoluciones_productos_general si no existe (para evitar errores 500 en pestaña Devoluciones)
+dbDevol.exec(`
+  CREATE TABLE IF NOT EXISTS devoluciones_productos_general (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    codigo TEXT,
+    nombre TEXT,
+    presentacion TEXT,
+    lote TEXT,
+    cantidad INTEGER,
+    caducidad TEXT,
+    apto INTEGER DEFAULT 1,
+    activo INTEGER DEFAULT 1,
+    pedido TEXT,
+    fecha TEXT
+  );
+`);
 const dbChat = createEncryptedDatabase("chat.db");
 const dbActivos = createEncryptedDatabase("activos_informaticos.db");
 const dbRRHH = createEncryptedDatabase("rrhh.db"); // Usada en administrador.js para sincronizar usuarios con empleados

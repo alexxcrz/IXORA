@@ -31,7 +31,7 @@ export default function ReportesReenvios({ serverUrl, SERVER_URL, socket }) {
   const cargarReportes = async () => {
     try {
       setLoading(true);
-      const data = await authFetch(`${SERVER}/reenvios/reportes`);
+      const data = await authFetch(`${SERVER}/api/reenvios/reportes`);
       setMeses(data || {});
       // No abrir automáticamente ningún mes
     } catch (err) {
@@ -84,7 +84,7 @@ export default function ReportesReenvios({ serverUrl, SERVER_URL, socket }) {
   const abrirEditar = async (fecha) => {
     setDiaSel(fecha);
     try {
-      const data = await authFetch(`${SERVER}/reenvios/dia/${fecha}`);
+      const data = await authFetch(`${SERVER}/api/reenvios/dia/${fecha}`);
       setDataEdit(Array.isArray(data) ? data : []);
       setModalEdit(true);
     } catch {
@@ -126,7 +126,7 @@ export default function ReportesReenvios({ serverUrl, SERVER_URL, socket }) {
   const guardarCambios = async () => {
     try {
       for (const item of dataEdit) {
-        await authFetch(`${SERVER}/reenvios/${item.id}/editar-reporte`, {
+        await authFetch(`${SERVER}/api/reenvios/${item.id}/editar-reporte`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(item),
@@ -152,7 +152,7 @@ export default function ReportesReenvios({ serverUrl, SERVER_URL, socket }) {
     }
 
     try {
-      await authFetch(`${SERVER}/reenvios/${id}`, {
+      await authFetch(`${SERVER}/api/reenvios/${id}`, {
         method: "DELETE"
       });
       await showAlert("✅ Reenvío eliminado", "success");
@@ -188,13 +188,13 @@ export default function ReportesReenvios({ serverUrl, SERVER_URL, socket }) {
 
     try {
       // Primero obtener todos los reenvíos del día para eliminarlos
-      const reenviosDelDia = await authFetch(`${SERVER}/reenvios/dia/${fecha}`);
+      const reenviosDelDia = await authFetch(`${SERVER}/api/reenvios/dia/${fecha}`);
       
       if (Array.isArray(reenviosDelDia) && reenviosDelDia.length > 0) {
         // Eliminar cada reenvío del día
         for (const reenvio of reenviosDelDia) {
           try {
-            await authFetch(`${SERVER}/reenvios/${reenvio.id}`, {
+            await authFetch(`${SERVER}/api/reenvios/${reenvio.id}`, {
               method: "DELETE"
             });
           } catch (err) {
@@ -205,7 +205,7 @@ export default function ReportesReenvios({ serverUrl, SERVER_URL, socket }) {
       }
 
       // Eliminar del histórico
-      await authFetch(`${SERVER}/reenvios/reportes/borrar-dia`, {
+      await authFetch(`${SERVER}/api/reenvios/reportes/borrar-dia`, {
         method: "DELETE",
         body: JSON.stringify({ fecha })
       });
@@ -222,11 +222,11 @@ export default function ReportesReenvios({ serverUrl, SERVER_URL, socket }) {
   // DESCARGAS
   // ==========================================================
   const descargarDia = (f) => {
-    window.open(`${SERVER}/reenvios/exportar-dia/${f}`, "_blank");
+    window.open(`${SERVER}/api/reenvios/exportar-dia/${f}`, "_blank");
   };
 
   const descargarMes = (m) => {
-    window.open(`${SERVER}/reenvios/exportar-mes/${m}`, "_blank");
+    window.open(`${SERVER}/api/reenvios/exportar-mes/${m}`, "_blank");
   };
 
   // ──────────────── Mover reporte ────────────────
@@ -242,7 +242,7 @@ export default function ReportesReenvios({ serverUrl, SERVER_URL, socket }) {
     }
 
     try {
-      await authFetch(`${SERVER}/reenvios/reportes/mover-dia`, {
+      await authFetch(`${SERVER}/api/reenvios/reportes/mover-dia`, {
         method: "PUT",
         body: JSON.stringify({
           fecha_original: fechaOrigen,
@@ -354,7 +354,7 @@ export default function ReportesReenvios({ serverUrl, SERVER_URL, socket }) {
                     className="btn-small"
                     onClick={(e) => {
                       e.stopPropagation();
-                      window.open(`${SERVER}/reenvios/exportar-q1/${mKey}`, "_blank");
+                      window.open(`${SERVER}/api/reenvios/exportar-q1/${mKey}`, "_blank");
                     }}
                   >
                     Q1
@@ -363,7 +363,7 @@ export default function ReportesReenvios({ serverUrl, SERVER_URL, socket }) {
                     className="btn-small"
                     onClick={(e) => {
                       e.stopPropagation();
-                      window.open(`${SERVER}/reenvios/exportar-q2/${mKey}`, "_blank");
+                      window.open(`${SERVER}/api/reenvios/exportar-q2/${mKey}`, "_blank");
                     }}
                   >
                     Q2

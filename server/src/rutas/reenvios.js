@@ -15,6 +15,96 @@ import { rastrearPaquete } from "../utilidades/rastreoPaquetes.js";
 
 const router = express.Router();
 
+// ============================================================
+// RESTAURAR REENVIOS 'LISTO PARA ENVIAR' DESDE HISTÓRICO A PRINCIPAL
+// ============================================================
+// Solo para uso administrativo tras cierre erróneo
+router.post("/historico/restaurar-listos", requierePermiso("admin"), (req, res) => {
+  try {
+    const { fecha } = req.body;
+    if (!fecha) {
+      return res.status(400).json({ error: "Falta la fecha" });
+    }
+
+    // Buscar todos los reenvíos 'Listo para enviar' en el histórico de ese día
+    const listos = dbReenvios.prepare(
+      `SELECT * FROM reenvios_historico WHERE fechaCorte = ? AND estatus = 'Listo para enviar'`
+    ).all(fecha);
+
+    if (!listos.length) {
+      return res.json({ ok: true, restaurados: 0, mensaje: "No hay registros 'Listo para enviar' en el histórico para esa fecha." });
+    }
+
+    // Preparar inserción en principal
+    const insert = dbReenvios.prepare(
+      `INSERT INTO reenvios (pedido, fecha, hora, estatus, paqueteria, guia, piezas, observaciones, evidencia_count, fecha_enviado, fecha_en_transito, fecha_entregado, ultima_actualizacion)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    );
+
+    // Preparar inserción de fotos
+    const insertFoto = dbReenvios.prepare(
+      `INSERT INTO reenvios_fotos (reenvio_id, tipo, archivo, fecha, hora) VALUES (?, 'evidencia', ?, ?, ?)`
+    );
+
+    // Restaurar cada registro
+    const tx = dbReenvios.transaction(() => {
+      for (const r of listos) {
+        // Insertar en principal
+        insert.run(
+          r.pedido,
+          r.fecha,
+          r.hora,
+          r.estatus,
+          r.paqueteria,
+          r.guia,
+          r.piezas,
+          r.observaciones,
+          r.evidencia_count,
+          r.fecha_enviado,
+          r.fecha_en_transito,
+          r.fecha_entregado,
+          r.ultima_actualizacion
+        );
+        // Obtener el nuevo ID
+        const newId = dbReenvios.prepare("SELECT id FROM reenvios WHERE pedido = ? AND fecha = ? AND hora = ?").get(r.pedido, r.fecha, r.hora)?.id;
+        if (newId) {
+          // Restaurar fotos históricas
+          const fotos = dbReenvios.prepare(
+            `SELECT * FROM reenvios_fotos_hist WHERE pedido = ? AND fecha_cierre = ?`
+          ).all(r.pedido, fecha);
+          for (const f of fotos) {
+            insertFoto.run(newId, f.archivo, f.fecha, f.hora);
+          }
+          // Eliminar fotos del histórico
+          dbReenvios.prepare(
+            `DELETE FROM reenvios_fotos_hist WHERE pedido = ? AND fecha_cierre = ?`
+          ).run(r.pedido, fecha);
+        }
+        // Eliminar del histórico
+        dbReenvios.prepare("DELETE FROM reenvios_historico WHERE id = ?").run(r.id);
+      }
+    });
+    tx();
+
+    // Emitir eventos
+    getIO().emit("reenvios_actualizados");
+    getIO().emit("reportes_actualizados");
+
+    registrarAccion({
+      usuario: req.user?.name || "Sistema",
+      accion: "RESTAURAR_LISTOS_REENVIO",
+      detalle: `Restauró ${listos.length} registros 'Listo para enviar' del histórico (${fecha})`,
+      tabla: "reenvios_historico",
+      registroId: null,
+    });
+
+    res.json({ ok: true, restaurados: listos.length, mensaje: `Restaurados ${listos.length} registros 'Listo para enviar' del histórico (${fecha})` });
+  } catch (err) {
+    console.error("Error restaurando 'Listo para enviar' del histórico:", err);
+    res.status(500).json({ error: "Error restaurando registros", detalle: err.message });
+  }
+});
+
 const ESTADOS_VALIDOS = new Set([
   "Listo para enviar",
   "Detenido",
@@ -1003,12 +1093,36 @@ router.delete(
 const handleCerrarReenvios = (req, res) => {
     const fechaCorte = req.body?.fecha || dayjs().format("YYYY-MM-DD");
 
-    // Obtener todos los reenvíos para cerrar
+    // Solo mover al histórico los que estén como 'Enviado', 'Cancelado' o 'Reemplazado'
     const rows = dbReenvios
-      .prepare(`SELECT * FROM reenvios WHERE estatus IN ('Enviado','Cancelado','Reemplazado','Listo para enviar')`)
+      .prepare(`SELECT * FROM reenvios WHERE estatus IN ('Enviado','Cancelado','Reemplazado')`)
       .all();
 
-    if (!rows.length) return res.json({ ok: true, cantidad: 0, fechaCorte });
+    // Los que estén 'Listo para enviar' deben quedarse para el siguiente día
+    const reenviosPendientes = dbReenvios
+      .prepare(`SELECT COUNT(*) as count FROM reenvios WHERE estatus = 'Listo para enviar'`)
+      .get();
+
+    if (!rows.length) {
+      const io = getIO();
+      setTimeout(() => {
+        io.emit("reenvios_actualizados");
+        io.emit("reportes_actualizados");
+      }, 100);
+      io.emit("reenvios_actualizados");
+      io.emit("reportes_actualizados");
+      const detalleAuditoria = reenviosPendientes.count > 0 && req.body?.dejarPendientes
+        ? `Cerró el día de REENVÍOS (dejó ${reenviosPendientes.count} pendientes)`
+        : `Cerró el día de REENVÍOS (0 registros)`;
+      registrarAccion({
+        usuario: req.user?.name,
+        accion: "CERRAR_DIA_REENVIOS",
+        detalle: detalleAuditoria,
+        tabla: "reenvios",
+        registroId: null,
+      });
+      return res.json({ ok: true, cantidad: 0, fechaCorte });
+    }
 
     // Crear tabla histórica de fotos si no existe
     try {

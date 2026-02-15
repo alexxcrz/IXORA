@@ -293,8 +293,7 @@ select:focus {
 }
 
 .tabla-registros {
-  width: max-content !important;
-  min-width: 1500px !important;
+  width: 100% !important;
   background: var(--fondo-card);
   color: var(--texto-principal);
   border-collapse: collapse !important;
@@ -902,7 +901,7 @@ input[type="number"].reg-modal::-moz-appearance {
   }
 
   .tabla-registros {
-    min-width: 1300px; /* Aumentado para PDA */
+    min-width: 0 !important;
   }
 
   .tabla-registros th:nth-child(3),

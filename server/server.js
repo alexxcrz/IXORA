@@ -147,7 +147,7 @@ app.use(authRoutes);
 app.use("/devoluciones", devolucionesRoutes);
 app.use("/inventario", inventoryRoutes);
 app.use(dailyRoutes);
-app.use("/reenvios", ReenviosRoutes);
+app.use("/api/reenvios", ReenviosRoutes);
 app.use(reportRoutes);
 app.use(adminRoutes);
 app.use("/chat", chatRoutes);
@@ -234,7 +234,53 @@ app.get("/__debug_hist", (req, res) => {
   }
 });
 
-// Eliminada toda la lógica de React/client/build y rutas frontend
+
+
+// Fallback SPA: servir index.html para rutas principales de pestañas
+import { readFile } from "fs/promises";
+const SPA_TABS = [
+  "/devoluciones",
+  "/inventario",
+  "/picking",
+  "/registros",
+  "/registrospicking",
+  "/reportes",
+  "/reportesdevoluciones",
+  "/reportespicking",
+  "/reportesactivaciones",
+  // "/reenvios", // Handler dedicado abajo
+  "/activaciones",
+  "/admin",
+  "/auditoria",
+  "/activos",
+  "/activosinformaticos",
+  "/ixoraia",
+  "/ixora_ia",
+  "/login",
+  "/personalizacion",
+  "/controlcalidad",
+  "/tienda"
+];
+
+// Fallback SPA: servir index.html para cualquier ruta no API ni estática
+app.get("*", async (req, res, next) => {
+  if (
+    req.path.startsWith("/api/") ||
+    req.path.startsWith("/uploads/") ||
+    req.path.startsWith("/sounds/") ||
+    req.path.startsWith("/personalizacion/")
+  ) {
+    return next();
+  }
+  try {
+    const indexPath = path.join(process.cwd(), "client", "public", "index.html");
+    const html = await readFile(indexPath, "utf8");
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.send(html);
+  } catch (err) {
+    res.status(500).send("No se pudo cargar la aplicación.");
+  }
+});
 
 // Iniciar servidor
 const PORT = process.env.PORT || 3001;

@@ -18,8 +18,7 @@ import ReportesDevoluciones from "./pestañas/ReportesDevoluciones/ReportesDevol
 import Administrador from "./pestañas/Administrador/Administrador";
 import Reenvios from "./pestañas/Reenvios/Reenvios";
 import ReportesReenvios from "./pestañas/ReportesReenvios/ReportesReenvios";
-import IxoraIA from "./pestañas/IxoraIA/IxoraIA";
-import Tienda from "./pestañas/Tienda/Tienda";
+
 import ActivosInformaticos from "./pestañas/ActivosInformaticos/ActivosInformaticos";
 import Activaciones from "./pestañas/Activaciones/Activaciones";
 import ReportesActivaciones from "./pestañas/ReportesActivaciones/ReportesActivaciones";
@@ -348,7 +347,7 @@ const TITULO_TABS = {
   auditoria: "Auditoría",
   admin: "Administrador",
   ixora_ia: "IXORA IA",
-  tienda: "Tienda",
+
   activos: "Activos Informáticos",
 };
 
@@ -739,7 +738,7 @@ function App() {
       { tab: "activaciones", perm: "tab:activaciones" },
       { tab: "rep_activaciones", perm: "tab:rep_activaciones" },
       { tab: "auditoria", perm: "tab:auditoria" },
-      { tab: "tienda", perm: "tab:tienda" },
+
       { tab: "activos", perm: "tab:activos" },
       { tab: "admin", perm: "tab:admin" },
       { tab: "ixora_ia", perm: "tab:ixora_ia" },
@@ -851,16 +850,6 @@ function App() {
     const initialTab = tabFromURL || "escaneo";
     
     // Si es tienda, permitir acceso sin permisos (pública)
-    if (initialTab === "tienda") {
-      if (initialTab !== activeTab) {
-        setActiveTab(initialTab);
-        const url = new URL(window.location);
-        url.pathname = `/${initialTab}`;
-        url.search = '';
-        window.history.replaceState({ tab: initialTab }, '', url);
-      }
-      return; // No verificar permisos para tienda
-    }
     
     // Para otras pestañas, verificar permisos
     if (!perms || perms.length === 0) return;
@@ -877,7 +866,6 @@ function App() {
       activaciones: "tab:activaciones",
       rep_activaciones: "tab:rep_activaciones",
       auditoria: "tab:auditoria",
-      tienda: "tab:tienda",
       activos: "tab:activos",
       admin: "tab:admin",
       ixora_ia: "tab:ixora_ia",
@@ -958,13 +946,6 @@ function App() {
 
   useEffect(() => {
     // Si estamos en la tienda, no cambiar el título (la tienda maneja su propio título)
-    if (activeTab === "tienda") {
-      const nombreTienda = localStorage.getItem('tienda_nombre');
-      if (nombreTienda) {
-        document.title = nombreTienda;
-        return; // No hacer nada más, dejar que la tienda maneje su título
-      }
-    }
     
     // Usar requestAnimationFrame para evitar parpadeos al cambiar título
     requestAnimationFrame(() => {
@@ -998,12 +979,11 @@ function App() {
             auditoria: "tab:auditoria",
             admin: "tab:admin",
             ixora_ia: "tab:ixora_ia",
-            tienda: "tab:tienda",
             activos: "tab:activos",
           };
           
           const requiredPerm = tabsWithPerms[previousTab];
-          if (!requiredPerm || can(requiredPerm) || previousTab === 'tienda') {
+          if (!requiredPerm || can(requiredPerm)) {
             setActiveTab(previousTab);
             const url = new URL(window.location);
             url.pathname = `/${previousTab}`;
@@ -1039,7 +1019,6 @@ function App() {
           auditoria: "tab:auditoria",
           admin: "tab:admin",
           ixora_ia: "tab:ixora_ia",
-          tienda: "tab:tienda",
           activos: "tab:activos",
         };
         
@@ -2358,13 +2337,10 @@ function App() {
       )}
 
       {activeTab === "ixora_ia" && can("tab:ixora_ia") && (
-        <IxoraIA serverUrl={SERVER_URL} pushToast={pushToast} socket={socket} />
+        {/* IxoraIA removed */}
       )}
 
 
-      {activeTab === "tienda" && (
-        <Tienda socket={socket} />
-      )}
 
       {activeTab === "activos" && can("tab:activos") && (
         <ActivosInformaticos serverUrl={SERVER_URL} socket={socket} />
@@ -2730,36 +2706,6 @@ function App() {
 
 
 
-          {can("tab:tienda") && debeMostrarPestaña("tab:tienda") && (
-            <>
-              <div 
-                className="menu-category menu-category-clickable"
-                onClick={() => setCategoriasColapsadas({...categoriasColapsadas, negocios: !categoriasColapsadas.negocios})}
-              >
-                <span>NEGOCIOS</span>
-                <span className="menu-category-arrow">{categoriasColapsadas.negocios ? "▼" : "▶"}</span>
-              </div>
-              {!categoriasColapsadas.negocios && (
-                <>
-                  {can("tab:tienda") && debeMostrarPestaña("tab:tienda") && (
-                    <a
-                      className={`menu-item ${activeTab === "tienda" ? "active" : ""}`}
-                      href="#tienda"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        cambiarModulo("tienda");
-                        cerrarMenu();
-                      }}
-                    >
-                      <span className="menu-icon">🛍️</span>
-                      Tienda
-                    </a>
-                  )}
-                </>
-              )}
-              <div className="menu-separator"></div>
-            </>
-          )}
 
           {((can("tab:admin") && debeMostrarPestaña("tab:admin")) || (can("tab:ixora_ia") && debeMostrarPestaña("tab:ixora_ia"))) && (
             <>

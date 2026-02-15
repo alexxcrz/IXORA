@@ -468,12 +468,11 @@ textarea:not(.login-bg textarea):not(.login-container textarea):not(.login-form-
 .items-table,
 .admin-table-wrapper,
 .gestion-table-wrapper,
-[class*="table-wrapper"],
-[class*="tabla-container"],
-[class*="table-container"] {
+ [class*="table-wrapper"],
+ [class*="tabla-container"],
+ [class*="table-container"] {
   overflow-x: auto !important;
   overflow-y: visible !important;
-  -webkit-overflow-scrolling: touch !important;
   width: 100% !important;
   max-width: 100% !important;
   position: relative !important;
@@ -598,17 +597,16 @@ table,
 .tabla-container,
 .table-container,
 .items-table,
-.admin-table-wrapper,
-.gestion-table-wrapper,
-[class*="table-wrapper"],
-[class*="tabla-container"],
-[class*="table-container"],
-[class*="wrapper"]:has(table) {
-  overflow-x: auto !important;
-  overflow-y: visible !important;
-  -webkit-overflow-scrolling: touch !important;
-  width: 100% !important;
-  max-width: 100% !important;
+ .admin-table-wrapper,
+ .gestion-table-wrapper,
+ [class*="table-wrapper"],
+ [class*="tabla-container"],
+ [class*="table-container"],
+ [class*="wrapper"]:has(table) {
+   overflow-x: auto !important;
+   overflow-y: visible !important;
+   width: 100% !important;
+   max-width: 100% !important;
 }
 
 /* TODAS las celdas deben mantener alineación estricta */
@@ -653,6 +651,7 @@ table td[style*="overflow"] {
   right: 0 !important;
   bottom: 0 !important;
   background: rgba(0, 0, 0, 0.7) !important;
+  -webkit-backdrop-filter: blur(4px) !important;
   backdrop-filter: blur(4px) !important;
   display: flex !important;
   justify-content: center !important;
@@ -1105,7 +1104,6 @@ html body label:not(.login-bg label):not(.login-container label):not(.login-form
   [class*="tabla-container"] {
     overflow-x: auto !important;
     overflow-y: visible !important;
-    -webkit-overflow-scrolling: touch !important;
     max-width: 100% !important;
     width: 100% !important;
   }
@@ -1138,7 +1136,6 @@ html body label:not(.login-bg label):not(.login-container label):not(.login-form
   [class*="subtabs"] {
     flex-wrap: wrap !important;
     overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
     gap: 6px;
   }
 

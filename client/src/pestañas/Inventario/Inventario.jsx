@@ -2310,14 +2310,7 @@ T 4 0 10 350 ${codigo}
   }
 
 
-  // Calcular si todos los productos están marcados para mostrar
-  const todosMarcados = useMemo(() => {
-    if (inventario.length === 0) return false;
-    return inventario.every(p => {
-      const valor = Number(p.mostrar_en_pagina || 0);
-      return valor === 1;
-    });
-  }, [inventario]);
+  // Eliminado: mostrar_en_pagina y switches relacionados
 
   const invFiltrado = useMemo(() => {
     // BARRERA DE SEGURIDAD: Filtrar SOLO productos del inventario activo
@@ -2657,124 +2650,37 @@ T 4 0 10 350 ${codigo}
         </div>
 
         {/* Switches discretos y estéticos */}
-        <div className="inventario-switches-container">
-          <div className="inventario-switch-item">
-            <label className="inventario-switch-label">
-              <div className="inventario-switch-content">
-                <span className="inventario-switch-text">Mostrar todo</span>
-                <div className="switch switch-elegant">
-                  <input
-                    type="checkbox"
-                    checked={todosMarcados}
-                    onChange={async (e) => {
-                      try {
-                        const activar = e.target.checked;
-                        
-                        // Filtrar productos que necesitan actualización
-                        const productosParaActualizar = inventario.filter(p => {
-                          const estadoActual = Number(p.mostrar_en_pagina || 0);
-                          const estadoDeseado = activar ? 1 : 0;
-                          return estadoActual !== estadoDeseado;
-                        });
-                        
-                        if (productosParaActualizar.length === 0) {
-                          // Si no hay productos para actualizar, actualizar el estado local para reflejar el cambio
-                          if (activar && inventario.some(p => Number(p.mostrar_en_pagina || 0) !== 1)) {
-                            // Si se activa pero hay productos desactivados, activarlos todos
-                            const todosIds = inventario.map(p => p.id);
-                            await authFetch(`${SERVER_URL}/inventario/masivo/mostrar-en-pagina`, {
-                              method: "PUT",
-                              headers: {
-                                "Content-Type": "application/json",
-                              },
-                              body: JSON.stringify({
-                                ids: todosIds,
-                                mostrar: true
-                              }),
-                            });
-                            setInventario(prev => prev.map(p => ({ ...p, mostrar_en_pagina: 1 })));
-                            pushToast(`✅ ${inventario.length} productos mostrados en página`, "ok");
-                          } else if (!activar && inventario.some(p => Number(p.mostrar_en_pagina || 0) === 1)) {
-                            // Si se desactiva pero hay productos activados, desactivarlos todos
-                            const todosIds = inventario.map(p => p.id);
-                            await authFetch(`${SERVER_URL}/inventario/masivo/mostrar-en-pagina`, {
-                              method: "PUT",
-                              headers: {
-                                "Content-Type": "application/json",
-                              },
-                              body: JSON.stringify({
-                                ids: todosIds,
-                                mostrar: false
-                              }),
-                            });
-                            setInventario(prev => prev.map(p => ({ ...p, mostrar_en_pagina: 0 })));
-                            pushToast(`⚠️ ${inventario.length} productos ocultos de la página`, "err");
-                          } else {
-                            pushToast("No hay productos para actualizar", "info");
-                          }
-                          return;
-                        }
 
-                        // Usar endpoint masivo para mayor eficiencia
-                        const ids = productosParaActualizar.map(p => p.id);
-                        await authFetch(`${SERVER_URL}/inventario/masivo/mostrar-en-pagina`, {
-                          method: "PUT",
-                          headers: {
-                            "Content-Type": "application/json",
-                          },
-                          body: JSON.stringify({
-                            ids,
-                            mostrar: activar ? 1 : 0
-                          }),
-                        });
 
-                        // Actualizar estado local SIN recargar (evita salto de scroll)
-                        // Asegurar que el estado se actualice correctamente usando función de actualización
-                        setInventario(prev => {
-                          const actualizado = prev.map(p => {
-                            if (ids.includes(p.id)) {
-                              return { ...p, mostrar_en_pagina: activar ? 1 : 0 };
-                            }
-                            return p;
-                          });
-                          return actualizado;
-                        });
 
-                        // Toast verde si se muestran, rojo si se ocultan
-                        pushToast(
-                          activar 
-                            ? `✅ ${productosParaActualizar.length} productos mostrados en página` 
-                            : `⚠️ ${productosParaActualizar.length} productos ocultos de la página`,
-                          activar ? "ok" : "err"
-                        );
-                      } catch (err) {
-                        console.error("Error actualizando productos:", err);
-                        pushToast("❌ Error actualizando productos: " + (err.message || "Error desconocido"), "err");
-                        // Revertir el estado del switch en caso de error
-                        e.target.checked = !e.target.checked;
-                      }
-                    }}
-                  />
-                  <span className="slider"></span>
-                </div>
-              </div>
-            </label>
+        <div className="search-container" style={{ display: 'flex', gap: '10px', alignItems: 'center', position: 'relative' }}>
+          <div style={{ position: 'relative', flex: 1 }}>
+            <input
+              className="search-input"
+              placeholder="Buscar (código, nombre, presentación, categoría o subcategoría)"
+              value={invQuery}
+              onChange={(e) => setInvQuery(e.target.value)}
+              style={{ width: '100%', paddingRight: '2em' }}
+            />
+            {!!invQuery && (
+              <span
+                onClick={() => setInvQuery("")}
+                style={{
+                  position: 'absolute',
+                  right: 10,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  cursor: 'pointer',
+                  fontSize: '1.3em',
+                  color: '#888',
+                  zIndex: 2
+                }}
+                title="Limpiar búsqueda"
+              >
+                ×
+              </span>
+            )}
           </div>
-        </div>
-
-        <div className="search-container" style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-          <input
-            className="search-input"
-            placeholder="Buscar (código, nombre, presentación, categoría o subcategoría)"
-            value={invQuery}
-            onChange={(e) => setInvQuery(e.target.value)}
-            style={{ flex: 1 }}
-          />
-          {!!invQuery && (
-            <button onClick={() => setInvQuery("")} className="btn-limpiar">
-              ×
-            </button>
-          )}
           <button
             onClick={() => setMostrarSoloAgotados(!mostrarSoloAgotados)}
             style={{
@@ -2834,7 +2740,7 @@ T 4 0 10 350 ${codigo}
                         <th>Lote</th>
                         <th style={{ textAlign: "center" }}>Pzs Lote Activo</th>
                         <th style={{ textAlign: "center" }}>Total Pzs General</th>
-                        <th style={{ textAlign: "center" }}>Mostrar</th>
+                        {/* <th style={{ textAlign: "center" }}>Mostrar</th> */}
                         <th>Códigos</th>
                         <th>Editar</th>
                         <th>Borrar</th>
@@ -3016,84 +2922,7 @@ T 4 0 10 350 ${codigo}
                             {p.total_piezas_general || 0}
                           </td>
 
-                          <td style={{ textAlign: "center" }}>
-                            <label
-                              className="switch"
-                              style={{
-                                opacity: !can("tab:inventario") ? 0.5 : 1,
-                                display: "inline-flex",
-                                cursor: can("tab:inventario") ? "pointer" : "not-allowed",
-                              }}
-                              title={
-                                !can("tab:inventario")
-                                  ? "No tienes autorización para mostrar/ocultar productos"
-                                  : Number(p.mostrar_en_pagina || 0) === 1
-                                  ? "Ocultar producto en página"
-                                  : "Mostrar producto en página"
-                              }
-                            >
-                              <input
-                                type="checkbox"
-                                checked={Number(p.mostrar_en_pagina || 0) === 1}
-                                onChange={async (e) => {
-                                  const nuevoEstado = e.target.checked;
-                                  const valorAnterior = Number(p.mostrar_en_pagina || 0);
-                                  
-                                  // Actualizar estado local INMEDIATAMENTE para feedback visual
-                                  setInventario(prev => prev.map(prod => {
-                                    if (prod.id === p.id) {
-                                      return { ...prod, mostrar_en_pagina: nuevoEstado ? 1 : 0 };
-                                    }
-                                    return prod;
-                                  }));
-                                  
-                                  try {
-                                    // Actualizar en el servidor
-                                    const response = await authFetch(`${SERVER_URL}/inventario/${p.id}`, {
-                                      method: "PUT",
-                                      headers: {
-                                        "Content-Type": "application/json",
-                                      },
-                                      body: JSON.stringify({
-                                        mostrar_en_pagina: nuevoEstado ? 1 : 0
-                                      }),
-                                    });
-                                    
-                                    // Si el servidor devuelve el producto actualizado, usarlo para asegurar sincronización
-                                    if (response && response.mostrar_en_pagina !== undefined) {
-                                      setInventario(prev => prev.map(prod => {
-                                        if (prod.id === p.id) {
-                                          return { ...prod, mostrar_en_pagina: Number(response.mostrar_en_pagina) };
-                                        }
-                                        return prod;
-                                      }));
-                                    }
-                                    
-                                    // Toast verde si se muestra, rojo si se oculta
-                                    pushToast(
-                                      nuevoEstado 
-                                        ? "✅ Producto mostrado en página" 
-                                        : "⚠️ Producto oculto de la página",
-                                      nuevoEstado ? "ok" : "err"
-                                    );
-                                  } catch (err) {
-                                    console.error("Error actualizando mostrar_en_pagina:", err);
-                                    pushToast("❌ Error actualizando: " + (err.message || "Error desconocido"), "err");
-                                    
-                                    // Revertir el estado local en caso de error
-                                    setInventario(prev => prev.map(prod => {
-                                      if (prod.id === p.id) {
-                                        return { ...prod, mostrar_en_pagina: valorAnterior };
-                                      }
-                                      return prod;
-                                    }));
-                                  }
-                                }}
-                                disabled={!can("tab:inventario")}
-                              />
-                              <span className="slider"></span>
-                            </label>
-                          </td>
+                          {/* <td style={{ textAlign: "center" }}>Mostrar switch</td> */}
 
                           <td>
                             <button

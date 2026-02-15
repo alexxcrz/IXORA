@@ -33,27 +33,5 @@ module.exports = function(app) {
     })
   );
 
-  // Proxy para otras rutas del backend (sin /api)
-  app.use(
-    ['/auth', '/admin', '/inventario', '/picking', '/reenvios', '/reportes', 
-     '/devoluciones', '/chat', '/notificaciones', '/uploads', 
-     '/sounds', '/tienda', '/activaciones', '/activos', '/server-info', '/server-config'],
-    createProxyMiddleware({
-      target: SERVER_URL,
-      changeOrigin: true,
-      ws: true,
-      logLevel: 'silent',
-      onProxyReq: (proxyReq, req, res) => {
-        // Agregar headers si es necesario
-        proxyReq.setHeader('X-Forwarded-Host', req.get('host'));
-        proxyReq.setHeader('X-Forwarded-Proto', req.protocol);
-      },
-      onError: (err, req, res) => {
-        // Solo mostrar errores críticos
-        if (!req.url.includes('.hot-update.') && !req.url.includes('hot-update.json') && err.code !== 'ECONNREFUSED') {
-          console.error('❌ [Proxy] Error:', err.message);
-        }
-      }
-    })
-  );
+  // (Eliminado proxy para rutas de pestañas, solo se mantiene /api)
 };

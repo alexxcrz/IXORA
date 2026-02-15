@@ -17,7 +17,9 @@ export default function Picking({
   mostrarBusquedaNombre,
   moduloRegistros
 }) {
-  const { authFetch } = useAuth();
+  const { authFetch, perms, refrescarPermisos } = useAuth();
+    // Permiso para activar/desactivar productos
+    const puedeActivar = perms && Array.isArray(perms) && perms.includes("inventario:activar");
   const { showAlert, showConfirm } = useAlert();
   const canalActual = (canal || "picking").toString().trim().toLowerCase();
   
@@ -1768,7 +1770,6 @@ export default function Picking({
         <div className="modal-overlay-picking" onClick={() => setModalAgotadosOpen(false)}>
           <div className="modal-busqueda-picking" onClick={(e) => e.stopPropagation()}>
             <h3>Productos Agotados</h3>
-            
             {cargandoAgotados ? (
               <div style={{ textAlign: 'center', padding: '12px', fontSize: '0.85rem' }}>
                 <p>Cargando productos agotados...</p>
@@ -1780,38 +1781,46 @@ export default function Picking({
             ) : (
               <div className="busqueda-resultados" style={{ maxHeight: '450px', overflowY: 'auto' }}>
                 {productosAgotados.map((producto) => (
-                  <div
-                    key={producto.id}
-                    className="busqueda-item"
-                    onClick={async () => {
-                      try {
-                        // Agregar el producto a la lista de picking
-                        await guardarProductoActual(
-                          producto.codigo,
-                          producto.nombre,
-                          1 // Cajas por defecto
-                        );
-                        setModalAgotadosOpen(false);
-                        pushToast(`✅ ${producto.nombre} agregado a la lista`, "ok");
-                        beepSuccess();
-                      } catch (err) {
-                        console.error("Error agregando producto agotado:", err);
-                        await showAlert("Error al agregar producto", "error");
-                      }
-                    }}
-                  >
-                    <div className="busqueda-item-nombre">
-                      {producto.codigo} - {producto.nombre}
-                    </div>
-                    <div className="busqueda-item-detalle">
-                      {producto.presentacion && <span>📦 {producto.presentacion}</span>}
-                      {producto.categoria && <span>🏷️ {producto.categoria}</span>}
-                    </div>
-                  </div>
+                                    <div key={producto.id} className="busqueda-item">
+                                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                        <div>
+                                          <div className="busqueda-item-nombre">
+                                            {producto.codigo} - {producto.nombre}
+                                          </div>
+                                          <div className="busqueda-item-detalle">
+                                            {producto.presentacion && <span>📦 {producto.presentacion}</span>}
+                                            {producto.categoria && <span>🏷️ {producto.categoria}</span>}
+                                          </div>
+                                        </div>
+                                        {puedeActivar && (
+                                          <label className="switch" style={{ marginLeft: 12 }}>
+                                            <input
+                                              type="checkbox"
+                                              checked={Number(producto.activo) === 1}
+                                              onChange={async (e) => {
+                                                try {
+                                                  const nuevoEstado = e.target.checked ? 1 : 0;
+                                                  await authFetch(`${SERVER_URL}/inventario/activar/${producto.id}`, {
+                                                    method: 'PUT',
+                                                    body: JSON.stringify({ activo: nuevoEstado })
+                                                  });
+                                                  setProductosAgotados((prev) => prev.map((p) =>
+                                                    p.id === producto.id ? { ...p, activo: nuevoEstado } : p
+                                                  ));
+                                                  pushToast(nuevoEstado ? 'Producto activado' : 'Producto desactivado', 'ok');
+                                                } catch (err) {
+                                                  pushToast('Error al cambiar estado', 'err');
+                                                }
+                                              }}
+                                            />
+                                            <span className="slider round"></span>
+                                          </label>
+                                        )}
+                                      </div>
+                                    </div>
                 ))}
               </div>
             )}
-
             <div className="modal-buttons-picking">
               <button
                 className="btn-no-picking"

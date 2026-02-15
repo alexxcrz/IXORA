@@ -1,3 +1,16 @@
+/* --- Forzar redondez login --- */
+.login-logo-large {
+  border-radius: 50% !important;
+}
+.login-logo-wrapper {
+  border-radius: 50% !important;
+}
+.login-card {
+  border-radius: 48px !important;
+}
+.login-bg {
+  border-radius: 48px !important;
+}
 /* =======================================================
    🎨 LOGIN - DISEÑO COMPLETAMENTE NUEVO
    ====================================================== */

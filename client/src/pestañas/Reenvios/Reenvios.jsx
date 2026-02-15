@@ -1,4 +1,3 @@
-// src/tabs/Reenvios.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import "./Reenvios.css";
 import { useAuth } from "../../AuthContext";
@@ -182,7 +181,7 @@ export default function Reenvios({ serverUrl, pushToast, fecha, socket }) {
   const cargar = async () => {
     try {
       setLoading(true);
-      const data = await authFetch(`${serverUrl}/reenvios`);
+      const data = await authFetch(`${serverUrl}/api/reenvios`);
       const reenviosArray = Array.isArray(data) ? data : [];
       
       // Ordenar: primero los que NO están "Enviado", luego los "Enviado" al final
@@ -722,7 +721,7 @@ export default function Reenvios({ serverUrl, pushToast, fecha, socket }) {
 
     try {
       // Buscar en histórico por pedido
-      const historicos = await authFetch(`${serverUrl}/reenvios/historico/buscar?pedido=${encodeURIComponent(pedidoBuscado.trim())}`);
+      const historicos = await authFetch(`${serverUrl}/api/reenvios/historico/buscar?pedido=${encodeURIComponent(pedidoBuscado.trim())}`);
       if (historicos && Array.isArray(historicos)) {
         setReenviosHistoricos(historicos);
         // Mostrar histórico siempre que haya una búsqueda activa, incluso si no hay resultados
@@ -888,7 +887,7 @@ export default function Reenvios({ serverUrl, pushToast, fecha, socket }) {
   const generarTokenMovil = async (reenvioId, pedidoNombre) => {
     try {
       setQrLoading(true);
-      const response = await authFetch(`${serverUrl}/reenvios/${reenvioId}/mobile-token`, {
+      const response = await authFetch(`${serverUrl}/api/reenvios/${reenvioId}/mobile-token`, {
         method: "POST",
       });
 
@@ -966,12 +965,12 @@ export default function Reenvios({ serverUrl, pushToast, fecha, socket }) {
         const pedido = item.pedido;
         if (!pedido) return [];
         
-        const j = await authFetch(`${serverUrl}/reenvios/historico/fotos/${encodeURIComponent(pedido)}`);
+        const j = await authFetch(`${serverUrl}/api/reenvios/historico/fotos/${encodeURIComponent(pedido)}`);
         const fotosData = j.urls || [];
         return fotosData.map(f => typeof f === 'string' ? f : f.url);
       } else {
         // Reenvío normal
-        const j = await authFetch(`${serverUrl}/reenvios/${item.id}/fotos`);
+        const j = await authFetch(`${serverUrl}/api/reenvios/${item.id}/fotos`);
         const fotosData = j.urls || [];
         // Si las fotos vienen con estructura {url, id, archivo}, devolver solo las URLs para compatibilidad
         // Pero también devolver los datos completos si están disponibles
@@ -990,12 +989,12 @@ export default function Reenvios({ serverUrl, pushToast, fecha, socket }) {
         const pedido = item.pedido;
         if (!pedido) return [];
         
-        const j = await authFetch(`${serverUrl}/reenvios/historico/fotos/${encodeURIComponent(pedido)}`);
+        const j = await authFetch(`${serverUrl}/api/reenvios/historico/fotos/${encodeURIComponent(pedido)}`);
         const fotosData = j.urls || [];
         return fotosData.map(f => typeof f === 'string' ? { url: f, id: null, archivo: null, esHistorico: true } : f);
       } else {
         // Reenvío normal
-        const j = await authFetch(`${serverUrl}/reenvios/${item.id}/fotos`);
+        const j = await authFetch(`${serverUrl}/api/reenvios/${item.id}/fotos`);
         const fotosData = j.urls || [];
         // Devolver datos completos con id, url, archivo
         return fotosData.map(f => typeof f === 'string' ? { url: f, id: null, archivo: null } : f);
@@ -1008,7 +1007,7 @@ export default function Reenvios({ serverUrl, pushToast, fecha, socket }) {
 
   const borrarFoto = async (reenvioId, fotoId, fotoIndex, esEnModalEdicion = false) => {
     try {
-      await authFetch(`${serverUrl}/reenvios/${reenvioId}/fotos/${fotoId}`, {
+      await authFetch(`${serverUrl}/api/reenvios/${reenvioId}/fotos/${fotoId}`, {
         method: "DELETE",
       });
 
@@ -1061,7 +1060,7 @@ export default function Reenvios({ serverUrl, pushToast, fecha, socket }) {
     if (!reenvioId) return;
     try {
       setCargandoHistorial(true);
-      const historial = await authFetch(`${serverUrl}/reenvios/${reenvioId}/historial`);
+      const historial = await authFetch(`${serverUrl}/api/reenvios/${reenvioId}/historial`);
       setHistorialEstados(Array.isArray(historial) ? historial : []);
     } catch (error) {
       console.error("Error cargando historial:", error);
@@ -1078,8 +1077,8 @@ export default function Reenvios({ serverUrl, pushToast, fecha, socket }) {
     if (!reenvioId) return;
     try {
       const endpoint = esHistorico 
-        ? `${serverUrl}/reenvios/historico/${reenvioId}/rastreo`
-        : `${serverUrl}/reenvios/${reenvioId}/rastreo`;
+        ? `${serverUrl}/api/reenvios/historico/${reenvioId}/rastreo`
+        : `${serverUrl}/api/reenvios/${reenvioId}/rastreo`;
       const data = await authFetch(endpoint);
       setEnlaceRastreo(data);
     } catch (error) {
@@ -1098,7 +1097,7 @@ export default function Reenvios({ serverUrl, pushToast, fecha, socket }) {
     }
 
     try {
-      await authFetch(`${serverUrl}/reenvios/${detalleItem.id}/estado`, {
+      await authFetch(`${serverUrl}/api/reenvios/${detalleItem.id}/estado`, {
         method: "PUT",
         body: JSON.stringify({
           estado: nuevoEstado,
@@ -1159,8 +1158,8 @@ export default function Reenvios({ serverUrl, pushToast, fecha, socket }) {
     try {
       setVerificandoEstado(true);
       const endpoint = esHistorico
-        ? `${serverUrl}/reenvios/historico/${detalleItem.id}/verificar-estado`
-        : `${serverUrl}/reenvios/${detalleItem.id}/verificar-estado`;
+        ? `${serverUrl}/api/reenvios/historico/${detalleItem.id}/verificar-estado`
+        : `${serverUrl}/api/reenvios/${detalleItem.id}/verificar-estado`;
       const resultado = await authFetch(endpoint, {
         method: "POST",
       });
@@ -1179,7 +1178,7 @@ export default function Reenvios({ serverUrl, pushToast, fecha, socket }) {
         // Actualizar estado local SIN recargar toda la lista
         if (!esHistorico) {
           // Obtener solo el reenvío actualizado
-          const reenvioActualizado = await authFetch(`${serverUrl}/reenvios/${detalleItem.id}`);
+          const reenvioActualizado = await authFetch(`${serverUrl}/api/reenvios/${detalleItem.id}`);
           
           // Actualizar en la lista
           setReenvios((prevReenvios) =>
@@ -1195,7 +1194,7 @@ export default function Reenvios({ serverUrl, pushToast, fecha, socket }) {
           await cargarHistorial(detalleItem.id);
         } else {
           // Para históricos, recargar el reenvío específico
-          const reenvioActualizado = await authFetch(`${serverUrl}/reenvios/historico/${detalleItem.id}`);
+          const reenvioActualizado = await authFetch(`${serverUrl}/api/reenvios/historico/${detalleItem.id}`);
           if (reenvioActualizado) {
             setDetalleItem({ ...detalleItem, ...reenvioActualizado });
           }
@@ -1294,7 +1293,7 @@ export default function Reenvios({ serverUrl, pushToast, fecha, socket }) {
     }
     
     // Llamada al servidor en segundo plano sin bloquear
-    authFetch(`${serverUrl}/reenvios/${item.id}/estatus`, {
+    authFetch(`${serverUrl}/api/reenvios/${item.id}/estatus`, {
       method: "PUT",
       body: JSON.stringify({ estatus }),
     }).catch((e) => {
@@ -1314,7 +1313,7 @@ export default function Reenvios({ serverUrl, pushToast, fecha, socket }) {
     if (!motivoDet.trim()) return;
 
     try {
-      await authFetch(`${serverUrl}/reenvios/${item.id}/detener`, {
+      await authFetch(`${serverUrl}/api/reenvios/${item.id}/detener`, {
         method: "POST",
         body: JSON.stringify({ motivo: motivoDet }),
       });
@@ -1364,7 +1363,7 @@ export default function Reenvios({ serverUrl, pushToast, fecha, socket }) {
   const guardarEdicion = async () => {
     try {
       // Actualizar datos del reenvío
-      await authFetch(`${serverUrl}/reenvios/${editItem.id}/envio`, {
+      await authFetch(`${serverUrl}/api/reenvios/${editItem.id}/envio`, {
         method: "PUT",
         body: JSON.stringify({
           pedido: editPedido,
@@ -1377,7 +1376,7 @@ export default function Reenvios({ serverUrl, pushToast, fecha, socket }) {
       if (editFotos.length > 0) {
         const fd = new FormData();
         editFotos.forEach((f) => fd.append("fotos", f, f.name));
-        await authFetch(`${serverUrl}/reenvios/${editItem.id}/fotos`, {
+        await authFetch(`${serverUrl}/api/reenvios/${editItem.id}/fotos`, {
           method: "POST",
           body: fd,
         });
@@ -1466,7 +1465,7 @@ export default function Reenvios({ serverUrl, pushToast, fecha, socket }) {
     const confirmado = await showConfirm("¿Eliminar/Cancelar este reenvío?", "Confirmar eliminación");
     if (!confirmado) return;
     try {
-      const j = await authFetch(`${serverUrl}/reenvios/${item.id}`, {
+      const j = await authFetch(`${serverUrl}/api/reenvios/${item.id}`, {
         method: "DELETE",
       }).catch(() => ({}));
       // Actualizar estado local SIN recargar
@@ -1492,7 +1491,7 @@ export default function Reenvios({ serverUrl, pushToast, fecha, socket }) {
 
       if (modoLiberacion && libSourceId) {
         const jLib = await authFetch(
-          `${serverUrl}/reenvios/${libSourceId}/liberar`,
+          `${serverUrl}/api/reenvios/${libSourceId}/liberar`,
           {
             method: "POST",
             body: JSON.stringify({
@@ -1520,7 +1519,7 @@ export default function Reenvios({ serverUrl, pushToast, fecha, socket }) {
         if (motivo.trim() && targetReenvioId) {
           promesas.push(
             authFetch(
-              `${serverUrl}/reenvios/${targetReenvioId}/comentario`,
+              `${serverUrl}/api/reenvios/${targetReenvioId}/comentario`,
               {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
@@ -1535,7 +1534,7 @@ export default function Reenvios({ serverUrl, pushToast, fecha, socket }) {
           fotos.forEach((f) => fd.append("fotos", f, f.name));
           promesas.push(
             authFetch(
-              `${serverUrl}/reenvios/${targetReenvioId}/fotos`,
+              `${serverUrl}/api/reenvios/${targetReenvioId}/fotos`,
               {
                 method: "POST",
                 body: fd,
@@ -1552,7 +1551,7 @@ export default function Reenvios({ serverUrl, pushToast, fecha, socket }) {
         // Si hay un reenvío temporal (creado solo para el token móvil), actualizarlo
         if (reenvioTemporalId) {
           // Actualizar el reenvío temporal con todos los datos
-          await authFetch(`${serverUrl}/reenvios/${reenvioTemporalId}/envio`, {
+          await authFetch(`${serverUrl}/api/reenvios/${reenvioTemporalId}/envio`, {
             method: "PUT",
             body: JSON.stringify({
               pedido,

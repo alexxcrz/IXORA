@@ -1054,7 +1054,7 @@ export default function RegistrosPicking({
   }, [modalAbierto]);
 
   return (
-    <div className="card">
+    <div className="card" style={{ width: '98vw', maxWidth: '98vw', marginLeft: 'auto', marginRight: 'auto', minHeight: '80vh' }}>
       <div className="registros-header">
         <h2 className="registros-titulo">Registros del día</h2>
         <div className="registros-acciones">
@@ -1200,8 +1200,8 @@ export default function RegistrosPicking({
         </div>
       </div>
 
-      <div className="tabla-container registros-tabla">
-        <table className="tabla-registros">
+      <div className="tabla-container registros-tabla" style={{ width: '100%', minHeight: 0, height: 'auto', flex: 'unset' }}>
+        <table className="tabla-registros" style={{ width: '100%', tableLayout: 'fixed' }}>
           <thead>
             <tr>
               <th>Fecha</th>
