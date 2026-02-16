@@ -1735,6 +1735,12 @@ function App() {
           fechaTimerRef.current = setTimeout(async () => {
             try {
               if (cancelado) return;
+              // Llamar al backend para eliminar la fecha manual
+              await authFetch(`${SERVER_URL}/fecha-actual/eliminar-automatica`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+              });
+              // Obtener la fecha actual del servidor
               const res2 = await authFetch(`${SERVER_URL}/fecha-actual`);
               const fechaActual2 = res2.fecha || "";
               setFecha(fechaActual2);
@@ -1833,6 +1839,11 @@ function App() {
       if (fechaPendiente && fechaPendiente !== "") {
         fechaTimerRef.current = setTimeout(async () => {
           try {
+            // Llamar al backend para eliminar la fecha manual
+            await authFetch(`${SERVER_URL}/fecha-actual/eliminar-automatica`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+            });
             // Obtener la fecha actual del servidor
             const res = await authFetch(`${SERVER_URL}/fecha-actual`);
             const fechaActual = res.fecha || "";
