@@ -151,18 +151,12 @@ function AppProtegida() {
     if (!user && tokenEnStorage && !isLoading) {
       // Si hay token pero no usuario y ya terminó de cargar, iniciar timer
       const intervalId = setInterval(() => {
-        setTiempoEsperaSesion(prev => {
-          if (prev >= 3000) {
-            // Ya pasaron 3 segundos, no incrementar más
-            return prev;
-          }
-          return prev + 100;
-        });
+          setTiempoEsperaSesion(prev => prev + 100);
       }, 100);
       
       // Limpiar después de 3 segundos
       const timeoutId = setTimeout(() => {
-        clearInterval(intervalId);
+          clearInterval(intervalId); // Limpiar el intervalo
       }, 3000);
       
       return () => {
@@ -1815,16 +1809,12 @@ function App() {
         pushToast(mensaje, "warn");
         // Notificación del navegador
         if ("Notification" in window && Notification.permission === "granted") {
-          try {
-            new Notification("Cambio temporal de fecha", {
-              body: mensaje,
-              icon: "/favicon.ico",
-              tag: "fecha_temporal",
-              requireInteraction: false,
-            });
-          } catch (e) {
-            // Ignorar errores de notificación
-          }
+          new Notification("Cambio temporal de fecha", {
+            body: mensaje,
+            icon: "/favicon.ico",
+            tag: "fecha_temporal",
+            requireInteraction: false,
+          });
         }
       }
       await cargarProductos();
