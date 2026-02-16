@@ -29,7 +29,24 @@ export default function Inventario({
   const can = (perm) => perms?.includes(perm);
   const CATS_SAFE = CATEGORIAS || { "Sin categoría": [] };
 
-  // Función helper para evitar duplicar la presentación si ya está en el nombre
+  // Referencias para sincronizar scroll horizontal
+  const scrollArribaRef = useRef(null);
+  const tablaContainerRef = useRef(null);
+
+  // Sincronizar scroll horizontal arriba <-> tabla
+  useEffect(() => {
+    const arriba = scrollArribaRef.current;
+    const tabla = tablaContainerRef.current;
+    if (!arriba || !tabla) return;
+    const syncArriba = () => { tabla.scrollLeft = arriba.scrollLeft; };
+    const syncTabla = () => { arriba.scrollLeft = tabla.scrollLeft; };
+    arriba.addEventListener('scroll', syncArriba);
+    tabla.addEventListener('scroll', syncTabla);
+    return () => {
+      arriba.removeEventListener('scroll', syncArriba);
+      tabla.removeEventListener('scroll', syncTabla);
+    };
+  }, []);
   const obtenerNombreCompleto = (nombre, presentacion) => {
     if (!nombre) return "";
     if (!presentacion || !presentacion.trim()) return nombre;
@@ -2706,8 +2723,11 @@ T 4 0 10 350 ${codigo}
         </button>
       </div>
 
-      {/* TABLA: Margin movido al CSS */}
-      <div className="tabla-container">
+      {/* TABLA: Scroll horizontal arriba sincronizado */}
+      <div ref={scrollArribaRef} style={{overflowX: 'auto', width: '100%', marginBottom: 4}}>
+        <div style={{width: 2000, height: 1}}></div>
+      </div>
+      <div className="tabla-container" ref={tablaContainerRef} style={{overflowX: 'auto'}}>
         {invFiltrado.cats.length === 0 ? (
           <p className="empty-msg">
             {inventario.length === 0
@@ -3043,7 +3063,23 @@ T 4 0 10 350 ${codigo}
             if (pendientesPiezas.length === 0) setModalPiezas(false);
           }}
         >
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="modal-content"
+            style={{
+              borderRadius: 14,
+              maxWidth: 520,
+              width: '100%',
+              minWidth: 340,
+              padding: '36px 32px',
+              boxShadow: '0 4px 24px rgba(0,0,0,0.10)',
+              background: '#f9fafc',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: 20
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
             {(() => {
               const prod = pendientesPiezas[indexPendiente];
 
@@ -4191,29 +4227,39 @@ T 4 0 10 350 ${codigo}
       )}
 
       {/* ========== MODAL Códigos alternos ========== */}
+
       {modalCodigos && (
         <div className="modal-overlay" onClick={() => setModalCodigos(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h3>Códigos alternos de: {obtenerNombreCompleto(codigoEditando?.nombre, codigoEditando?.presentacion)}</h3>
-
-            <div className="codigos-list">
+            <h3 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: 2, textAlign: 'center', color: '#222' }}>Códigos alternos</h3>
+            <div style={{ fontSize: '0.92rem', color: '#888', marginBottom: 18, textAlign: 'center', fontWeight: 500 }}>
+              {obtenerNombreCompleto(codigoEditando?.nombre, codigoEditando?.presentacion)}
+            </div>
+            <ul style={{ listStyle: 'disc', paddingLeft: 18, marginBottom: 18, width: '100%' }}>
               {codigosProd.map((c) => (
-                <div key={c} className="codigo-item">
-                  <span>{c}</span>
-
-                  <button
-                    className="btn-borrar"
+                <li
+                  key={c}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    marginBottom: 8,
+                    padding: '4px 0',
+                    fontSize: '1rem',
+                    fontWeight: 500
+                  }}
+                >
+                  <span style={{ color: '#333' }}>{c}</span>
+                  <span
+                    style={{ color: '#d32f2f', fontSize: '1.2em', cursor: 'pointer', userSelect: 'none', padding: '0 6px' }}
+                    title="Eliminar código"
                     onClick={async () => {
                       try {
                         await authFetch(
                           `${SERVER_URL}/api/inventario/codigos/${codigoEditando.codigo}/${c}`,
-                          {
-                            method: "DELETE",
-                          }
+                          { method: "DELETE" }
                         );
-                        setCodigosProd((prev) =>
-                          prev.filter((x) => x !== c)
-                        );
+                        setCodigosProd((prev) => prev.filter((x) => x !== c));
                         pushToast?.("✅ Código eliminado", "ok");
                       } catch (err) {
                         pushToast?.("❌ Error eliminando código: " + err.message, "err");
@@ -4221,41 +4267,34 @@ T 4 0 10 350 ${codigo}
                     }}
                   >
                     ×
-                  </button>
-                </div>
+                  </span>
+                </li>
               ))}
+            </ul>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', marginTop: 6 }}>
+              <input
+                placeholder="Nuevo código"
+                value={codigoNuevo}
+                onChange={(e) => setCodigoNuevo(e.target.value)}
+                style={{ fontSize: '0.95rem', padding: '7px 12px', borderRadius: 6, border: '1px solid #bcd', flex: 1, background: '#fff', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}
+              />
+              <button
+                style={{ fontSize: '0.9rem', padding: '7px 16px', borderRadius: 6, background: '#1976d2', color: '#fff', border: 'none', fontWeight: 500, cursor: 'pointer', boxShadow: '0 1px 4px rgba(25,118,210,0.08)' }}
+                onClick={async () => {
+                  if (!codigoNuevo.trim()) return;
+                  try {
+                    await authFetch(
+                      `${SERVER_URL}/inventario/codigos/${codigoEditando.codigo}`,
+                      { method: "POST", body: JSON.stringify({ codigo: codigoNuevo }) }
+                    );
+                    setCodigosProd((prev) => [...prev, codigoNuevo]);
+                    setCodigoNuevo("");
+                  } catch (err) {
+                    pushToast?.("❌ Error agregando código: " + err.message, "err");
+                  }
+                }}
+              >Agregar</button>
             </div>
-
-            <input
-              placeholder="Nuevo código"
-              value={codigoNuevo}
-              onChange={(e) => setCodigoNuevo(e.target.value)}
-            />
-
-            <button
-              className="btn-editar mt-8"
-              onClick={async () => {
-                if (!codigoNuevo.trim()) return;
-
-                try {
-                  await authFetch(
-                    `${SERVER_URL}/inventario/codigos/${codigoEditando.codigo}`,
-                    {
-                      method: "POST",
-                      body: JSON.stringify({ codigo: codigoNuevo }),
-                    }
-                  );
-
-                  setCodigosProd((prev) => [...prev, codigoNuevo]);
-                  setCodigoNuevo("");
-                  pushToast?.("✅ Código agregado", "ok");
-                } catch (err) {
-                  pushToast?.("❌ Error agregando código: " + err.message, "err");
-                }
-              }}
-            >
-              Agregar
-            </button>
           </div>
         </div>
       )}

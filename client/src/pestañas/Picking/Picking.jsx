@@ -17,9 +17,8 @@ export default function Picking({
   mostrarBusquedaNombre,
   moduloRegistros
 }) {
-  const { authFetch, perms, refrescarPermisos } = useAuth();
-    // Permiso para activar/desactivar productos
-    const puedeActivar = perms && Array.isArray(perms) && perms.includes("inventario:activar");
+  const { authFetch, can } = useAuth();
+    // ...
   const { showAlert, showConfirm } = useAlert();
   const canalActual = (canal || "picking").toString().trim().toLowerCase();
   
@@ -1649,7 +1648,33 @@ export default function Picking({
             }, 80);
           }}
         >
-          <div className="modal-duplicado-picking" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-duplicado-picking" onClick={(e) => e.stopPropagation()} style={{ position: 'relative' }}>
+            {/* Botón X en la esquina superior derecha */}
+            <button
+              aria-label="Cerrar"
+              onClick={() => {
+                setModalDuplicado({ open: false, esSurtido: false, codigo: "", nombre: "", cajas: "", pxc: "", mensajeExtra: "" });
+                limpiarEstadosCompletamente();
+                setTimeout(() => {
+                  const el = document.getElementById("inputCodigo");
+                  if (el) safeFocus(el, 0);
+                }, 80);
+              }}
+              style={{
+                position: 'absolute',
+                top: 8,
+                right: 8,
+                background: 'none',
+                border: 'none',
+                fontSize: 24,
+                cursor: 'pointer',
+                color: '#888',
+                padding: 0,
+                zIndex: 2
+              }}
+            >
+              ×
+            </button>
             {modalDuplicado.esSurtido ? (
               <>
                 <h3>🚨 Producto ya surtido</h3>
@@ -1679,24 +1704,7 @@ export default function Picking({
             )}
 
             <div className="modal-buttons-picking">
-              {modalDuplicado.esSurtido ? (
-                <button
-                  className="btn-no-picking"
-                  onClick={() => {
-                    setModalDuplicado({ open: false, esSurtido: false, codigo: "", nombre: "", cajas: "", pxc: "", mensajeExtra: "" });
-                    beepAlerta();
-                    if (navigator.vibrate) navigator.vibrate(300);
-                    limpiarEstadosCompletamente();
-                    setTimeout(() => {
-                      const el = document.getElementById("inputCodigo");
-                      if (el) safeFocus(el, 0);
-                    }, 80);
-                  }}
-                  style={{ width: '100%' }}
-                >
-                  Cerrar
-                </button>
-              ) : (
+              {modalDuplicado.esSurtido ? null : (
                 <>
                   <button
                     className="btn-yes-picking"
@@ -1742,22 +1750,6 @@ export default function Picking({
                   >
                     ✔
                   </button>
-
-                  <button
-                    className="btn-no-picking"
-                    onClick={() => {
-                      setModalDuplicado({ open: false, esSurtido: false, codigo: "", nombre: "", cajas: "", pxc: "", mensajeExtra: "" });
-                      beepAlerta();
-                      if (navigator.vibrate) navigator.vibrate(300);
-                      limpiarEstadosCompletamente();
-                      setTimeout(() => {
-                        const el = document.getElementById("inputCodigo");
-                        if (el) safeFocus(el, 0);
-                      }, 80);
-                    }}
-                  >
-                    ✖
-                  </button>
                 </>
               )}
             </div>
@@ -1768,7 +1760,30 @@ export default function Picking({
       {/* Modal de Productos Agotados */}
       {modalAgotadosOpen && (
         <div className="modal-overlay-picking" onClick={() => setModalAgotadosOpen(false)}>
-          <div className="modal-busqueda-picking" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-busqueda-picking" onClick={(e) => e.stopPropagation()} style={{ position: 'relative' }}>
+            {/* Botón X en la esquina superior derecha */}
+            <button
+              aria-label="Cerrar"
+              onClick={() => setModalAgotadosOpen(false)}
+              style={{
+                position: 'absolute',
+                top: 8,
+                right: 8,
+                background: 'none',
+                border: 'none',
+                boxShadow: 'none',
+                outline: 'none',
+                fontSize: 28,
+                fontWeight: 'bold',
+                cursor: 'pointer',
+                color: '#222',
+                padding: 0,
+                zIndex: 2,
+                lineHeight: 1
+              }}
+            >
+              ×
+            </button>
             <h3>Productos Agotados</h3>
             {cargandoAgotados ? (
               <div style={{ textAlign: 'center', padding: '12px', fontSize: '0.85rem' }}>
@@ -1781,55 +1796,53 @@ export default function Picking({
             ) : (
               <div className="busqueda-resultados" style={{ maxHeight: '450px', overflowY: 'auto' }}>
                 {productosAgotados.map((producto) => (
-                                    <div key={producto.id} className="busqueda-item">
-                                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                        <div>
-                                          <div className="busqueda-item-nombre">
-                                            {producto.codigo} - {producto.nombre}
-                                          </div>
-                                          <div className="busqueda-item-detalle">
-                                            {producto.presentacion && <span>📦 {producto.presentacion}</span>}
-                                            {producto.categoria && <span>🏷️ {producto.categoria}</span>}
-                                          </div>
-                                        </div>
-                                        {puedeActivar && (
-                                          <label className="switch" style={{ marginLeft: 12 }}>
-                                            <input
-                                              type="checkbox"
-                                              checked={Number(producto.activo) === 1}
-                                              onChange={async (e) => {
-                                                try {
-                                                  const nuevoEstado = e.target.checked ? 1 : 0;
-                                                  await authFetch(`${SERVER_URL}/inventario/activar/${producto.id}`, {
-                                                    method: 'PUT',
-                                                    body: JSON.stringify({ activo: nuevoEstado })
-                                                  });
-                                                  setProductosAgotados((prev) => prev.map((p) =>
-                                                    p.id === producto.id ? { ...p, activo: nuevoEstado } : p
-                                                  ));
-                                                  pushToast(nuevoEstado ? 'Producto activado' : 'Producto desactivado', 'ok');
-                                                } catch (err) {
-                                                  pushToast('Error al cambiar estado', 'err');
-                                                }
-                                              }}
-                                            />
-                                            <span className="slider round"></span>
-                                          </label>
-                                        )}
-                                      </div>
-                                    </div>
+                  <div key={producto.id} className="busqueda-item">
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div>
+                        <div className="busqueda-item-nombre">
+                          {producto.codigo} - {producto.nombre}
+                        </div>
+                        <div className="busqueda-item-detalle">
+                          {producto.presentacion && <span>📦 {producto.presentacion}</span>}
+                          {producto.categoria && <span>🏷️ {producto.categoria}</span>}
+                        </div>
+                      </div>
+                      {/* Habilitar switch para todos temporalmente para pruebas */}
+                      <label className="switch" style={{ marginLeft: 12 }}>
+                        {can && can("inventario.activar_productos") ? (
+                          <>
+                            <input
+                              type="checkbox"
+                              checked={Number(producto.activo) === 1}
+                              onChange={async (e) => {
+                                try {
+                                  const nuevoEstado = e.target.checked ? 1 : 0;
+                                  await authFetch(`${SERVER_URL}/inventario/${producto.id}`, {
+                                    method: 'PUT',
+                                    body: JSON.stringify({ activo: nuevoEstado })
+                                  });
+                                  setProductosAgotados((prev) => prev.map((p) =>
+                                    p.id === producto.id ? { ...p, activo: nuevoEstado } : p
+                                  ));
+                                  pushToast(nuevoEstado ? 'Producto activado' : 'Producto desactivado', 'ok');
+                                } catch (err) {
+                                  pushToast('Error al cambiar estado', 'err');
+                                }
+                              }}
+                            />
+                            <span className="slider round"></span>
+                          </>
+                        ) : (
+                          <span style={{ color: '#888', fontSize: '0.95em', marginLeft: 12 }}>
+                            {producto.nombre} {producto.presentacion ? `- ${producto.presentacion}` : ''}
+                          </span>
+                        )}
+                      </label>
+                    </div>
+                  </div>
                 ))}
               </div>
             )}
-            <div className="modal-buttons-picking">
-              <button
-                className="btn-no-picking"
-                onClick={() => setModalAgotadosOpen(false)}
-                style={{ width: 'auto', padding: '10px 20px' }}
-              >
-                Cerrar
-              </button>
-            </div>
           </div>
         </div>
       )}

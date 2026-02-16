@@ -1703,6 +1703,7 @@ function App() {
   const [mostrarModalCodigo, setMostrarModalCodigo] = useState(false);
   const [fechaPendiente, setFechaPendiente] = useState(null);
   const [cambiandoFecha, setCambiandoFecha] = useState(false);
+  const fechaTimerRef = useRef(null);
 
   const solicitarCodigoYCambiarFecha = async (nuevaFecha) => {
     if (!perms || !perms.includes("tab:admin")) {
@@ -1714,6 +1715,70 @@ function App() {
     setMostrarModalCodigo(true);
   };
 
+  // Temporizador para revertir la fecha a la actual después de 3 minutos si hay una fecha personalizada
+  useEffect(() => {
+    // Limpiar cualquier temporizador previo
+    if (fechaTimerRef.current) {
+      clearTimeout(fechaTimerRef.current);
+      fechaTimerRef.current = null;
+    }
+    // Si la fecha está vacía o es la fecha real, no iniciar temporizador
+    if (!fecha || fecha === "") return;
+    // Comprobar si la fecha es diferente a la fecha real del servidor
+    let cancelado = false;
+    const checkAndSetTimer = async () => {
+      try {
+        const res = await authFetch(`${SERVER_URL}/fecha-actual`);
+        const fechaActual = res.fecha || "";
+        if (fecha !== fechaActual) {
+          // Iniciar temporizador de 3 minutos
+          fechaTimerRef.current = setTimeout(async () => {
+            try {
+              if (cancelado) return;
+              const res2 = await authFetch(`${SERVER_URL}/fecha-actual`);
+              const fechaActual2 = res2.fecha || "";
+              setFecha(fechaActual2);
+              pushToast("⏰ La fecha ha sido restablecida automáticamente a la actual después de 3 minutos", "info");
+              await cargarProductos();
+            } catch (err) {
+              console.error("Error restaurando fecha automáticamente:", err);
+            }
+          }, 3 * 60 * 1000);
+        }
+      } catch (err) {
+        console.error("Error comprobando fecha actual:", err);
+      }
+    };
+    checkAndSetTimer();
+    return () => {
+      cancelado = true;
+      if (fechaTimerRef.current) {
+        clearTimeout(fechaTimerRef.current);
+        fechaTimerRef.current = null;
+      }
+    };
+  }, [fecha, SERVER_URL, authFetch, cargarProductos, pushToast]);
+
+  // Actualizar la fecha automáticamente cada minuto si no hay fecha personalizada
+  useEffect(() => {
+    let intervalId = null;
+    if (!fecha || fecha === "") {
+      // Actualizar la fecha cada minuto
+      intervalId = setInterval(async () => {
+        try {
+          const res = await authFetch(`${SERVER_URL}/fecha-actual`);
+          const fechaActual = res.fecha || "";
+          setFecha(fechaActual);
+        } catch (err) {
+          console.error("Error actualizando fecha automáticamente:", err);
+        }
+      }, 60 * 1000);
+    }
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [fecha, SERVER_URL, authFetch]);
+
   const confirmarCambioFechaConCodigo = async (codigo) => {
     if (!fechaPendiente && fechaPendiente !== "") {
       setMostrarModalCodigo(false);
@@ -1723,7 +1788,7 @@ function App() {
     try {
       setCambiandoFecha(true);
 
-      const body = fechaPendiente === "" 
+      const body = fechaPendiente === ""
         ? { fecha: "", confirmationCode: codigo }
         : { fecha: fechaPendiente, confirmationCode: codigo };
 
@@ -1738,10 +1803,48 @@ function App() {
         pushToast("✅ Fecha eliminada correctamente");
       } else {
         pushToast("✅ Fecha establecida correctamente");
+        // Notificación global para todos los usuarios
+        const mensaje = `⚠️ ${user?.nickname || user?.nombre || 'Un usuario'} cambió la fecha temporalmente a: ${fechaPendiente}`;
+        // Toast local
+        pushToast(mensaje, "warn");
+        // Notificación del navegador
+        if ("Notification" in window && Notification.permission === "granted") {
+          try {
+            new Notification("Cambio temporal de fecha", {
+              body: mensaje,
+              icon: "/favicon.ico",
+              tag: "fecha_temporal",
+              requireInteraction: false,
+            });
+          } catch (e) {
+            // Ignorar errores de notificación
+          }
+        }
       }
       await cargarProductos();
       setMostrarModalCodigo(false);
       setFechaPendiente(null);
+
+      // Iniciar/reiniciar temporizador de 3 minutos para revertir la fecha
+      if (fechaTimerRef.current) {
+        clearTimeout(fechaTimerRef.current);
+      }
+      // Solo iniciar el timer si se estableció una fecha distinta a vacía
+      if (fechaPendiente && fechaPendiente !== "") {
+        fechaTimerRef.current = setTimeout(async () => {
+          try {
+            // Obtener la fecha actual del servidor
+            const res = await authFetch(`${SERVER_URL}/fecha-actual`);
+            const fechaActual = res.fecha || "";
+            setFecha(fechaActual);
+            pushToast("⏰ La fecha ha sido restablecida automáticamente a la actual después de 3 minutos", "info");
+            // Opcional: recargar productos si es necesario
+            await cargarProductos();
+          } catch (err) {
+            console.error("Error restaurando fecha automáticamente:", err);
+          }
+        }, 3 * 60 * 1000); // 3 minutos
+      }
     } catch (err) {
       console.error("Error cambiando fecha:", err);
       const mensaje = err.message || err.error || "Error al cambiar la fecha";
@@ -1750,6 +1853,7 @@ function App() {
     } finally {
       setCambiandoFecha(false);
     }
+    // ...
   };
 
   const handleFechaChange = useCallback(async (e) => {
