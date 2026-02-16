@@ -1563,7 +1563,7 @@ export default function Reenvios({ serverUrl, pushToast, fecha, socket }) {
           // Actualizar observaciones
           if (motivo.trim()) {
             await authFetch(
-              `${serverUrl}/reenvios/${reenvioTemporalId}/comentario`,
+              `${serverUrl}/api/reenvios/${reenvioTemporalId}/comentario`,
               {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
@@ -1576,7 +1576,7 @@ export default function Reenvios({ serverUrl, pushToast, fecha, socket }) {
           setReenvioTemporalId(null); // Limpiar el ID temporal
         } else {
           // Crear nuevo reenvío normalmente
-          const j = await authFetch(`${serverUrl}/reenvios`, {
+          const j = await authFetch(`${serverUrl}/api/reenvios`, {
             method: "POST",
             body: JSON.stringify({
               pedido,
@@ -1597,7 +1597,7 @@ export default function Reenvios({ serverUrl, pushToast, fecha, socket }) {
 
           // No esperar la respuesta de fotos para mostrar el toast más rápido
           authFetch(
-            `${serverUrl}/reenvios/${targetReenvioId}/fotos`,
+            `${serverUrl}/api/reenvios/${targetReenvioId}/fotos`,
             {
               method: "POST",
               body: fd,

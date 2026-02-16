@@ -51,14 +51,14 @@
     linear-gradient(90deg, var(--azul-borde) 1px, transparent 1px);
   background-size: 50px 50px;
   background-position: 0 0;
-  mask-image: 
-    radial-gradient(ellipse 10px 10px at center, black 60%, transparent 60%);
   -webkit-mask-image: 
     radial-gradient(ellipse 10px 10px at center, black 60%, transparent 60%);
-  mask-size: 50px 50px;
+  mask-image: 
+    radial-gradient(ellipse 10px 10px at center, black 60%, transparent 60%);
   -webkit-mask-size: 50px 50px;
-  mask-repeat: repeat;
+  mask-size: 50px 50px;
   -webkit-mask-repeat: repeat;
+  mask-repeat: repeat;
   animation: gridMove 25s linear infinite;
   opacity: 0.6;
   z-index: 0;
@@ -262,6 +262,7 @@ body.login-page #root {
   max-width: 900px;
   max-height: calc(100vh - 32px);
   background: var(--fondo-card);
+  -webkit-backdrop-filter: blur(40px) saturate(200%);
   backdrop-filter: blur(40px) saturate(200%);
   border: 1px solid var(--borde-sutil);
   border-radius: 28px;
@@ -410,6 +411,7 @@ body.login-page #root {
   position: relative;
   padding: 16px;
   background: var(--fondo-card-hover);
+  -webkit-backdrop-filter: blur(20px);
   backdrop-filter: blur(20px);
   border-radius: 24px;
   border: 2px solid var(--borde-sutil);
@@ -534,6 +536,7 @@ body.login-page #root {
   gap: var(--espacio-sm) !important;
   margin-bottom: var(--espacio-md) !important;
   background: var(--fondo-card-hover) !important;
+  -webkit-backdrop-filter: blur(15px) !important;
   backdrop-filter: blur(15px) !important;
   padding: 6px !important;
   border-radius: 18px !important;
@@ -623,6 +626,7 @@ body.login-page #root {
   padding-right: 14px !important;
   font-size: 0.85rem !important;
   background: rgba(255, 255, 255, 0.06) !important;
+  -webkit-backdrop-filter: blur(15px) !important;
   backdrop-filter: blur(15px) !important;
   border: 2px solid rgba(255, 255, 255, 0.1) !important;
   border-radius: 12px !important;
@@ -659,6 +663,7 @@ body.login-page #root {
   padding-right: 32px !important;
   font-size: 0.85rem !important;
   background: rgba(255, 255, 255, 0.06) !important;
+  -webkit-backdrop-filter: blur(15px) !important;
   backdrop-filter: blur(15px) !important;
   border: 2px solid rgba(255, 255, 255, 0.1) !important;
   border-radius: 9999px !important;
@@ -851,6 +856,7 @@ body.login-page #root {
   font-size: 28px !important;
   text-align: center !important;
   background: rgba(255, 255, 255, 0.06) !important;
+  -webkit-backdrop-filter: blur(15px) !important;
   backdrop-filter: blur(15px) !important;
   border: 2px solid rgba(255, 255, 255, 0.1) !important;
   border-radius: 16px !important;
@@ -926,6 +932,7 @@ body.login-page #root {
   text-align: center;
   width: 100%;
   background: rgba(255, 255, 255, 0.04);
+  -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
@@ -981,6 +988,7 @@ body.login-page #root {
   transform: translateX(-50%);
   padding: var(--espacio-md) var(--espacio-xl);
   background: rgba(20, 25, 45, 0.95);
+  -webkit-backdrop-filter: blur(40px) saturate(200%);
   backdrop-filter: blur(40px) saturate(200%);
   color: var(--texto-principal);
   font-size: 1rem;
@@ -1093,7 +1101,7 @@ body.login-page #root {
     border-radius: 24px;
     max-height: 100vh;
     height: auto;
-    min-height: auto;
+    min-height: initial;
     overflow: hidden !important;
     display: flex;
     flex-direction: column;
@@ -1206,6 +1214,7 @@ body.login-page #root {
     padding-right: 10px !important;
     font-size: 0.75rem !important;
     background: rgba(255, 255, 255, 0.06) !important;
+    -webkit-backdrop-filter: blur(15px) !important;
     backdrop-filter: blur(15px) !important;
     border: 2px solid rgba(255, 255, 255, 0.1) !important;
     border-radius: 12px !important;
@@ -1237,6 +1246,7 @@ body.login-page #root {
     padding-right: 24px !important;
     font-size: 0.75rem !important;
     background: rgba(255, 255, 255, 0.06) !important;
+    -webkit-backdrop-filter: blur(15px) !important;
     backdrop-filter: blur(15px) !important;
     border: 2px solid rgba(255, 255, 255, 0.1) !important;
     border-radius: 12px !important;
@@ -1337,7 +1347,7 @@ body.login-page #root {
     border-radius: 20px;
     max-height: 100vh;
     height: auto;
-    min-height: auto;
+    min-height: initial;
     overflow: hidden !important;
     box-sizing: border-box;
     display: flex;
@@ -1456,6 +1466,7 @@ body.login-page #root {
     padding-right: 9px !important;
     font-size: 0.7rem !important;
     background: rgba(255, 255, 255, 0.06) !important;
+    -webkit-backdrop-filter: blur(15px) !important;
     backdrop-filter: blur(15px) !important;
     border: 2px solid rgba(255, 255, 255, 0.1) !important;
     border-radius: 12px !important;
@@ -1487,6 +1498,7 @@ body.login-page #root {
     padding-right: 24px !important;
     font-size: 0.7rem !important;
     background: rgba(255, 255, 255, 0.06) !important;
+    -webkit-backdrop-filter: blur(15px) !important;
     backdrop-filter: blur(15px) !important;
     border: 2px solid rgba(255, 255, 255, 0.1) !important;
     border-radius: 12px !important;

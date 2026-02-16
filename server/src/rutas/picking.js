@@ -1395,22 +1395,14 @@ router.get("/dia/devoluciones/:tipo/resumen", (req, res) => {
    FECHA ACTUAL
    ============================================================ */
 
+// Siempre devolver la fecha real del sistema, ignorando cualquier fecha manual
 router.get("/fecha-actual", (_req, res) => {
-  const fechaManual = getFechaActual();
-  
-  // Si no hay fecha manual establecida (null o vacío), devolver fecha actual del sistema
-  if (!fechaManual || fechaManual === "") {
-    const hoy = new Date();
-    const año = hoy.getFullYear();
-    const mes = String(hoy.getMonth() + 1).padStart(2, '0');
-    const dia = String(hoy.getDate()).padStart(2, '0');
-    const fechaActual = `${año}-${mes}-${dia}`;
-    
-    return res.json({ fecha: fechaActual, esAutomatica: true });
-  }
-  
-  // Si hay fecha manual, devolverla
-  return res.json({ fecha: fechaManual, esAutomatica: false });
+  const hoy = new Date();
+  const año = hoy.getFullYear();
+  const mes = String(hoy.getMonth() + 1).padStart(2, '0');
+  const dia = String(hoy.getDate()).padStart(2, '0');
+  const fechaActual = `${año}-${mes}-${dia}`;
+  return res.json({ fecha: fechaActual, esAutomatica: true });
 });
 
 // Endpoint para eliminar fecha manual automáticamente (cuando expira)
@@ -1483,131 +1475,33 @@ router.post("/fecha-actual/validar-password", authRequired, async (req, res) => 
   res.json({ success: true });
 });
 
+// Forzar que la fecha siempre sea la real del sistema, ignorando cualquier petición de cambio
 router.post("/fecha-actual", authRequired, async (req, res) => {
-  const { fecha, confirmationCode } = req.body;
   const userId = req.user?.id;
-
   if (!userId) {
     return res.status(401).json({ error: "Usuario no autenticado" });
   }
-
-  // Guardar fecha anterior antes de cambiarla
-  const fechaAnterior = getFechaActual();
-
-  // Si NO hay fecha activa, cualquiera puede establecer una (sin código)
-  if (!fechaAnterior || fechaAnterior === "") {
-    if (!fecha || fecha === "") {
-      return res.status(400).json({ error: "Debes proporcionar una fecha" });
-    }
-
-    // Establecer fecha sin requerir código
-    setFechaActual(fecha, userId);
-    getIO().emit("fecha_actualizada", fecha);
-
-    // Registrar en auditoría
-    try {
-      registrarAccion({
-        usuario: userId,
-        accion: "FECHA_ESTABLECIDA",
-        detalle: `Estableció fecha: ${fecha}`,
-        tabla: "sistema",
-        registroId: null,
-        cambios: { fecha_nueva: fecha }
-      });
-    } catch (err) {
-      console.error("Error registrando establecimiento de fecha:", err);
-    }
-
-    return res.json({ success: true, fecha });
-  }
-
-  // Si YA hay fecha activa, se requiere código temporal de admin para cambiarla
-  // Verificar que el usuario es admin
-  if (!tienePermiso(userId, "tab:admin")) {
-    return res.status(403).json({ error: "Solo administradores pueden cambiar la fecha cuando ya hay una activa" });
-  }
-
-  // Verificar código de confirmación
-  if (!confirmationCode) {
-    return res.status(400).json({ error: "Se requiere código de confirmación para cambiar la fecha activa", requiresCode: true });
-  }
-
-  // Validar el código de confirmación
-  console.log(`\n🔍 [FECHA] Validando código...`);
-  console.log(`   Usuario ID: ${userId}`);
-  console.log(`   Código: ${confirmationCode}`);
-
-  const codigo = dbUsers.prepare(`
-    SELECT * FROM confirmation_codes 
-    WHERE codigo = ? AND accion = 'cambiar_fecha' AND usado = 0
-    ORDER BY creado_en DESC LIMIT 1
-  `).get(confirmationCode);
-
-  if (!codigo) {
-    console.log(`   ❌ Código no encontrado`);
-    return res.status(401).json({ error: "Código inválido o ya utilizado" });
-  }
-
-  console.log(`   ✓ Código encontrado (Usuario: ${codigo.usuario_id})`);
-
-  // Verificar que no haya expirado (10 minutos)
-  const ahora = new Date();
-  const expiracion = new Date(codigo.expira_en);
-  if (ahora > expiracion) {
-    console.log(`   ❌ Código expirado`);
-    return res.status(401).json({ error: "El código ha expirado" });
-  }
-
-  console.log(`   ✓ Código válido`);
-
-  // Marcar código como usado
-  dbUsers.prepare(`
-    UPDATE confirmation_codes 
-    SET usado = 1 
-    WHERE id = ?
-  `).run(codigo.id);
-
-  // Si se está eliminando la fecha (cadena vacía), permitirlo con código
-  if (fecha === "" || fecha === null) {
-    setFechaActual("", userId);
-    getIO().emit("fecha_actualizada", "");
-    
-    // Registrar en auditoría
-    try {
-      registrarAccion({
-        usuario: userId,
-        accion: "FECHA_ELIMINADA",
-        detalle: `Eliminó fecha: ${fechaAnterior}`,
-        tabla: "sistema",
-        registroId: null,
-        cambios: { fecha_anterior: fechaAnterior }
-      });
-    } catch (err) {
-      console.error("Error registrando eliminación de fecha:", err);
-    }
-    
-    return res.json({ success: true, fecha: "" });
-  }
-
-  // Cambiar a una fecha diferente (requiere código)
-  setFechaActual(fecha, userId);
-  getIO().emit("fecha_actualizada", fecha);
-
+  const hoy = new Date();
+  const año = hoy.getFullYear();
+  const mes = String(hoy.getMonth() + 1).padStart(2, '0');
+  const dia = String(hoy.getDate()).padStart(2, '0');
+  const fechaActual = `${año}-${mes}-${dia}`;
+  // Emitir la fecha real a todos
+  getIO().emit("fecha_actualizada", fechaActual);
   // Registrar en auditoría
   try {
     registrarAccion({
       usuario: userId,
-      accion: "FECHA_CAMBIADA",
-      detalle: `Cambió fecha de ${fechaAnterior} a ${fecha}`,
+      accion: "FECHA_FORZADA_AUTOMATICA",
+      detalle: `Se forzó la fecha a la real del sistema: ${fechaActual}`,
       tabla: "sistema",
       registroId: null,
-      cambios: { fecha_anterior: fechaAnterior, fecha_nueva: fecha }
+      cambios: { fecha_nueva: fechaActual }
     });
   } catch (err) {
     console.error("Error registrando cambio de fecha:", err);
   }
-
-  res.json({ success: true, fecha });
+  return res.json({ success: true, fecha: fechaActual });
 });
 
 /* ============================================================
