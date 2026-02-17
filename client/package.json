@@ -9,15 +9,11 @@
     "test": "react-scripts test"
   },
   "dependencies": {
-    "better-sqlite3": "^12.4.1",
-    "cors": "^2.8.5",
     "dayjs": "^1.11.18",
     "docx": "^9.5.1",
     "exceljs": "^4.4.0",
-    "express": "^5.1.0",
     "jspdf": "^3.0.4",
     "jspdf-autotable": "^5.0.2",
-    "node-fetch": "^3.3.2",
     "react": "^18.0.0",
     "react-dom": "^18.0.0",
     "react-scripts": "^5.0.1",
