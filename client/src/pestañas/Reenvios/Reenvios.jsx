@@ -1682,7 +1682,7 @@ export default function Reenvios({ serverUrl, pushToast, fecha, socket }) {
       setCerrarResumen(null);
 
       // 🚨 Primera petición: verificar si hay reenvíos pendientes
-      const checkResponse = await authFetch(`${serverUrl}/reenvios/cerrar-reenvios`, {
+      const checkResponse = await authFetch(`${serverUrl}/api/reenvios/cerrar-reenvios`, {
         method: "POST",
         body: JSON.stringify({
           fecha: fecha || undefined,
@@ -1703,7 +1703,7 @@ export default function Reenvios({ serverUrl, pushToast, fecha, socket }) {
         );
 
         // Segunda petición con la decisión
-        const data = await authFetch(`${serverUrl}/reenvios/cerrar-reenvios`, {
+        const data = await authFetch(`${serverUrl}/api/reenvios/cerrar-reenvios`, {
           method: "POST",
           body: JSON.stringify({
             fecha: fecha || undefined,
