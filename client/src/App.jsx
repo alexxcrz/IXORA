@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from "react";
+import { useNotifications } from "./components/Notifications";
 import io from "socket.io-client";
 import "./App.css";
 import "./estilos/tema.css";
@@ -1698,6 +1699,7 @@ function App() {
   const [fechaPendiente, setFechaPendiente] = useState(null);
   const [cambiandoFecha, setCambiandoFecha] = useState(false);
   const fechaTimerRef = useRef(null);
+  const { addNotification } = useNotifications();
 
   const solicitarCodigoYCambiarFecha = async (nuevaFecha) => {
     if (!perms || !perms.includes("tab:admin")) {
@@ -1738,12 +1740,16 @@ function App() {
               const res2 = await authFetch(`${SERVER_URL}/fecha-actual`);
               const fechaActual2 = res2.fecha || "";
               setFecha(fechaActual2);
-              pushToast("⏰ La fecha ha sido restablecida automáticamente a la actual después de 3 minutos", "info");
+              addNotification({
+                title: "Fecha restablecida",
+                message: "⏰ La fecha ha sido restablecida automáticamente a la actual después de 2 minutos",
+                type: "info"
+              });
               await cargarProductos();
             } catch (err) {
               console.error("Error restaurando fecha automáticamente:", err);
             }
-          }, 3 * 60 * 1000);
+          }, 2 * 60 * 1000);
         }
       } catch (err) {
         console.error("Error comprobando fecha actual:", err);
@@ -1800,13 +1806,24 @@ function App() {
 
       setFecha(data.fecha || fechaPendiente || "");
       if (fechaPendiente === "" || fechaPendiente === null) {
-        pushToast("✅ Fecha eliminada correctamente");
+        addNotification({
+          title: "Fecha eliminada",
+          message: "✅ Fecha eliminada correctamente",
+          type: "success"
+        });
       } else {
-        pushToast("✅ Fecha establecida correctamente");
+        addNotification({
+          title: "Fecha establecida",
+          message: "✅ Fecha establecida correctamente",
+          type: "success"
+        });
         // Notificación global para todos los usuarios
         const mensaje = `⚠️ ${user?.nickname || user?.nombre || 'Un usuario'} cambió la fecha temporalmente a: ${fechaPendiente}`;
-        // Toast local
-        pushToast(mensaje, "warn");
+        addNotification({
+          title: "Cambio temporal de fecha",
+          message: mensaje,
+          type: "warn"
+        });
         // Notificación del navegador
         if ("Notification" in window && Notification.permission === "granted") {
           new Notification("Cambio temporal de fecha", {
@@ -1877,7 +1894,11 @@ function App() {
         });
 
         setFecha(data.fecha || nueva);
-        pushToast("✅ Fecha establecida correctamente");
+        addNotification({
+          title: "Fecha establecida",
+          message: "✅ Fecha establecida correctamente",
+          type: "success"
+        });
         await cargarProductos();
       } catch (err) {
         console.error("Error estableciendo fecha:", err);
